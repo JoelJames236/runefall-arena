@@ -662,7 +662,8 @@ export class Sim {
     const bz = getBuff(src, 'berserk'); if (bz) amt *= 1 + bz.value;
     amt *= 1 - CLASSES[tgt.cls].defense;
     for (const b of tgt.buffs) if (b.type === 'dr' || b.type === 'stoneskin') amt *= 1 - b.value;
-    if (this.shieldwall(tgt)) amt *= 0.9;
+    amt *= this.shieldwall(tgt);
+    if (src.cls === 'warrior' && this.teamSize[src.team] >= 2) amt *= 1 + CLASSES.warrior.passive.dmg; // Shieldwall: team-play damage
     // Berserker Bloodrage, team play only: up to 25% less damage taken as health drops
     if (tgt.cls === 'berserker' && this.teamSize[tgt.team] >= 2) amt *= 1 - 0.25 * (1 - Math.max(0, tgt.hp) / tgt.maxHp);
     amt = Math.max(1, Math.round(amt));
@@ -679,6 +680,8 @@ export class Sim {
     tgt.stats.absorbed += absorbed;
     if (src.resType === 'rage') src.res = Math.min(src.maxRes, src.res + (amt + absorbed) * 0.075);
     if (tgt.resType === 'rage') tgt.res = Math.min(tgt.maxRes, tgt.res + (amt + absorbed) * 0.07);
+    // Shieldwall, team play: a warrior near a hurt ally gains rage from the blows the ally takes
+    if (this.teamSize[tgt.team] >= 2) for (const w of this.fighters) if (w.cls === 'warrior' && w.alive && w !== tgt && w.team === tgt.team && this.dist(w, tgt) <= CLASSES.warrior.passive.radius) w.res = Math.min(w.maxRes, w.res + (amt + absorbed) * CLASSES.warrior.passive.rageShare);
     if (!o.noMark) {
       const m = tgt.buffs.find(b => b.type === 'mark' && b.src === src.id);
       if (m) m.data.stored = Math.round(m.data.stored + (amt + absorbed) * 0.3);
@@ -694,14 +697,14 @@ export class Sim {
     return amt;
   }
 
-  // Warrior passive (team play only): a warrior and an ally within 10 yards of each other both take 10% less damage
+  // Warrior passive Shieldwall (team play only): damage-taken multiplier. The warrior himself always
+  // takes `self` less (he is the frontline); allies within `radius` of a living warrior take `ally` less.
   shieldwall(t) {
-    if (this.teamSize[t.team] < 2) return false;
-    for (const w of this.fighters) {
-      if (w.cls !== 'warrior' || !w.alive || w.team !== t.team) continue;
-      if (w.id !== t.id ? this.dist(w, t) <= 10 : this.alliesOf(t).some(a => this.dist(a, t) <= 10)) return true;
-    }
-    return false;
+    if (this.teamSize[t.team] < 2) return 1;
+    const P = CLASSES.warrior.passive;
+    if (t.cls === 'warrior') return 1 - P.self;
+    for (const w of this.fighters) if (w.cls === 'warrior' && w.alive && w.team === t.team && w !== t && this.dist(w, t) <= P.radius) return 1 - P.ally;
+    return 1;
   }
 
   heal(src, tgt, amount, ab) {

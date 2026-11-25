@@ -75,7 +75,7 @@ their champion so the match can finish.
 | --- | --- | --- | --- |
 | Mage | Mana | Ranged frost/fire/arcane burst, frost slows, root, blink | Arcane Comet (big hit + stun) |
 | Rogue | Energy + combo points | Fast melee, stealth, teleport behind target, stun finisher | Death Mark (delayed detonation) |
-| Warrior | Rage | Tanky melee, charge, slows, interrupt + silence, damage reduction; *Shieldwall* passive protects a nearby ally in 2v2 | Steel Tempest (CC-immune spin) |
+| Warrior | Rage | Tanky melee, charge, slows, interrupt + silence, damage reduction; *Shieldwall* passive in 2v2: takes 15% less damage, nearby ally 10% less, gains rage when the ally is hit | Steel Tempest (CC-immune spin) |
 | Berserker | Rage | Bare-chested dual-axe brute: bleeds, execute, axe throw (root), leap slam, lifesteal; *Bloodrage* passive — up to +50% damage as his health drops (in 2v2 also up to 25% less damage taken) | Berserk (sacrifice health for damage + attack speed) |
 | Priest | Mana | Sustain: heals and shields (self or ally), disorient, purge | Halo of Judgment (damage + group heal + purge) |
 | Shaman | Mana | Lightning & magma, stun totem, team-protecting totem, wind dash | Fire Spirit (summoned elemental) |
@@ -87,7 +87,7 @@ Full numbers live in [`js/data/classes.js`](js/data/classes.js) and are shown in
 Open <http://localhost:8080/balance.html> to run headless AI-vs-AI simulations: a 1v1 win-rate matrix, or
 every 2v2 team composition against every other. It measures the AI's play rather than expert human play,
 so use it as a guide. Latest runs (hard AI, with the bridge): **1v1** — classes between 39% and 62% overall;
-**2v2** — classes between 37% (Warrior) and 57%, strongest compositions Shaman + Shaman and Rogue + Priest (~76%).
+**2v2** — every class between 40% and 53%, strongest composition Rogue + Priest (~68%).
 
 ## Project layout
 

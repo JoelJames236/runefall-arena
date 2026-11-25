@@ -75,12 +75,13 @@ export const CLASSES = {
 
   warrior: {
     id: 'warrior', name: 'Warrior', role: 'Armored Juggernaut', emblem: '⛨', color: '#e0604a', accent: '#c9c9d4',
-    desc: 'A towering wall of steel who wins in close quarters. Generates rage from dealing and taking damage, and closes the gap with charges and crippling blows. Passive — Shieldwall: in team play, you and any ally within 10 yards of you take 10% less damage.',
+    desc: 'A towering wall of steel who wins in close quarters. Generates rage from dealing and taking damage, and closes the gap with charges and crippling blows. Passive — Shieldwall (team play): you take 15% less damage, allies within 15 yards of you take 10% less, and you gain rage when a nearby ally is hit.',
     weapon: 'Steel longsword and iron-rimmed round shield', armor: 'Weathered leather and iron pauldron',
     hp: 1380, defense: 0.15, speed: 6.8, resType: 'rage', res: 100, resStart: 20, regen: 1,
     auto: { name: 'Sword Swing', dmg: 43, speed: 2.0, range: 4.5, ranged: false, school: 'phys', glyph: '🗡', color: '#e0604a',
       desc: 'Basic attack: heavy alternating sword swings (43 damage every 2.0 sec). Melee range, generates rage.' },
     rating: { health: 5, damage: 3, mobility: 2, defense: 5 },
+    passive: { name: 'Shieldwall', self: 0.15, ally: 0.1, radius: 15, rageShare: 0.03, dmg: 0 }, // team play only
     abilities: [
       { id: 'rending_blow', name: 'Rending Blow', glyph: '⚔', color: '#ff6a4a', school: 'phys', cost: 25, cd: 5, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
         desc: 'A savage strike dealing 110 damage and reducing healing received by 50% for 8 sec.',
