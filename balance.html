@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Runefall Arena — Balance Lab</title>
+<style>
+  body { background: #120c18; color: #eee; font: 15px/1.5 system-ui, sans-serif; padding: 24px; }
+  table { border-collapse: collapse; margin: 12px 0; }
+  td, th { border: 1px solid #443; padding: 6px 12px; text-align: center; }
+  th { color: #e8c37a; }
+  button, select { font-size: 15px; padding: 6px 12px; }
+</style>
+</head>
+<body>
+<h2>Balance Lab — AI vs. AI round simulations</h2>
+<p>Each cell: win rate of the row class against the column class (both sides played by the same AI difficulty). Only the AI's skill is measured, so treat results as a guide, not gospel.</p>
+<label>Rounds per matchup <input id="n" type="number" value="20" min="2" max="200"></label>
+<label>AI <select id="d"><option>hard</option><option>normal</option><option>easy</option></select></label>
+<button id="go">Run</button>
+<div id="out"></div>
+<script type="module">
+import { Sim } from './js/sim/sim.js';
+import { AI } from './js/sim/ai.js';
+import { CLASS_ORDER } from './js/data/classes.js';
+
+function round(a, b, diff) {
+  const sim = new Sim(a, b), ai0 = new AI(sim, 0, diff), ai1 = new AI(sim, 1, diff);
+  for (let t = 0; t < 400 && sim.state !== 'roundEnd'; t += 1 / 30) { sim.step(1 / 30, [ai0.getInput(1 / 30), ai1.getInput(1 / 30)]); sim.events.length = 0; }
+  return { w: sim.state !== 'roundEnd' ? -2 : sim.fighters[0].alive ? 0 : sim.fighters[1].alive ? 1 : -1, len: sim.fightT };
+}
+
+document.getElementById('go').onclick = async () => {
+  const N = +document.getElementById('n').value, diff = document.getElementById('d').value;
+  const out = document.getElementById('out'); out.textContent = 'Running…';
+  await new Promise(r => setTimeout(r, 20));
+  const wins = {}, lens = [];
+  for (const a of CLASS_ORDER) for (const b of CLASS_ORDER) {
+    if (a === b) continue;
+    let w = 0;
+    // alternate sides so spawn position never matters
+    for (let i = 0; i < N; i++) { const flip = i % 2; const r = flip ? round(b, a, diff) : round(a, b, diff); lens.push(r.len); if ((r.w === 0 && !flip) || (r.w === 1 && flip)) w++; }
+    wins[a + b] = w / N;
+    out.textContent = `Running… ${a} vs ${b}`; await new Promise(r => setTimeout(r, 0));
+  }
+  lens.sort((x, y) => x - y);
+  let html = '<table><tr><th></th>' + CLASS_ORDER.map(c => `<th>${c}</th>`).join('') + '<th>overall</th></tr>';
+  for (const a of CLASS_ORDER) {
+    let tot = 0;
+    html += `<tr><th>${a}</th>` + CLASS_ORDER.map(b => { if (a === b) return '<td>—</td>'; const v = wins[a + b]; tot += v; const hue = 120 * v; return `<td style="background:hsl(${hue},45%,22%)">${Math.round(v * 100)}%</td>`; }).join('');
+    html += `<td><b>${Math.round(tot / 4 * 100)}%</b></td></tr>`;
+  }
+  html += '</table>' + `<p>Round length: median ${lens[lens.length >> 1].toFixed(1)}s, 90th percentile ${lens[Math.floor(lens.length * 0.9)].toFixed(1)}s</p>`;
+  out.innerHTML = html;
+  window.__result = { wins, median: lens[lens.length >> 1] };
+};
+</script>
+</body>
+</html>

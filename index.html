@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runefall Arena — 1v1 Fantasy Duels</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "peerjs": "https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="vignette"></div>
+<div id="floaters"></div>
+
+<!-- Splash -->
+<section id="splash" class="screen active">
+  <div class="title-block">
+    <div class="sub">A Duel of Blade and Spell</div>
+    <h1>Runefall Arena</h1>
+    <div class="rule"></div>
+  </div>
+  <div class="enter pulse">Click anywhere to enter</div>
+  <div id="loadmsg" class="loadmsg"></div>
+</section>
+
+<!-- Main menu -->
+<section id="menu" class="screen">
+  <div class="title-block small">
+    <div class="sub">A Duel of Blade and Spell</div>
+    <h1>Runefall Arena</h1>
+    <div class="rule"></div>
+  </div>
+  <nav class="menu-buttons">
+    <button class="btn big" data-act="play">Play vs. Champion AI</button>
+    <button class="btn big" data-act="create">Create Private Match</button>
+    <button class="btn big" data-act="join">Join Match</button>
+    <button class="btn" data-act="browse">Class Selection</button>
+    <button class="btn" data-act="settings">Settings</button>
+    <button class="btn" data-act="howto">How to Play</button>
+  </nav>
+  <div class="footer-note">Best of 7 · First to 4 round wins</div>
+</section>
+
+<!-- Class select -->
+<section id="classSelect" class="screen">
+  <div class="cs-header"><h2 id="csTitle">Choose Your Champion</h2></div>
+  <div class="cs-list" id="csList"></div>
+  <div class="cs-details panel" id="csDetails"></div>
+  <div class="cs-hint">Drag to rotate the champion · Scroll to zoom</div>
+  <div class="cs-lobby panel hidden" id="csLobby"></div>
+  <div class="cs-bottom">
+    <button class="btn" id="csBack">Back</button>
+    <div id="csDifficulty" class="difficulty">
+      <span>AI Difficulty</span>
+      <button class="chip" data-diff="easy">Squire</button>
+      <button class="chip" data-diff="normal">Knight</button>
+      <button class="chip" data-diff="hard">Champion</button>
+    </div>
+    <button class="btn primary" id="csConfirm">Enter the Arena</button>
+  </div>
+</section>
+
+<!-- Create match / lobby -->
+<section id="lobby" class="screen">
+  <div class="panel lobby-panel">
+    <h2>Private Match</h2>
+    <p class="muted">Share this link or room code with a friend. The match begins once both champions are ready.</p>
+    <div class="code-row"><span class="label">Room Code</span><span id="roomCode" class="room-code">······</span></div>
+    <div class="link-row"><input id="roomLink" readonly><button class="btn" id="copyLink">Copy Link</button></div>
+    <div id="lobbyStatus" class="status">Opening the arena gates…</div>
+    <button class="btn" id="lobbyBack">Cancel</button>
+  </div>
+</section>
+
+<!-- Join -->
+<section id="join" class="screen">
+  <div class="panel lobby-panel">
+    <h2>Join Match</h2>
+    <p class="muted">Enter the room code your friend shared with you.</p>
+    <input id="joinCode" class="code-input" maxlength="6" placeholder="ABC123" autocomplete="off">
+    <div id="joinStatus" class="status"></div>
+    <div class="row">
+      <button class="btn" id="joinBack">Back</button>
+      <button class="btn primary" id="joinGo">Join</button>
+    </div>
+  </div>
+</section>
+
+<!-- Settings -->
+<section id="settings" class="screen">
+  <div class="panel settings-panel">
+    <h2>Settings</h2>
+    <label>Music Volume <input type="range" id="setMusic" min="0" max="100"></label>
+    <label>Effects Volume <input type="range" id="setSfx" min="0" max="100"></label>
+    <label>Mouse Sensitivity <input type="range" id="setSens" min="10" max="300"></label>
+    <label class="check"><input type="checkbox" id="setInvert"> Invert Mouse Y</label>
+    <label>Graphics Quality
+      <select id="setQuality">
+        <option value="high">High (bloom + shadows)</option>
+        <option value="medium">Medium (shadows)</option>
+        <option value="low">Low (fastest)</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="setFps"> Show FPS</label>
+    <button class="btn primary" id="settingsBack">Done</button>
+  </div>
+</section>
+
+<!-- How to play -->
+<section id="howto" class="screen">
+  <div class="panel howto-panel">
+    <h2>How to Play</h2>
+    <div class="howto-grid">
+      <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move &amp; strafe</div>
+      <div><kbd>Mouse</kbd> Turn camera &amp; champion</div>
+      <div><kbd>1</kbd>–<kbd>6</kbd> Abilities</div>
+      <div><kbd>Space</kbd> Jump</div>
+      <div><kbd>Shift</kbd> Sprint (uses stamina)</div>
+      <div><kbd>Tab</kbd> / <kbd>Click</kbd> Target opponent</div>
+      <div><kbd>Wheel</kbd> Zoom camera</div>
+      <div><kbd>Esc</kbd> Menu</div>
+    </div>
+    <ul class="tips">
+      <li>Casting a spell with a cast time requires standing still — moving or jumping cancels it.</li>
+      <li>Break line of sight behind the four rune pillars to stop enemy casts.</li>
+      <li>Interrupt key spells: stuns, disorients and <b>Shield Slam</b> cancel casts.</li>
+      <li>Crowd control has diminishing returns: repeated stuns last 50%, then 25%, then you are immune for 15s.</li>
+      <li>After 60 seconds, <b>Dampening</b> steadily reduces all healing and shields so every round ends.</li>
+      <li>Melee abilities need you to face your opponent.</li>
+    </ul>
+    <button class="btn primary" id="howtoBack">Back</button>
+  </div>
+</section>
+
+<!-- HUD -->
+<section id="hud" class="hidden">
+  <div class="topbar">
+    <div class="score side-a"><span class="pname" id="scoreNameA">You</span><div class="pips" id="pipsA"></div></div>
+    <div class="round-info">
+      <div id="roundLabel">Round 1</div>
+      <div id="roundTimer">0:00</div>
+      <div id="dampLabel" class="damp hidden">Dampening 0%</div>
+    </div>
+    <div class="score side-b"><div class="pips" id="pipsB"></div><span class="pname" id="scoreNameB">Enemy</span></div>
+  </div>
+
+  <div class="unitframe player" id="frameA">
+    <div class="portrait" id="portA"></div>
+    <div class="uf-body">
+      <div class="uf-name"><span id="nameA">You</span><span class="uf-class" id="classA"></span></div>
+      <div class="bar hp"><div class="fill" id="hpA"></div><div class="absorb" id="absA"></div><span id="hpTextA"></span></div>
+      <div class="bar res"><div class="fill" id="resA"></div><span id="resTextA"></span></div>
+      <div class="cp" id="cpA"></div>
+      <div class="buffs" id="buffsA"></div>
+    </div>
+  </div>
+
+  <div class="unitframe target" id="frameB">
+    <div class="portrait" id="portB"></div>
+    <div class="uf-body">
+      <div class="uf-name"><span id="nameB">Enemy</span><span class="uf-class" id="classB"></span></div>
+      <div class="bar hp"><div class="fill" id="hpB"></div><div class="absorb" id="absB"></div><span id="hpTextB"></span></div>
+      <div class="bar res"><div class="fill" id="resB"></div><span id="resTextB"></span></div>
+      <div class="castbar small hidden" id="castB"><div class="fill"></div><span></span></div>
+      <div class="buffs" id="buffsB"></div>
+    </div>
+  </div>
+
+  <div id="errorText" class="error-text"></div>
+  <div id="announce" class="announce"></div>
+  <div id="crosshair"></div>
+
+  <div class="bottom">
+    <div class="castbar hidden" id="castA"><div class="fill"></div><span></span></div>
+    <div class="stamina"><div class="fill" id="stamFill"></div></div>
+    <div class="actionbar" id="actionbar"></div>
+  </div>
+  <div id="fps" class="fps hidden"></div>
+  <div id="controlsHint" class="controls-hint">WASD move · Mouse look · 1–6 abilities · Space jump · Shift sprint · Esc menu</div>
+  <div id="lockHint" class="lock-hint hidden">Click to control your champion</div>
+  <div id="tooltip" class="tooltip hidden"></div>
+</section>
+
+<!-- Pause -->
+<section id="pause" class="screen overlay">
+  <div class="panel pause-panel">
+    <h2>Paused</h2>
+    <p class="muted" id="pauseNote"></p>
+    <button class="btn primary" id="pauseResume">Resume</button>
+    <button class="btn" id="pauseSettings">Settings</button>
+    <button class="btn" id="pauseHowto">How to Play</button>
+    <button class="btn danger" id="pauseLeave">Leave Match</button>
+  </div>
+</section>
+
+<!-- Match end -->
+<section id="matchEnd" class="screen overlay">
+  <div class="panel end-panel">
+    <div id="endTitle" class="end-title">Victory</div>
+    <div id="endScore" class="end-score">4 – 2</div>
+    <div id="endStats" class="end-stats"></div>
+    <div id="endStatus" class="status"></div>
+    <div class="row">
+      <button class="btn" id="endMenu">Main Menu</button>
+      <button class="btn" id="endClass">Change Class</button>
+      <button class="btn primary" id="endRematch">Rematch</button>
+    </div>
+  </div>
+</section>
+
+<div id="toast" class="toast"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
