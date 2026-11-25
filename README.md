@@ -3,6 +3,8 @@
 A browser-based 3D fantasy **1v1 arena duel** game: five classes, 30 abilities, best-of-7 matches,
 an AI opponent, and peer-to-peer online play via a shareable link. No install, no build step.
 
+**▶ Play now: https://joeljames236.github.io/runefall-arena/**
+
 ## Play locally
 
 The game uses ES modules, so it must be served over HTTP (opening `index.html` as a file won't work).
