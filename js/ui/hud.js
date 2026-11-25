@@ -92,8 +92,8 @@ export class HUD {
     });
     const pips = () => Array.from({ length: RULES.winsNeeded }, () => '<div class="pip"></div>').join('');
     $('pipsA').innerHTML = pips(); $('pipsB').innerHTML = pips();
-    $('cpA').style.display = me.cls === 'rogue' ? '' : 'none';
-    $('cpA').innerHTML = '<i></i>'.repeat(5);
+    $('cpA').style.display = me.cls === 'rogue' || me.cls === 'berserker' ? '' : 'none';
+    $('cpA').innerHTML = me.cls === 'berserker' ? '<span class="bloodrage"></span>' : '<i></i>'.repeat(5);
     this.lastBuffKey = {};
     this.hintT = 14; $('controlsHint').style.opacity = 1;
   }
@@ -127,6 +127,7 @@ export class HUD {
       setStyle($('hpB'), 'width', '0%'); setStyle($('resB'), 'width', '0%'); setText($('hpTextB'), ''); setText($('resTextB'), ''); $('buffsB').innerHTML = ''; $('castB').classList.add('hidden');
     }
     if (me.cls === 'rogue') [...$('cpA').children].forEach((c, i) => setCls(c, 'on', i < me.cp));
+    if (me.cls === 'berserker') { const bonus = Math.round(CLASSES.berserker.passive.maxBonus * (1 - Math.max(0, me.hp) / me.maxHp) * 100); const el = $('cpA').firstChild; setText(el, `Bloodrage +${bonus}% damage`); setStyle(el, 'color', bonus > 35 ? '#ff4a3a' : bonus > 15 ? '#ff9a6a' : '#c8a080'); }
     this.castbar($('castA'), me, true);
     setStyle($('stamFill'), 'width', (me.stamina ?? 100) + '%');
     // mini frames

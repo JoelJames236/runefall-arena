@@ -42,6 +42,7 @@ const AB_ANIM = {
   rending_blow: 'slash', crippling_slash: 'slash', iron_bulwark: 'bash', shield_slam: 'bash',
   sacred_bolt: 'release', mend: 'raise', divine_aegis: 'raise', blinding_light: 'raise', halo_judgment: 'raise',
   lightning_lash: 'release', magma_burst: 'release', quake_totem: 'slam', gale_dash: 'dash', stoneskin_totem: 'slam', fire_spirit: 'raise',
+  rending_axes: 'slash', headtaker: 'finisher', axe_throw: 'slam', undying_rage: 'raise', berserk: 'raise',
 };
 export { AB_ANIM };
 
@@ -336,11 +337,11 @@ export class World {
   }
   onAuto(id) {
     const ch = this.chars[id]; if (!ch) return;
-    ch.play('attack', { rogue: 0.36, warrior: 0.55, mage: 0.42, priest: 0.42, shaman: 0.45 }[ch.cls] || 0.45);
+    ch.play('attack', { rogue: 0.36, warrior: 0.55, berserker: 0.5, mage: 0.42, priest: 0.42, shaman: 0.45 }[ch.cls] || 0.45);
     if (this.charState[id]) this.charState[id].faceT = 0.35;
   }
   onHitFlinch(id, crit) { const ch = this.chars[id]; if (ch && (!ch.act || crit)) ch.hit(crit ? 2 : 1); }
-  onDash(id, fx) { const ch = this.chars[id]; if (ch) ch.play(fx === 'bull_rush' ? 'charge' : 'dash', fx === 'bull_rush' ? 0.6 : 0.35); }
+  onDash(id, fx) { const ch = this.chars[id]; if (ch) ch.play(fx === 'bull_rush' || fx === 'skull_leap' ? 'charge' : 'dash', fx === 'bull_rush' || fx === 'skull_leap' ? 0.7 : 0.35); }
 
   updateGameCamera(dt, me, input) {
     if (!me) return;

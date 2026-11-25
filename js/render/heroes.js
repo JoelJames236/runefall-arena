@@ -26,6 +26,8 @@ const LOOKS = {
     tint: [0.16, 0.13, 0.2], tintAmt: 0.82, skinTint: [0.95, 0.88, 0.85], scale: 0.98, weapons: ['daggerR', 'daggerL'], idle: 'Crouch_Idle_Loop' },
   mage: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: ['Hair_Beard'], hide: [],
     tint: [0.16, 0.2, 0.46], tintAmt: 0.8, skinTint: [1, 0.95, 0.92], scale: 1.0, weapons: ['staff'], idle: 'Idle_Loop', glow: 0xa070ff },
+  berserker: { outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], hair: ['Hair_Long', 'Hair_Beard'], hide: [],
+    tint: [0.22, 0.16, 0.12], tintAmt: 0.65, skinTint: [0.96, 0.82, 0.72], scale: 1.13, weapons: ['axe', 'axeL'], idle: 'Sword_Idle', weaponScale: 1.35, axeTint: [0.5, 0.48, 0.46] },
   priest: { outfit: 'Female_Peasant', head: 'Superhero_Female_FullBody', hair: ['Hair_Buns'], hide: [],
     tint: [0.9, 0.85, 0.72], tintAmt: 0.72, skinTint: [1, 0.96, 0.94], scale: 1.0, weapons: ['mace'], idle: 'Idle_Loop', halo: true, glow: 0xffd98a },
   shaman: { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: ['Hair_Long', 'Hair_Beard'], hide: ['Arms_1'],
@@ -34,16 +36,16 @@ const LOOKS = {
 
 // one-shot actions: kind -> per-class clip list (alternated) + whether it should use the full body
 const ACTIONS = {
-  attack: { warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'] },
+  attack: { berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'] },
   slash: { any: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Cross'] },
   stab: { any: ['Punch_Cross', 'Punch_Jab'] },
-  finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'] },
+  finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'], berserker: ['Sword_Regular_C'] },
   bash: { any: ['Shield_OneShot'], rogue: ['Melee_Hook'] },
   release: { any: ['Spell_Simple_Shoot'] },
-  raise: { any: ['Spell_Simple_Shoot'] },
-  slam: { any: ['Sword_Attack'], shaman: ['OverhandThrow'] },
+  raise: { any: ['Spell_Simple_Shoot'], berserker: ['Punch_Cross'] },
+  slam: { any: ['Sword_Attack'], shaman: ['OverhandThrow'], berserker: ['OverhandThrow'] },
   dash: { any: ['Roll'], full: true },
-  charge: { any: ['Shield_Dash'], full: true },
+  charge: { any: ['Shield_Dash'], berserker: ['Sword_Dash'], full: true },
   flinch: { any: ['Hit_Chest'] },
 };
 
@@ -159,7 +161,7 @@ function makeWeapon(kind, look) {
   switch (kind) {
     case 'sword': { const s = propClone('Sword_Bronze', [0.62, 0.64, 0.68]); s.rotation.set(0, 0, 0); s.position.set(0, -0.12, 0); g.add(s); tip.position.set(0, 0.95, 0); break; }
     case 'shield': { const s = propClone('Shield_Wooden', [0.36, 0.24, 0.18]); g.add(s); break; }
-    case 'axe': { const s = propClone('Axe_Bronze', null); s.position.set(0, -0.2, 0); g.add(s); tip.position.set(0, 0.6, 0); break; }
+    case 'axe': case 'axeL': { const s = propClone('Axe_Bronze', look.axeTint || null); s.position.set(0, -0.2, 0); g.add(s); tip.position.set(0, 0.6, 0); break; }
     case 'daggerR': case 'daggerL': {
       const shape = new THREE.Shape(); shape.moveTo(-0.022, 0); shape.lineTo(0.022, 0); shape.lineTo(0.016, 0.24); shape.lineTo(0, 0.31); shape.lineTo(-0.016, 0.24); shape.lineTo(-0.022, 0);
       const blade = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.004, bevelSegments: 1 }), new THREE.MeshStandardMaterial({ color: 0xb8bec8, roughness: 0.22, metalness: 1, envMapIntensity: 1.5 }));
@@ -208,6 +210,7 @@ function makeWeapon(kind, look) {
 const GRIP = {
   sword: { bone: 'hand_r', dir: [0, 0.55, 1], side: [-1, 0, 0], palm: 0.085 },
   axe: { bone: 'hand_r', dir: [0, 0.35, 1], side: [-1, 0, 0], palm: 0.085 },
+  axeL: { bone: 'hand_l', dir: [0, 0.35, 1], side: [1, 0, 0], palm: 0.085 },
   mace: { bone: 'hand_r', dir: [0, 0.8, 0.6], side: [-1, 0, 0], palm: 0.085 },
   staff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 },
   daggerR: { bone: 'hand_r', dir: [0.15, -0.15, 1], side: [-1, 0, 0], palm: 0.08 },
@@ -260,6 +263,7 @@ export class Character {
       o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true;
       if (look.hide.some(h => o.name.includes(h))) { o.visible = false; return; }
       const isSkin = /Regular|Superhero/i.test(o.material.name);
+      if (/Hair|Eye/i.test(o.material.name)) { o.material = o.material.clone(); if (cls === 'berserker' && /Hair/i.test(o.material.name)) o.material.color.setRGB(0.16, 0.1, 0.07); return; }
       o.material = isSkin ? skin(o.material) : gradeMaterial(o.material, look.tint, look.tintAmt);
     });
     // transplant head (+ eyes) and hair onto the outfit skeleton
@@ -273,8 +277,12 @@ export class Character {
       m.bind(new THREE.Skeleton(bones, srcMesh.skeleton.boneInverses), srcMesh.bindMatrix);
       return m;
     };
-    for (const h of HEADS[look.head]) attach(h.src, h.geo, /Eye/i.test(h.src.name) ? h.src.material : skin(h.src.material));
-    for (const hn of look.hair) GL[hn].scene.traverse(o => { if (o.isSkinnedMesh) { const mat = o.material.clone(); if (cls === 'mage') mat.color.setRGB(0.75, 0.75, 0.78); if (cls === 'shaman') mat.color.setRGB(0.35, 0.25, 0.2); attach(o, o.geometry, mat); } });
+    if (look.head) for (const h of HEADS[look.head]) attach(h.src, h.geo, /Eye/i.test(h.src.name) ? h.src.material : skin(h.src.material));
+    // extra clothing pieces borrowed from other outfits (e.g. trousers + boots on a bare body)
+    for (const part of look.parts || []) GL[part.src].scene.traverse(o => {
+      if (o.isSkinnedMesh && part.only.some(n => o.name.includes(n))) attach(o, o.geometry, gradeMaterial(o.material, look.tint, look.tintAmt));
+    });
+    for (const hn of look.hair) GL[hn].scene.traverse(o => { if (o.isSkinnedMesh) { const mat = o.material.clone(); if (cls === 'mage') mat.color.setRGB(0.75, 0.75, 0.78); if (cls === 'shaman') mat.color.setRGB(0.35, 0.25, 0.2); if (cls === 'berserker') mat.color.setRGB(0.16, 0.1, 0.07); attach(o, o.geometry, mat); } });
     // weapons: grips are solved from the hand's pose in the idle clip, so a weapon points
     // the intended world direction at rest and then simply follows the hand bone.
     this.weapons = {};
@@ -285,6 +293,7 @@ export class Character {
       const wp = makeWeapon(w, look), gp = GRIP[w];
       const bone = this.bones[gp.bone] || this.bones.hand_r;
       solveGrip(wp, bone, gp, this.bones);
+      if (look.weaponScale) wp.scale.multiplyScalar(look.weaponScale);
       bone.add(wp);
       this.weapons[w] = wp;
     }

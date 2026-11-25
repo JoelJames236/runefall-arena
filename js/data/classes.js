@@ -7,7 +7,7 @@
 //   melee: needs to face the target      gcd: triggers / respects the global cooldown
 //   cast: cast time in seconds (moving cancels)
 
-export const CLASS_ORDER = ['mage', 'rogue', 'warrior', 'priest', 'shaman'];
+export const CLASS_ORDER = ['mage', 'rogue', 'warrior', 'berserker', 'priest', 'shaman'];
 
 const MELEE = 4.2;
 
@@ -53,8 +53,8 @@ export const CLASSES = {
     rating: { health: 2, damage: 5, mobility: 5, defense: 2 },
     abilities: [
       { id: 'viper_strike', name: 'Viper Strike', glyph: '🐍', color: '#9be36a', school: 'phys', cost: 30, cd: 0, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
-        desc: 'A venomous stab dealing 90 damage. Awards 1 combo point.',
-        exec(sim, c, t) { sim.damage(c, t, 90, { school: 'phys', ab: 'viper_strike' }); c.cp = Math.min(5, c.cp + 1); } },
+        desc: 'A venomous stab dealing 96 damage. Awards 1 combo point.',
+        exec(sim, c, t) { sim.damage(c, t, 96, { school: 'phys', ab: 'viper_strike' }); c.cp = Math.min(5, c.cp + 1); } },
       { id: 'gutting_edge', name: 'Gutting Edge', glyph: '⚔', color: '#ffcf4a', school: 'phys', cost: 35, cd: 0, gcd: true, cast: 0, range: MELEE, target: true, melee: true, needsCp: true,
         desc: 'Finisher. Consume combo points to deal 60 damage plus 65 per point (385 at 5 points).',
         exec(sim, c, t) { const n = c.cp; c.cp = 0; sim.damage(c, t, 60 + 65 * n, { school: 'phys', ab: 'gutting_edge', big: n >= 4 }); } },
@@ -77,9 +77,9 @@ export const CLASSES = {
     id: 'warrior', name: 'Warrior', role: 'Armored Juggernaut', emblem: '⛨', color: '#e0604a', accent: '#c9c9d4',
     desc: 'A towering wall of steel who wins in close quarters. Generates rage from dealing and taking damage, and closes the gap with charges and crippling blows. Passive — Shieldwall: in team play, you and any ally within 10 yards of you take 10% less damage.',
     weapon: 'Steel longsword and iron-rimmed round shield', armor: 'Weathered leather and iron pauldron',
-    hp: 1420, defense: 0.15, speed: 6.8, resType: 'rage', res: 100, resStart: 20, regen: 1,
-    auto: { name: 'Sword Swing', dmg: 45, speed: 2.0, range: 4.5, ranged: false, school: 'phys', glyph: '🗡', color: '#e0604a',
-      desc: 'Basic attack: heavy alternating sword swings (45 damage every 2.0 sec). Melee range, generates rage.' },
+    hp: 1380, defense: 0.15, speed: 6.8, resType: 'rage', res: 100, resStart: 20, regen: 1,
+    auto: { name: 'Sword Swing', dmg: 43, speed: 2.0, range: 4.5, ranged: false, school: 'phys', glyph: '🗡', color: '#e0604a',
+      desc: 'Basic attack: heavy alternating sword swings (43 damage every 2.0 sec). Melee range, generates rage.' },
     rating: { health: 5, damage: 3, mobility: 2, defense: 5 },
     abilities: [
       { id: 'rending_blow', name: 'Rending Blow', glyph: '⚔', color: '#ff6a4a', school: 'phys', cost: 25, cd: 5, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
@@ -100,6 +100,41 @@ export const CLASSES = {
       { id: 'steel_tempest', name: 'Steel Tempest', glyph: '✺', color: '#ffe0a0', school: 'phys', cost: 40, cd: 40, gcd: true, cast: 0, range: 0, target: false, signature: true,
         desc: 'SIGNATURE — Become a whirlwind of steel for 4 sec, immune to crowd control and striking all enemies within 6 yards for 38 damage every 0.5 sec.',
         exec(sim, c) { sim.cleanse(c, ['slow', 'root']); sim.addBuff(c, 'tempest', 4, { src: c.id, name: 'Steel Tempest', icon: '✺', data: { tick: 0.25 } }); } },
+    ],
+  },
+
+  berserker: {
+    id: 'berserker', name: 'Berserker', role: 'Bloodraged Dual-Axe Brute', emblem: '🪓', color: '#d83a2a', accent: '#ffb070',
+    desc: 'A colossal, half-naked brute who grows deadlier the closer he is to death. Passive — Bloodrage: deals up to 50% more damage as his health drops (in team play he also takes up to 25% less damage). Leaps onto casters, chains bleeds and executes, and trades his own blood for fury.',
+    weapon: 'Two bronze war axes, one in each fist', armor: 'Bare chest, war-torn trousers and boots — muscle is armor',
+    hp: 1180, defense: 0.04, speed: 7.2, resType: 'rage', res: 100, resStart: 12, regen: 1.2,
+    auto: { name: 'Twin Axe Hacks', dmg: 34, speed: 1.6, range: 4.5, ranged: false, school: 'phys', glyph: '🪓', color: '#d83a2a',
+      desc: 'Basic attack: alternating hacks with both axes (34 damage every 1.6 sec). Melee range, generates rage. Bloodrage applies.' },
+    rating: { health: 4, damage: 5, mobility: 3, defense: 2 },
+    passive: { name: 'Bloodrage', maxBonus: 0.5 },
+    abilities: [
+      { id: 'rending_axes', name: 'Rending Axes', glyph: '🩸', color: '#e03030', school: 'phys', cost: 20, cd: 0, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
+        desc: 'Carve the target with both axes for 58 damage and make them bleed for 36 more over 4 sec.',
+        exec(sim, c, t) { sim.damage(c, t, 58, { school: 'phys', ab: 'rending_axes' }); sim.addDot(c, t, 'Bleeding', 36, 4, 'phys', '🩸'); } },
+      { id: 'headtaker', name: 'Headtaker', glyph: '💀', color: '#ff6a4a', school: 'phys', cost: 30, cd: 7, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
+        desc: 'A brutal overhead chop for 85 damage — doubled against targets below 35% health.',
+        exec(sim, c, t) { const low = t.hp / t.maxHp < 0.35; sim.damage(c, t, low ? 170 : 85, { school: 'phys', ab: 'headtaker', big: low }); } },
+      { id: 'axe_throw', name: 'Hurled Axe', glyph: '↯', color: '#c8b090', school: 'phys', cost: 15, cd: 16, gcd: true, cast: 0, range: 25, target: true,
+        desc: 'Hurl one axe at an enemy up to 25 yards away: 50 damage and they are pinned in place for 2 sec.',
+        exec(sim, c, t) { sim.spawnProjectile(c, t, 'axe_throw', 32, () => { sim.damage(c, t, 50, { school: 'phys', ab: 'axe_throw' }); sim.addBuff(t, 'root', 2, { src: c.id, cc: 'root', name: 'Pinned', icon: '↯' }); }); } },
+      { id: 'skull_leap', name: 'Skull-Splitter Leap', glyph: '⤴', color: '#ffb070', school: 'phys', cost: 0, cd: 20, gcd: false, cast: 0, range: 30, minRange: 6, target: true,
+        desc: 'Leap through the air onto an enemy 6–30 yards away. On landing, deal 40 damage to enemies within 5 yards and slow them by 40% for 3 sec.',
+        exec(sim, c, t) { sim.charge(c, t, () => {
+          sim.event({ e: 'fx', fx: 'skull_leap_land', id: c.id, x: c.x, z: c.z });
+          for (const e of sim.enemiesOf(c)) if (sim.dist(c, e) <= 5) { sim.damage(c, e, 40, { school: 'phys', ab: 'skull_leap' }); sim.addBuff(e, 'slow', 3, { value: 0.4, src: c.id, name: 'Shaken', icon: '⤴' }); }
+          c.res = Math.min(c.maxRes, c.res + 15);
+        }, { fx: 'skull_leap', arc: 4.5, speed: 30 }); } },
+      { id: 'undying_rage', name: 'Undying Rage', glyph: '♥', color: '#b01020', school: 'phys', cost: 0, cd: 45, gcd: false, cast: 0, range: 0, target: false, allowCC: true,
+        desc: 'For 6 sec take 20% less damage and heal for 20% of all damage you deal. Usable while stunned.',
+        exec(sim, c) { sim.addBuff(c, 'dr', 6, { value: 0.2, src: c.id, name: 'Undying Rage', icon: '♥', fx: 'undying' }); sim.addBuff(c, 'lifesteal', 6, { value: 0.2, src: c.id, name: 'Undying Rage', icon: '♥' }); } },
+      { id: 'berserk', name: 'Berserk', glyph: '☄', color: '#ff2a1a', school: 'phys', cost: 0, cd: 50, gcd: false, cast: 0, range: 0, target: false, signature: true,
+        desc: 'SIGNATURE — Sacrifice 15% of your current health to go berserk for 8 sec: +25% damage, basic attacks 30% faster, and immunity to slows and roots. The lost blood fuels Bloodrage.',
+        exec(sim, c) { c.hp = Math.max(1, Math.round(c.hp * 0.85)); sim.cleanse(c, ['slow', 'root']); sim.addBuff(c, 'berserk', 8, { value: 0.25, src: c.id, name: 'Berserk', icon: '☄', fx: 'berserk' }); } },
     ],
   },
 
@@ -147,8 +182,8 @@ export const CLASSES = {
     rating: { health: 3, damage: 4, mobility: 3, defense: 3 },
     abilities: [
       { id: 'lightning_lash', name: 'Lightning Lash', glyph: '⚡', color: '#7ae0ff', school: 'nature', cost: 50, cd: 0, gcd: true, cast: 1.3, range: 30, target: true,
-        desc: 'Strike the target with a bolt of lightning for 100 nature damage.',
-        exec(sim, c, t) { sim.event({ e: 'fx', fx: 'lightning_lash', id: c.id, tid: t.id }); sim.damage(c, t, 100, { school: 'nature', ab: 'lightning_lash' }); } },
+        desc: 'Strike the target with a bolt of lightning for 96 nature damage.',
+        exec(sim, c, t) { sim.event({ e: 'fx', fx: 'lightning_lash', id: c.id, tid: t.id }); sim.damage(c, t, 96, { school: 'nature', ab: 'lightning_lash' }); } },
       { id: 'magma_burst', name: 'Magma Burst', glyph: '♨', color: '#ff7a2a', school: 'fire', cost: 70, cd: 7, gcd: true, cast: 0, range: 30, target: true,
         desc: 'Launch molten rock that deals 78 fire damage and burns for 60 more over 6 sec.',
         exec(sim, c, t) { sim.spawnProjectile(c, t, 'magma_burst', 40, () => { sim.damage(c, t, 78, { school: 'fire', ab: 'magma_burst' }); sim.addDot(c, t, 'Magma Burn', 60, 6, 'fire', '♨'); }); } },
@@ -176,6 +211,7 @@ export const BUFF_ICONS = {
   absorb: { icon: '◈', color: '#7ab0ff' }, dr: { icon: '⛨', color: '#d8d8e8' }, speed: { icon: '❦', color: '#d8f4ff' },
   stealth: { icon: '◐', color: '#6b5a8f' }, ambush: { icon: '⚡', color: '#ffcf4a' }, tempest: { icon: '✺', color: '#ffe0a0' },
   spirit: { icon: '♆', color: '#ffb03a' }, stoneskin: { icon: '⬢', color: '#b0d080' }, ccimmune: { icon: '✦', color: '#fff' },
+  berserk: { icon: '☄', color: '#ff2a1a' }, lifesteal: { icon: '♥', color: '#b01020' },
 };
 
 // Bot names. Enemy bots in 2v2 are always Zigi and Jöggu.

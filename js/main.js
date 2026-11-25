@@ -705,8 +705,8 @@ function handleEvents(evs, view) {
       case 'hit': audio.play(HIT_SOUND[ev.kind] || 'fire_hit', { x: ev.x, z: ev.z }); if (ev.kind === 'arcane_comet') world.addShake(ev.id === my ? 0.7 : 0.3); break;
       case 'dmg':
         hud.combatText(ev, F, my);
-        if (ev.ab === 'auto' && F[ev.src] && !['rogue', 'warrior'].includes(F[ev.src].cls)) { /* ranged auto impact sound comes from 'hit' */ }
-        else if (ev.ab === 'auto' || ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam'].includes(ev.ab)) audio.play(ev.crit || ev.big || ev.ab === 'rending_blow' ? 'melee_heavy' : 'melee_hit', pos(ev.id));
+        if (ev.ab === 'auto' && F[ev.src] && !['rogue', 'warrior', 'berserker'].includes(F[ev.src].cls)) { /* ranged auto impact sound comes from 'hit' */ }
+        else if (ev.ab === 'auto' || ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skull_leap'].includes(ev.ab)) audio.play(ev.crit || ev.big || ev.ab === 'rending_blow' ? 'melee_heavy' : 'melee_hit', pos(ev.id));
         if (ev.crit && (ev.src === my || ev.id === my)) audio.play('crit', pos(ev.id));
         if (!ev.dot && ev.amt > 0) world.onHitFlinch(ev.id, ev.crit);
         if (ev.id === my && ev.amt >= 90) world.addShake(Math.min(0.6, ev.amt / 400));

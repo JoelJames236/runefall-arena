@@ -18,6 +18,7 @@ const PROJ_STYLE = {
   arcane_bolt: { color: 0xb98cff, core: 0xf4e8ff, size: 0.24, trail: 0x8a5aff, small: true },
   holy_spark: { color: 0xffe680, core: 0xffffff, size: 0.22, trail: 0xfff0b0, small: true },
   static_bolt: { color: 0x7ae0ff, core: 0xeaffff, size: 0.22, trail: 0x4ad8ff, small: true, zap: true },
+  axe_throw: { color: 0x9a8a7a, core: 0xb8b0a8, size: 0.42, trail: 0x6a5a4a, axe: true, small: true },
 };
 const SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff7a2a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff, phys: 0xffffff };
 const CAST_SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff8a3a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff };
@@ -286,11 +287,13 @@ export class VFX {
       const st = PROJ_STYLE[p.kind] || PROJ_STYLE.flame_burst;
       if (!m) {
         const g = new THREE.Group();
-        const core = new THREE.Mesh(st.rock ? this.G.rock : st.shard ? this.G.shard : this.G.sphereLo,
+        const core = new THREE.Mesh(st.rock ? this.G.rock : (st.shard || st.axe) ? this.G.shard : this.G.sphereLo,
+          st.axe ? new THREE.MeshStandardMaterial({ color: 0x8a8078, roughness: 0.35, metalness: 0.9 }) :
           st.rock ? new THREE.MeshStandardMaterial({ color: 0x3a2010, emissive: 0xff4a0a, emissiveIntensity: 1.5, flatShading: true }) : st.shard ? new THREE.MeshStandardMaterial({ color: 0xcff4ff, emissive: 0x6ac8ff, emissiveIntensity: 1.2, roughness: 0.1 }) : new THREE.MeshBasicMaterial({ color: st.core }));
         const halo = new THREE.Mesh(this.G.sphereLo, this.addMat(st.color, 0.5));
         core.scale.setScalar(st.size * (st.rock ? 0.6 : st.shard ? 0.35 : 0.5)); halo.scale.setScalar(st.size);
         if (st.stretch) { core.scale.z = st.size * st.stretch * 0.4; halo.scale.z = st.size * st.stretch * 0.6; }
+        if (st.axe) { core.scale.set(st.size * 0.7, st.size * 0.25, st.size * 1.1); halo.scale.setScalar(st.size * 0.6); halo.material.opacity = 0.15; }
         g.add(core, halo);
         if (st.big) { const ring = new THREE.Mesh(this.G.torus, this.addMat(st.color, 0.8)); ring.scale.setScalar(st.size * 1.3); g.add(ring); g.userData.ring = ring; }
         g.position.set(p.x, p.y, p.z);
@@ -304,6 +307,7 @@ export class VFX {
       if (dx * dx + dy * dy + dz * dz > 1e-6) m.lookAt(p.x + dx, p.y + dy, p.z + dz);
       if (m.userData.ring) { m.userData.ring.rotation.x += dt * 6; m.userData.ring.rotation.y += dt * 4; }
       if (st.rock) m.userData.core.rotation.x += dt * 10;
+      if (st.axe) m.userData.core.rotation.x += dt * 28;
       // trail
       const steps = st.big ? 6 : st.small ? 2 : 3;
       for (let k = 0; k < steps; k++) {
@@ -423,7 +427,7 @@ export class VFX {
       for (const b of (f.alive ? f.buffs : [])) {
         let key = null;
         if (b.type === 'absorb') key = b.fx || 'absorb';
-        else if (['stun', 'root', 'disorient', 'silence', 'dr', 'tempest', 'mark', 'spirit', 'speed', 'stoneskin', 'slow', 'healred', 'stealth'].includes(b.type)) key = b.type;
+        else if (['stun', 'root', 'disorient', 'silence', 'dr', 'tempest', 'mark', 'spirit', 'speed', 'stoneskin', 'slow', 'healred', 'stealth', 'berserk', 'lifesteal'].includes(b.type)) key = b.type === 'dr' && b.fx === 'undying' ? 'undying' : b.type;
         else if (b.type === 'dot') key = b.data?.school === 'holy' || b.name === 'Holy Burn' ? 'dot_holy' : 'dot';
         if (!key) continue;
         want.add(key);
@@ -432,6 +436,12 @@ export class VFX {
         if (fx) this.updateBuffFx(key, fx, pos, dt, time, f, ch);
       }
       for (const [k, fx] of map) if (!want.has(k)) { this.scene.remove(fx); this.disposeObj(fx); map.delete(k); }
+      // Bloodrage made visible: a berserker steams red rage the lower his health
+      if (f.cls === 'berserker' && f.alive) {
+        const miss = 1 - Math.max(0, f.hp) / f.maxHp;
+        if (miss > 0.25 && Math.random() < dt * 30 * miss * this.budget) { const a = Math.random() * 6.28; this.glow.emit({ x: pos.x + Math.sin(a) * 0.35, y: pos.y + 1.0 + Math.random() * 0.9, z: pos.z + Math.cos(a) * 0.35, vy: 1.4, life: 0.7, size: 0.18 + miss * 0.25, color: 0xd8201a, grow: -0.4 }); }
+        if (miss > 0.5 && Math.random() < dt * 6 * this.budget) this.smoke.emit({ x: pos.x, y: pos.y + 1.6, z: pos.z, vy: 0.9, life: 1.0, size: 0.6, color: 0x5a1010, grow: 1.2, alpha: 0.35 });
+      }
     }
   }
 
@@ -486,6 +496,14 @@ export class VFX {
         for (const s of [-1, 1]) { const horn = new THREE.Mesh(this.G.cone, add(0xffb03a, 0.7)); horn.scale.set(0.1, 0.4, 0.1); horn.position.set(s * 0.25, 0.35, 0); horn.rotation.z = -s * 0.5; g.add(horn); }
         const L = new THREE.PointLight(0xff8a3a, 10, 8, 2); g.add(L);
         g.userData.spirit = true; return g; }
+      case 'berserk': {
+        const r = new THREE.Mesh(this.G.plane, add(0xff2a1a, 0.55)); r.material.map = this.ringTexture; r.rotation.x = -Math.PI / 2; r.position.y = 0.07; r.scale.setScalar(1.3); g.add(r);
+        const L = new THREE.PointLight(0xff3a1a, 8, 7, 2); L.position.y = 1.3; g.add(L);
+        g.userData.pulse2 = r; return g; }
+      case 'undying': {
+        const s = new THREE.Mesh(this.G.sphere, add(0xa01020, 0.14)); s.scale.setScalar(1.35); s.position.y = 1.15; g.add(s);
+        g.userData.pulse = s; return g; }
+      case 'lifesteal': return g;
       case 'healred': case 'speed': case 'slow': case 'dot': case 'dot_holy': case 'stoneskin': case 'stealth': return g; // particle-only
     }
     return null;
@@ -512,6 +530,8 @@ export class VFX {
     if (key === 'healred' && Math.random() < dt * 4 * b) { const p = R(0.6); this.glow.emit({ x: p.x, y: pos.y + 0.8 + Math.random(), z: p.z, vy: -0.6, life: 0.6, size: 0.25, color: 0xff2a2a }); }
     if (key === 'stoneskin' && Math.random() < dt * 6 * b) { const p = R(0.8); this.glow.emit({ x: p.x, y: pos.y + Math.random() * 1.8, z: p.z, vy: 0.5, life: 0.7, size: 0.2, color: 0xb0e080 }); }
     if (key === 'stealth' && Math.random() < dt * 6 * b && ch.opacity > 0.05) { const p = R(0.6); this.smoke.emit({ x: p.x, y: pos.y + Math.random() * 1.6, z: p.z, vy: 0.3, life: 0.9, size: 0.6, color: 0x1a1024, grow: 1, alpha: 0.3 }); }
+    if (key === 'berserk' && Math.random() < dt * 45 * b) { const p = R(0.8); this.glow.emit({ x: p.x, y: pos.y + 0.3 + Math.random() * 1.8, z: p.z, vy: 2.2, life: 0.55, size: 0.4, color: Math.random() < 0.6 ? 0xff2a1a : 0xff8a3a, grow: -0.7 }); }
+    if (key === 'lifesteal' && Math.random() < dt * 12 * b) { const p = R(1.6); this.glow.emit({ x: p.x, y: pos.y + 0.6 + Math.random(), z: p.z, vx: (pos.x - p.x) * 2, vy: 0.4, vz: (pos.z - p.z) * 2, life: 0.5, size: 0.22, color: 0xc0102a }); }
     if (key === 'tempest' && Math.random() < dt * 60 * b) { const a = Math.random() * 6.28; this.glow.emit({ x: pos.x + Math.sin(a) * 2.2, y: pos.y + 0.6 + Math.random() * 1.2, z: pos.z + Math.cos(a) * 2.2, vx: Math.cos(a) * 6, vz: -Math.sin(a) * 6, life: 0.25, size: 0.35, color: 0xfff0d0, grow: -0.5, drag: 3 }); }
   }
 
@@ -547,7 +567,7 @@ export class VFX {
       case 'fizzle': this.burst(ev.x, ev.y, ev.z, 0x888888, 10, 2, 0.4, 0.3); this.smokeBurst(ev.x, ev.y, ev.z, 0x444444, 4, 1, 0.6, 0.5, 0.3); break;
       case 'dmg': {
         const P = at(ev.id);
-        const meleeAb = ev.ab === 'auto' ? !!(F[ev.src] && ['rogue', 'warrior'].includes(F[ev.src].cls)) : ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam'].includes(ev.ab);
+        const meleeAb = ev.ab === 'auto' ? !!(F[ev.src] && ['rogue', 'warrior', 'berserker'].includes(F[ev.src].cls)) : ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker'].includes(ev.ab);
         if (meleeAb) {
           this.burst(P.x, P.y + 1.2, P.z, [0xff3a2a, 0xffe0c0], ev.crit || ev.big ? 26 : 10, 5, 0.35, 0.28, { gravity: 9 });
           const src = F[ev.src];
@@ -619,9 +639,9 @@ export class VFX {
     const c = PROJ_STYLE[ev.kind]?.color ?? 0xffffff;
     switch (ev.kind) {
       case 'arcane_comet':
-        this.burst(ev.x, ev.y, ev.z, [0xc07aff, 0xffffff, 0x7a5aff], 90, 14, 0.9, 0.9, { drag: 2.5 });
+        this.burst(ev.x, ev.y, ev.z, [0xc07aff, 0xffffff, 0x7a5aff], 60, 12, 0.8, 0.6, { drag: 2.5 });
         this.groundRing(ev.x, ev.z, 0xb46aff, 0.5, 8, 0.7); this.sphereFlash(ev.x, ev.y, ev.z, 0xc07aff, 0.5, 3.8, 0.45);
-        this.flash(ev.x, ev.y + 1, ev.z, 0xb46aff, 120, 0.6); this.pillar(ev.x, ev.z, 0xc07aff, 14, 1.2, 0.6);
+        this.flash(ev.x, ev.y + 1, ev.z, 0xb46aff, 70, 0.5); this.pillar(ev.x, ev.z, 0xc07aff, 9, 0.7, 0.45);
         this.smokeBurst(ev.x, 0.5, ev.z, 0x2a1a40, 16, 4, 1.1, 1.6, 0.5); this.shards(ev.x, 0.6, ev.z, 0x9a6aff, 10, 6, 1.2, 0.25);
         break;
       case 'frost_lance':
@@ -709,6 +729,13 @@ export class VFX {
         this.smokeBurst(ev.x, 0.3, ev.z, 0x6a5a48, 24, 7, 1.4, 2.0, 0.6);
         this.flash(ev.x, 1, ev.z, 0xff9a4a, 70, 0.5);
         this.shards(ev.x, 0.3, ev.z, 0x6a5a4a, 12, 8, 1.3, 0.45);
+        break;
+      case 'skull_leap_land':
+        this.groundRing(ev.x, ev.z, 0xff6a3a, 0.5, 6, 0.5);
+        this.smokeBurst(ev.x, 0.3, ev.z, 0x5a4a3a, 18, 5, 1.1, 1.6, 0.55);
+        this.burst(ev.x, 0.4, ev.z, [0x8a6a4a, 0xff8a3a], 40, 9, 0.7, 0.5, { up: 3, gravity: 14 });
+        this.shards(ev.x, 0.3, ev.z, 0x5a4a3a, 9, 7, 1.1, 0.3);
+        this.flash(ev.x, 1, ev.z, 0xff6a3a, 45, 0.4);
         break;
       case 'bull_rush_hit':
         this.burst(ev.x, 1, ev.z, [0xffb04a, 0xffffff], 40, 7, 0.5, 0.45); this.groundRing(ev.x, ev.z, 0xffb04a, 0.5, 4, 0.4); this.flash(ev.x, 1, ev.z, 0xffb04a, 40, 0.3);

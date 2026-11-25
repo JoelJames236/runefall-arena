@@ -51,7 +51,7 @@ async function run1v1(N, diff, out) {
   for (const a of CLASS_ORDER) {
     let tot = 0;
     html += `<tr><th>${a}</th>` + CLASS_ORDER.map(b => { if (a === b) return '<td>—</td>'; const v = wins[a + b]; tot += v; return `<td style="background:hsl(${120 * v},45%,22%)">${Math.round(v * 100)}%</td>`; }).join('');
-    html += `<td><b>${Math.round(tot / 4 * 100)}%</b></td></tr>`;
+    html += `<td><b>${Math.round(tot / (CLASS_ORDER.length - 1) * 100)}%</b></td></tr>`;
   }
   html += '</table>' + `<p>Round length: median ${lens[lens.length >> 1].toFixed(1)}s, 90th percentile ${lens[Math.floor(lens.length * 0.9)].toFixed(1)}s</p>`;
   out.innerHTML = html;

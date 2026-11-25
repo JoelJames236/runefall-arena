@@ -10,7 +10,9 @@ export const PILLARS = [0, 1, 2, 3].map(i => {
 });
 export const RULES = { winsNeeded: 4, countdown: 3.5, roundEnd: 4.0, dampStart: 60, dampRate: 1.2, gcd: 1.0, critChance: 0.08, critMult: 1.5, backMult: 1.1 };
 export const FIGHTER_R = 0.6;
-const MOVE_ABS = new Set(['arcane_shift', 'shadow_leap', 'bull_rush', 'gale_dash']);
+const MOVE_ABS = new Set(['arcane_shift', 'shadow_leap', 'bull_rush', 'gale_dash', 'skull_leap']);
+// Berserker passive: up to +60% damage as health drops (linear with missing health)
+export const bloodrage = f => f.cls === 'berserker' ? 1 + (CLASSES.berserker.passive.maxBonus) * (1 - Math.max(0, f.hp) / f.maxHp) : 1;
 const STUNLIKE = ['stun', 'disorient'];
 const RES_NAME = { mana: 'mana', energy: 'energy', rage: 'rage' };
 const MELEE_AUTO_RANGE = 4.5;
@@ -403,7 +405,7 @@ export class Sim {
     const d = this.dist(f, t);
     if (A.ranged) { if (d > A.range + 0.3 || !this.los(f, t)) return; }
     else if (d > MELEE_AUTO_RANGE || Math.abs(angleDiff(f.yaw, angleTo(f, t))) > 1.45) return;
-    f.autoT = A.speed;
+    f.autoT = A.speed / (hasBuff(f, 'berserk') ? 1.3 : 1);
     this.removeBuff(f, 'stealth');
     this.event({ e: 'auto', id: f.id, tid: t.id, ranged: !!A.ranged });
     if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true }));
@@ -499,10 +501,12 @@ export class Sim {
       if (L <= 1.8) { this.endDash(f, true); return; }
       vx = dx / L; vz = dz / L; f.yaw = Math.atan2(vx, vz);
     }
+    // leaps travel along a parabolic arc
+    if (d.arc) { if (d.total === undefined) d.total = Math.max(1, Math.hypot(this.fighters[d.homing].x - f.x, this.fighters[d.homing].z - f.z)); d.done = (d.done || 0) + d.speed * dt; const u = Math.min(1, d.done / d.total); f.y = 4 * d.arc * u * (1 - u); }
     const step = d.speed * dt;
     const nx = f.x + vx * step, nz = f.z + vz * step;
     let blocked = false;
-    for (const p of PILLARS) if (Math.hypot(nx - p.x, nz - p.z) < p.r + FIGHTER_R) blocked = true;
+    if (!d.arc) for (const p of PILLARS) if (Math.hypot(nx - p.x, nz - p.z) < p.r + FIGHTER_R) blocked = true; // leaps clear pillars
     if (Math.hypot(nx, nz) > ARENA_R - FIGHTER_R) blocked = true;
     if (!blocked) { f.x = nx; f.z = nz; }
     if (blocked || d.t <= 0) this.endDash(f, false);
@@ -510,6 +514,7 @@ export class Sim {
 
   endDash(f, arrived) {
     const d = f.dash; f.dash = null; f.locked = false; f.forceSeq++; f.forceYaw++;
+    if (d.arc) { f.y = 0; f.vy = 0; }
     if (arrived && d.onArrive) d.onArrive();
     this.event({ e: 'dashEnd', id: f.id, fx: d.fx });
   }
@@ -526,9 +531,13 @@ export class Sim {
     if (back) amt *= RULES.backMult;
     const crit = direct && !o.noCrit && Math.random() < RULES.critChance;
     if (crit) { amt *= RULES.critMult; src.stats.crits++; }
+    amt *= bloodrage(src);
+    const bz = getBuff(src, 'berserk'); if (bz) amt *= 1 + bz.value;
     amt *= 1 - CLASSES[tgt.cls].defense;
     for (const b of tgt.buffs) if (b.type === 'dr' || b.type === 'stoneskin') amt *= 1 - b.value;
     if (this.shieldwall(tgt)) amt *= 0.9;
+    // Berserker Bloodrage, team play only: up to 25% less damage taken as health drops
+    if (tgt.cls === 'berserker' && this.teamSize[tgt.team] >= 2) amt *= 1 - 0.25 * (1 - Math.max(0, tgt.hp) / tgt.maxHp);
     amt = Math.max(1, Math.round(amt));
     let absorbed = 0;
     for (const b of tgt.buffs) {
@@ -538,6 +547,8 @@ export class Sim {
     }
     tgt.hp -= amt;
     src.stats.dmg += amt;
+    const ls = getBuff(src, 'lifesteal');
+    if (ls && src !== tgt && src.alive) { const h = Math.round((amt + absorbed) * ls.value * (1 - this.damp / 100)); if (h > 0) { src.hp = Math.min(src.maxHp, src.hp + h); src.stats.heal += h; this.event({ e: 'heal', id: src.id, src: src.id, amt: h, ab: 'lifesteal' }); } }
     tgt.stats.absorbed += absorbed;
     if (src.resType === 'rage') src.res = Math.min(src.maxRes, src.res + (amt + absorbed) * 0.075);
     if (tgt.resType === 'rage') tgt.res = Math.min(tgt.maxRes, tgt.res + (amt + absorbed) * 0.07);
@@ -582,8 +593,10 @@ export class Sim {
 
   addBuff(f, type, dur, o = {}) {
     if (!f.alive) return null;
+    if (type === 'slow' && o.src !== f.id && hasBuff(f, 'berserk')) return null; // berserk: immune to slows
     if (o.cc) {
       if (hasBuff(f, 'tempest') || hasBuff(f, 'ccimmune')) { this.event({ e: 'immune', id: f.id }); return null; }
+      if (o.cc === 'root' && hasBuff(f, 'berserk')) { this.event({ e: 'immune', id: f.id }); return null; }
       const dr = f.dr[o.cc];
       if (dr && dr.t > 15) delete f.dr[o.cc];
       const n = f.dr[o.cc] ? f.dr[o.cc].n : 0;
@@ -712,10 +725,10 @@ export class Sim {
     this.event({ e: 'dash', id: f.id, fx });
   }
 
-  charge(f, t, onArrive) {
-    f.dash = { homing: t.id, speed: 40, t: 1.0, fx: 'bull_rush', onArrive };
+  charge(f, t, onArrive, o = {}) {
+    f.dash = { homing: t.id, speed: o.speed || 40, t: o.arc ? 1.6 : 1.0, fx: o.fx || 'bull_rush', onArrive, arc: o.arc || 0 };
     f.locked = true; f.forceSeq++;
-    this.event({ e: 'dash', id: f.id, fx: 'bull_rush' });
+    this.event({ e: 'dash', id: f.id, fx: f.dash.fx });
   }
 
   shadowLeap(f, t) {

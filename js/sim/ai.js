@@ -11,8 +11,8 @@ const DIFF = {
   hard: { react: 0.15, interrupt: 0.9, defensive: 1.0, kite: 1.0, dodge: 0.95, focus: 1.0 },
 };
 
-const MELEE_CLASSES = new Set(['rogue', 'warrior']);
-const INTERRUPTS = { warrior: ['shield_slam'], rogue: ['skull_crack'], priest: ['blinding_light'], mage: [], shaman: ['quake_totem'] };
+const MELEE_CLASSES = new Set(['rogue', 'warrior', 'berserker']);
+const INTERRUPTS = { berserker: [], warrior: ['shield_slam'], rogue: ['skull_crack'], priest: ['blinding_light'], mage: [], shaman: ['quake_totem'] };
 
 export class AI {
   constructor(sim, id, difficulty = 'normal') {
@@ -235,6 +235,18 @@ export class AI {
         if ((p = use('rending_blow'))) return p;
         if (!hasBuff(foe, 'slow') && (p = use('crippling_slash'))) return p;
         if (me.res > 70 && (p = use('crippling_slash'))) return p;
+        return null;
+      case 'berserker':
+        // low health = more damage: only pop the defensive when truly close to death
+        if (def && hp < 0.3 && (p = use('undying_rage'))) return p;
+        if (!visible) return null;
+        if (dist > 7 && (p = use('skull_leap'))) return p;
+        if (dist > 6 && !foeCC && (p = use('axe_throw'))) return p;
+        if (dist < 6 && (hp < 0.75 || foeHp < 0.5) && hp > 0.25 && (p = use('berserk'))) return p;
+        if (foeHp < 0.35 && (p = use('headtaker'))) return p;
+        if (!foe.buffs.some(b => b.name === 'Bleeding' && b.src === me.id) && (p = use('rending_axes'))) return p;
+        if ((p = use('headtaker'))) return p;
+        if (me.res > 55 && (p = use('rending_axes'))) return p;
         return null;
       case 'priest': {
         const hurt = this.hurtFriend(me, allies, 0.75);
