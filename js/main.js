@@ -262,7 +262,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 
 function newRoom() {
   return { format: '2v2', botDiff: 'normal', slots: [
-    { kind: 'human', name: S.playerName, cls: S.myCls, ready: true, cid: 'host' },
+    { kind: 'human', name: S.playerName, cls: S.myCls, ready: false, cid: 'host' },
     { kind: 'empty' }, { kind: 'empty' }, { kind: 'empty' },
   ] };
 }
@@ -277,14 +277,12 @@ function botFor(i) {
 function startHost() {
   closeNet();
   S.room = newRoom(); S.mySlot = 0; S.queueing = false;
-  show('room'); renderRoom();
-  $('roomStatus').textContent = 'Opening the arena gates…';
   const net = S.net = new Net();
   bindNet(net);
-  net.host(code => {
-    $('roomCode').textContent = code;
-    $('roomStatus').textContent = 'Invite friends with the link — or fill empty slots with bots.';
-  });
+  net.role = 'host';
+  show('room'); renderRoom();
+  $('roomStatus').textContent = 'Opening the arena gates…';
+  net.host(code => { $('roomCode').textContent = code; renderRoom(); });
 }
 
 function roomLink() { const url = new URL(location.href); url.search = ''; url.hash = ''; url.searchParams.set('join', S.net?.code || ''); return url.toString(); }
@@ -321,9 +319,15 @@ function renderRoom() {
   $('slotsB').innerHTML = act.filter(i => SLOT_TEAM[i] === 1).map(card).join('');
   $('room').querySelector('.room-actions').classList.toggle('guest', !isHost);
   const mine = room.slots[S.mySlot];
-  $('roomReady').classList.toggle('hidden', isHost);
+  // everyone (host included) readies up; the host then starts the match
+  $('roomReady').classList.remove('hidden');
   $('roomReady').textContent = mine?.ready ? 'Cancel Ready' : 'Ready';
   $('roomReady').classList.toggle('on', !!mine?.ready);
+  const waiting = act.map(i => room.slots[i]).filter(s => s.kind === 'human' && !s.ready).map(s => s.name);
+  const open = act.filter(i => room.slots[i].kind === 'empty').length;
+  if (!S.queueing) $('roomStatus').textContent = open ? `${open} open slot${open > 1 ? 's' : ''} — invite a friend${isHost ? ' or add a bot' : ''}.`
+    : waiting.length ? `Waiting for ${waiting.join(', ')} to press Ready.`
+    : isHost ? 'Everyone is ready — press Start Match!' : 'Everyone is ready — waiting for the host to start.';
   if (isHost) {
     const teamBHumans = [2, 3].some(i => room.slots[i].kind === 'human');
     $('roomQueue').classList.toggle('gone', room.format !== '2v2' || teamBHumans);
@@ -342,13 +346,18 @@ function canStart() {
 $('roomFormat').addEventListener('click', e => {
   const f = e.target.closest('[data-format]')?.dataset.format; if (!f || S.net?.role !== 'host') return;
   S.room.format = f;
-  if (f === '1v1') { // move humans out of slots 1/3 if possible
-    for (const [from, to] of [[1, 2], [3, 2], [1, 0]]) {
-      const a = S.room.slots[from], b = S.room.slots[to];
-      if (a.kind === 'human' && b.kind !== 'human') { S.room.slots[to] = a; S.room.slots[from] = { kind: 'empty' }; if (a.cid === 'host') S.mySlot = to; }
-    }
-    for (const i of [1, 3]) if (S.room.slots[i].kind === 'human') { S.net.sendTo(S.room.slots[i].cid, { t: 'kicked', msg: 'The lobby switched to 1v1 and is full.' }); S.net.kick(S.room.slots[i].cid); S.room.slots[i] = { kind: 'empty' }; }
-    else S.room.slots[1] = S.room.slots[3] = { kind: 'empty' };
+  if (f === '1v1') {
+    // 1v1 uses slots 0 (Gold) and 2 (Crimson): keep the host plus the first other player,
+    // put them on opposite sides; anyone beyond two players can't fit and is told why.
+    const humans = S.room.slots.filter(s => s.kind === 'human').sort((a, b) => (b.cid === 'host') - (a.cid === 'host'));
+    const bots = S.room.slots.filter(s => s.kind === 'bot');
+    const keep = humans.slice(0, 2);
+    for (const s of humans.slice(2)) { S.net.sendTo(s.cid, { t: 'kicked', msg: 'The lobby switched to 1v1 and is full.' }); S.net.kick(s.cid); }
+    const slots = [{ kind: 'empty' }, { kind: 'empty' }, { kind: 'empty' }, { kind: 'empty' }];
+    slots[0] = keep[0] || bots.shift() || { kind: 'empty' };
+    slots[2] = keep[1] || bots.find(b => BOT_NAMES.enemy.includes(b.name)) || bots[0] || { kind: 'empty' };
+    S.room.slots = slots;
+    S.mySlot = slots.findIndex(s => s.cid === 'host');
     stopQueue();
   }
   roomBroadcast();
@@ -375,7 +384,10 @@ $('room').addEventListener('change', e => {
 $('roomBotDiff').addEventListener('change', e => { if (S.room) { S.room.botDiff = e.target.value; roomBroadcast(); } });
 $('roomFill').addEventListener('click', () => { for (const i of activeSlots(S.room)) if (S.room.slots[i].kind === 'empty') S.room.slots[i] = botFor(i); roomBroadcast(); });
 $('roomClass').addEventListener('click', () => openClassSelect('room'));
-$('roomReady').addEventListener('click', () => { if (!S.net || !S.roomView) return; const v = !S.roomView.slots[S.mySlot]?.ready; S.net.send({ t: 'ready', v }); });
+$('roomReady').addEventListener('click', () => {
+  if (S.net?.role === 'host') { const s = S.room.slots[S.mySlot]; if (s) { s.ready = !s.ready; roomBroadcast(); } return; }
+  if (!S.net || !S.roomView) return; const v = !S.roomView.slots[S.mySlot]?.ready; S.net.send({ t: 'ready', v });
+});
 $('roomLeave').addEventListener('click', () => leaveOnline());
 $('roomStart').addEventListener('click', () => { if (canStart()) startOnline(); });
 $('roomQueue').addEventListener('click', () => { if (S.queueing) stopQueue(); else startQueue(); });
@@ -449,7 +461,6 @@ function bindNet(net) {
     if (S.inGame) { endGame(); world.showMenuScene(); audio.setTrack('menu'); }
     if (S.screen !== 'room' && S.screen !== 'classSelect') show('room');
     if (S.screen === 'room') renderRoom();
-    $('roomStatus').textContent = 'Waiting for the host to start the match…';
   });
   net.on('start', m => { if (net.role === 'guest') transition(() => startMatch(m.roster, 'guest', m.you)); });
   net.on('snap', m => onSnapshot(m.s));
@@ -505,7 +516,7 @@ function startOnline() {
   const myFid = owners.indexOf('host');
   S.cidToFid = new Map();
   owners.forEach((cid, fid) => { if (cid && cid !== 'host') { S.cidToFid.set(cid, fid); S.net.sendTo(cid, { t: 'start', roster, you: fid }); } });
-  for (const s of room.slots) if (s.kind === 'human') s.ready = s.cid === 'host';
+  for (const s of room.slots) if (s.kind === 'human') s.ready = false; // everyone readies again next time
   transition(() => startMatch(roster, 'host', myFid));
 }
 
