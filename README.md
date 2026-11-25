@@ -62,6 +62,9 @@ their champion so the match can finish.
 - **Hits from behind deal 10% more damage.** Direct hits and heals can **crit** (8%, +50%).
 - Cast-time spells require standing still; moving or jumping cancels them. The four rune pillars block
   line of sight.
+- **The bridge** spans the middle of the arena: run up a ramp and fight on the deck, or duck under the
+  arch. Deck, ramps and arch block line of sight; melee can't reach between deck and floor, and charges
+  stop short of a target on the other level. Drop off the side to escape.
 - 1.0 s global cooldown with a short spell-queue window.
 - Crowd control has diminishing returns (100% → 50% → 25% → immune, resets after 15 s).
 - **Dampening** starts after 60 s and steadily reduces healing and shields, so every round ends.
@@ -100,6 +103,7 @@ js/input.js              Keyboard + mouse, pointer lock with drag-to-look fallba
 js/audio.js              Synthesized SFX + generative orchestral music (Web Audio)
 js/render/world.js       Scene, lighting, post-processing, camera, team rings, selection circles
 js/render/arena.js       Procedural arena, sky, terrain, crowd, banners, statues, backdrop
+js/render/bridge.js      The central arch bridge (same dimensions as BRIDGE in sim.js)
 js/render/heroes.js      Rigged champions (outfits, animation mixer, weapon grips)
 js/render/armory.js      Class armor sets + weapons (built in code, merged per bone for few draw calls)
 js/render/characters.js  Procedural fallback champion models

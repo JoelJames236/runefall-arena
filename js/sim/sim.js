@@ -34,7 +34,85 @@ export function angleDiff(a, b) { let d = (b - a) % (Math.PI * 2); if (d > Math.
 // true when `src` stands behind `tgt` (outside the target's front ~220° arc)
 export const isBehind = (src, tgt) => Math.abs(angleDiff(tgt.yaw, angleTo(tgt, src))) > 1.92;
 
-export function segBlocked(ax, az, bx, bz) {
+// ---------------------------------------------------------------- the central bridge
+// A stone bridge across the middle along the x axis (between the two spawns, which sit on the z axis).
+// Deck: |x| <= hx, |z| <= hz at height H — walk on top or run underneath it.
+// Ramps: hx < |x| <= hx + ramp, solid embankments sloping from H down to the floor.
+export const BRIDGE = { hx: 6.5, hz: 1.9, H: 3.2, ramp: 7.5, slab: 0.45 };
+const BR = BRIDGE, BR_END = BRIDGE.hx + BRIDGE.ramp;
+export const rampH = ax => BR.H * Math.max(0, Math.min(1, (BR_END - ax) / BR.ramp));
+// height of the walkable surface under a fighter whose feet are at y
+export function floorAt(x, z, y) {
+  if (Math.abs(z) > BR.hz + 0.15) return 0;
+  const ax = Math.abs(x);
+  if (ax <= BR.hx) return y >= BR.H - 0.9 ? BR.H : 0;
+  if (ax <= BR_END) { const h = rampH(ax); return y >= h - 0.75 ? h : 0; }
+  return 0;
+}
+// the arch under the deck: opening height at |x| (0 at the abutments); the side spandrels are solid stone
+export const archY = ax => ax >= BR.hx ? 0 : (BR.H - BR.slab - 0.25) * Math.sqrt(1 - (ax / BR.hx) ** 2);
+const ARCH_PASS = 2.05; // you can cross under the deck from the side where the arch is at least this high
+export const SPAN_Z = BRIDGE.hz + 0.1; // spandrel plane (each side)
+// true when a fighter with feet at y can't stand here (inside a ramp embankment or an arch spandrel)
+export function solidAt(x, z, y) {
+  const ax = Math.abs(x), az = Math.abs(z);
+  if (ax <= BR.hx) return y < BR.H - 0.9 && az > BR.hz - 0.55 && az < BR.hz + 0.8 && archY(ax) < ARCH_PASS;
+  if (az > BR.hz + 0.45) return false;
+  return ax <= BR_END + 0.3 && y < rampH(ax) - 0.75;
+}
+// where a leap/teleport ending at height y comes to rest (never inside a ramp)
+export function landAt(x, z, y) {
+  if (Math.abs(z) > BR.hz + 0.15) return 0;
+  const ax = Math.abs(x);
+  if (ax <= BR.hx) return y >= BR.H - 1.4 ? BR.H : 0;
+  return ax <= BR_END ? rampH(ax) : 0;
+}
+// under the deck: head room is limited (jumps bump the ceiling)
+export const underDeck = (x, z, y) => Math.abs(x) <= BR.hx + 0.2 && Math.abs(z) <= BR.hz + 0.3 && y < BR.H - 0.9;
+export const DECK_CEIL = BRIDGE.H - BRIDGE.slab - 2.0;
+export const airborne = f => f.y - floorAt(f.x, f.z, f.y) > 0.05;
+// distance used for ranges: a level difference counts double (no melee from under the bridge)
+export function rangeDist(a, b) {
+  const dh = floorAt(a.x, a.z, a.y) - floorAt(b.x, b.z, b.y);
+  return Math.hypot(a.x - b.x, a.z - b.z, dh * 2);
+}
+// Liang-Barsky: does segment A + tD (t in 0..1) intersect the convex region { n·P <= b for all planes }?
+function clipSeg(A, D, planes) {
+  let t0 = 0, t1 = 1;
+  for (const [nx, ny, nz, b] of planes) {
+    const p = nx * A[0] + ny * A[1] + nz * A[2], q = nx * D[0] + ny * D[1] + nz * D[2];
+    if (Math.abs(q) < 1e-9) { if (p > b) return false; continue; }
+    const t = (b - p) / q;
+    if (q > 0) t1 = Math.min(t1, t); else t0 = Math.max(t0, t);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+const BW = BRIDGE.hz + 0.25, RS = BRIDGE.H * BR_END - 0.1 * BRIDGE.ramp;
+const BRIDGE_SOLIDS = [
+  // deck slab
+  [[1, 0, 0, BR.hx + 0.3], [-1, 0, 0, BR.hx + 0.3], [0, 0, 1, BW], [0, 0, -1, BW], [0, 1, 0, BR.H - 0.05], [0, -1, 0, -(BR.H - BR.slab)]],
+  // ramps (triangular prisms): x beyond the deck, under the slope
+  [[-1, 0, 0, -BR.hx], [0, 0, 1, BW], [0, 0, -1, BW], [BR.H, BR.ramp, 0, RS]],
+  [[1, 0, 0, -BR.hx], [0, 0, 1, BW], [0, 0, -1, BW], [-BR.H, BR.ramp, 0, RS]],
+];
+// does the 3D segment a->b pass through the deck, a ramp or an arch spandrel?
+function bridgeBlocks(ax, ay, az, bx, by, bz) {
+  if ((ax > BR_END && bx > BR_END) || (ax < -BR_END && bx < -BR_END) || (az > BW && bz > BW) || (az < -BW && bz < -BW)) return false;
+  const A = [ax, ay, az], D = [bx - ax, by - ay, bz - az];
+  for (const s of BRIDGE_SOLIDS) if (clipSeg(A, D, s)) return true;
+  // spandrels: thin walls in the planes z = ±SPAN_Z, between the arch curve and the deck
+  if (Math.abs(D[2]) > 1e-9) for (const zp of [SPAN_Z, -SPAN_Z]) {
+    const t = (zp - az) / D[2]; if (t < 0 || t > 1) continue;
+    const x = Math.abs(ax + D[0] * t), y = ay + D[1] * t;
+    if (x <= BR.hx && y < BR.H - BR.slab && y > archY(x)) return true;
+  }
+  return false;
+}
+
+// line of sight between eye points (y = eye height; defaults to standing on the floor)
+export function segBlocked(ax, az, bx, bz, ay = 1.5, by = 1.5) {
+  if (bridgeBlocks(ax, ay, az, bx, by, bz)) return true;
   for (const p of PILLARS) {
     const dx = bx - ax, dz = bz - az;
     const L2 = dx * dx + dz * dz || 1e-6;
@@ -80,9 +158,22 @@ export function moveFighter(f, inp, dt, others, canAct = true) {
   const sy = Math.sin(f.yaw), cy = Math.cos(f.yaw);
   const vx = (sy * mz - cy * mx) * speed, vz = (cy * mz + sy * mx) * speed;
   const ox = f.x, oz = f.z;
+  const grounded = f.vy <= 0 && f.y <= floorAt(ox, oz, f.y) + 0.001;
   f.x += vx * dt; f.z += vz * dt;
-  if (inp.jump && f.y <= 0.001 && canAct && !stunned && !rooted && !f.locked) { f.vy = 7.8; }
-  if (f.y > 0 || f.vy > 0) { f.vy -= 24 * dt; f.y += f.vy * dt; if (f.y <= 0) { f.y = 0; f.vy = 0; } }
+  if (solidAt(f.x, f.z, f.y)) { // slide along the ramp embankments
+    if (!solidAt(ox, f.z, f.y)) f.x = ox; else if (!solidAt(f.x, oz, f.y)) f.z = oz; else { f.x = ox; f.z = oz; }
+  }
+  if (inp.jump && grounded && canAct && !stunned && !rooted && !f.locked) { f.vy = 7.8; }
+  let fl = floorAt(f.x, f.z, f.y);
+  if (f.vy > 0 || f.y > fl + 0.001) {
+    if (grounded && f.vy <= 0 && f.y - fl < 0.6) f.y = fl; // follow the slope down a ramp
+    else {
+      const y0 = f.y; f.vy -= 24 * dt; f.y += f.vy * dt;
+      fl = floorAt(f.x, f.z, Math.max(y0, f.y));
+      if (f.y <= fl) { f.y = fl; f.vy = 0; }
+    }
+  } else if (f.y < fl) f.y = fl; // step up onto a ramp
+  if (underDeck(f.x, f.z, f.y) && f.y > DECK_CEIL) { f.y = DECK_CEIL; f.vy = Math.min(0, f.vy); }
   collide(f, others);
   const moved = Math.hypot(f.x - ox, f.z - oz);
   f.moving = moved > 0.2 * dt;
@@ -256,8 +347,8 @@ export class Sim {
   // ------------------------------------------------------------ queries
   enemiesOf(f) { return this.fighters.filter(o => o.team !== f.team && o.alive); }
   alliesOf(f) { return this.fighters.filter(o => o.team === f.team && o.id !== f.id && o.alive); }
-  dist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
-  los(a, b) { return !segBlocked(a.x, a.z, b.x, b.z); }
+  dist(a, b) { return rangeDist(a, b); }
+  los(a, b) { return !segBlocked(a.x, a.z, b.x, b.z, a.y + 1.5, b.y + 1.5); }
   forward(f) { return { x: Math.sin(f.yaw), z: Math.cos(f.yaw) }; }
   visibleTo(t, viewer) { return !!t && t.alive && (!hasBuff(t, 'stealth') || (viewer && t.team === viewer.team)); }
   shieldAmt(v) { return Math.round(v * (1 - this.damp / 100)); }
@@ -302,7 +393,7 @@ export class Sim {
     if (hasBuff(f, 'tempest') && ab.id !== 'steel_tempest') return "Can't do that while spinning";
     if (hasBuff(f, 'silence') && ab.school !== 'phys') return 'You are silenced';
     if (hasBuff(f, 'root') && MOVE_ABS.has(ab.id) && !ab.allowRooted) return 'You are rooted';
-    if (ab.cast > 0 && f.y > 0.05) return "You can't cast while jumping";
+    if (ab.cast > 0 && airborne(f)) return "You can't cast while jumping";
     if (f.cds[idx] > 0) return 'Ability not ready yet';
     if (ab.gcd && f.gcd > 0 && !ignoreGcd) return 'GCD';
     if (ab.cost > f.res) return `Not enough ${RES_NAME[f.resType]}`;
@@ -427,7 +518,7 @@ export class Sim {
     }
     // casting
     if (f.cast) {
-      if (f.moving || f.y > 0.05) { this.cancelCast(f, false); }
+      if (f.moving || airborne(f)) { this.cancelCast(f, false); }
       else if (isStunned(f) || hasBuff(f, 'silence')) { this.cancelCast(f, true); }
       else {
         f.cast.t += dt;
@@ -498,23 +589,36 @@ export class Sim {
     if (d.homing !== undefined) {
       const t = this.fighters[d.homing];
       const dx = t.x - f.x, dz = t.z - f.z, L = Math.hypot(dx, dz);
-      if (L <= 1.8) { this.endDash(f, true); return; }
+      // a charge can't reach a target on another level (e.g. on the bridge above): it stops short
+      if (L <= 1.8) { this.endDash(f, d.arc || Math.abs(t.y - f.y) < 1.6); return; }
       vx = dx / L; vz = dz / L; f.yaw = Math.atan2(vx, vz);
     }
-    // leaps travel along a parabolic arc
-    if (d.arc) { if (d.total === undefined) d.total = Math.max(1, Math.hypot(this.fighters[d.homing].x - f.x, this.fighters[d.homing].z - f.z)); d.done = (d.done || 0) + d.speed * dt; const u = Math.min(1, d.done / d.total); f.y = 4 * d.arc * u * (1 - u); }
+    // leaps travel along a parabolic arc (from the start height to the target's height)
+    if (d.arc) {
+      const t = this.fighters[d.homing];
+      if (d.total === undefined) { d.total = Math.max(1, Math.hypot(t.x - f.x, t.z - f.z)); d.y0 = f.y; }
+      d.done = (d.done || 0) + d.speed * dt; const u = Math.min(1, d.done / d.total);
+      f.y = d.y0 + (t.y - d.y0) * u + 4 * d.arc * u * (1 - u);
+    }
     const step = d.speed * dt;
     const nx = f.x + vx * step, nz = f.z + vz * step;
     let blocked = false;
-    if (!d.arc) for (const p of PILLARS) if (Math.hypot(nx - p.x, nz - p.z) < p.r + FIGHTER_R) blocked = true; // leaps clear pillars
+    if (!d.arc) {
+      for (const p of PILLARS) if (Math.hypot(nx - p.x, nz - p.z) < p.r + FIGHTER_R) blocked = true; // leaps clear pillars
+      if (solidAt(nx, nz, f.y)) blocked = true;
+    }
     if (Math.hypot(nx, nz) > ARENA_R - FIGHTER_R) blocked = true;
-    if (!blocked) { f.x = nx; f.z = nz; }
+    if (!blocked) {
+      f.x = nx; f.z = nz;
+      if (!d.arc) { const fl = floorAt(nx, nz, f.y); if (fl > f.y || f.y - fl < 0.6) f.y = fl; } // dashes follow ramps
+      if (!d.arc && underDeck(f.x, f.z, f.y) && f.y > DECK_CEIL) f.y = DECK_CEIL;
+    }
     if (blocked || d.t <= 0) this.endDash(f, false);
   }
 
   endDash(f, arrived) {
     const d = f.dash; f.dash = null; f.locked = false; f.forceSeq++; f.forceYaw++;
-    if (d.arc) { f.y = 0; f.vy = 0; }
+    if (d.arc) { f.y = landAt(f.x, f.z, f.y); f.vy = 0; }
     if (arrived && d.onArrive) d.onArrive();
     this.event({ e: 'dashEnd', id: f.id, fx: d.fx });
   }
@@ -664,9 +768,13 @@ export class Sim {
 
   spawnZone(z) {
     const zone = { id: NEXT_ID++, t: 0, data: {}, ...z };
+    const o = this.fighters[zone.owner];
+    if (zone.y === undefined) zone.y = floorAt(zone.x, zone.z, o ? o.y : 0); // totems sit on the level they were dropped on
     this.zones.push(zone);
-    this.event({ e: 'zone', zone: { id: zone.id, type: zone.type, x: zone.x, z: zone.z, r: zone.r, dur: zone.dur, owner: zone.owner } });
+    this.event({ e: 'zone', zone: { id: zone.id, type: zone.type, x: zone.x, y: zone.y, z: zone.z, r: zone.r, dur: zone.dur, owner: zone.owner } });
   }
+  // inside a ground zone: in radius and on the same level (bridge deck vs. floor below)
+  inZone(f, z) { return Math.hypot(f.x - z.x, f.z - z.z) <= z.r && Math.abs(floorAt(f.x, f.z, f.y) - z.y) < 1.2; }
 
   updateZones(dt) {
     for (let i = this.zones.length - 1; i >= 0; i--) {
@@ -675,7 +783,7 @@ export class Sim {
       const owner = this.fighters[z.owner];
       if (z.type === 'quake' && z.t >= z.dur) {
         this.event({ e: 'fx', fx: 'quake_erupt', id: z.owner, x: z.x, z: z.z });
-        for (const f of this.enemiesOf(owner)) if (Math.hypot(f.x - z.x, f.z - z.z) <= z.r && f.y < 1.5) {
+        for (const f of this.enemiesOf(owner)) if (this.inZone(f, z) && f.y - z.y < 1.5) {
           this.damage(owner, f, 35, { school: 'nature', ab: 'quake_totem' });
           this.interrupt(f, owner);
           this.addBuff(f, 'stun', 1.75, { src: owner.id, cc: 'cc', name: 'Quaked', icon: '⛰' });
@@ -684,12 +792,12 @@ export class Sim {
         z.data.acc = (z.data.acc || 0) + dt;
         const tick = z.data.acc >= 1; if (tick) z.data.acc -= 1;
         for (const a of this.fighters) {
-          if (!a.alive || a.team !== owner.team || Math.hypot(a.x - z.x, a.z - z.z) > z.r) continue;
+          if (!a.alive || a.team !== owner.team || !this.inZone(a, z)) continue;
           const b = a.buffs.find(b => b.type === 'stoneskin');
           if (b) b.t = 0.3; else this.addBuff(a, 'stoneskin', 0.3, { value: 0.2, src: owner.id, name: 'Stoneskin', icon: '⬢' });
           if (tick) this.heal(owner, a, 20, 'stoneskin');
         }
-        for (const e of this.enemiesOf(owner)) if (Math.hypot(e.x - z.x, e.z - z.z) <= z.r) {
+        for (const e of this.enemiesOf(owner)) if (this.inZone(e, z)) {
           const s = e.buffs.find(b => b.type === 'slow' && b.name === 'Earthbound');
           if (s) s.t = 0.3; else this.addBuff(e, 'slow', 0.3, { value: 0.3, src: owner.id, name: 'Earthbound', icon: '⬢' });
         }
@@ -699,22 +807,23 @@ export class Sim {
   }
 
   // ------------------------------------------------------------ movement abilities
-  validSpot(x, z) {
+  validSpot(x, z, y = 0) {
     if (Math.hypot(x, z) > ARENA_R - FIGHTER_R) return false;
     for (const p of PILLARS) if (Math.hypot(x - p.x, z - p.z) < p.r + FIGHTER_R) return false;
-    return true;
+    return !solidAt(x, z, y);
   }
 
   blink(f, dx, dz, dist, fx) {
     const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
     const x0 = f.x, z0 = f.z;
-    let bx = f.x, bz = f.z;
+    let bx = f.x, bz = f.z, by = f.y;
     for (let s = 0.5; s <= dist; s += 0.5) {
       const nx = x0 + dx * s, nz = z0 + dz * s;
-      if (!this.validSpot(nx, nz)) break;
+      if (!this.validSpot(nx, nz, by)) break;
+      const fl = floorAt(nx, nz, by); if (fl > by || by - fl < 0.6) by = fl; // follow ramps; past the deck edge we drop
       bx = nx; bz = nz;
     }
-    f.x = bx; f.z = bz; f.forceSeq++;
+    f.x = bx; f.z = bz; f.y = by; f.forceSeq++;
     this.event({ e: 'blink', id: f.id, fx, x0, z0, x1: bx, z1: bz });
   }
 
@@ -735,9 +844,17 @@ export class Sim {
     const x0 = f.x, z0 = f.z;
     const fw = this.forward(t);
     const cands = [[-fw.x, -fw.z], [fw.z, -fw.x], [-fw.z, fw.x], [fw.x, fw.z]];
-    for (const [cx, cz] of cands) {
-      const nx = t.x + cx * 1.6, nz = t.z + cz * 1.6;
-      if (this.validSpot(nx, nz)) { f.x = nx; f.z = nz; break; }
+    const tf = floorAt(t.x, t.z, t.y);
+    let done = false;
+    for (const strict of [true, false]) { // prefer a spot on the target's own level
+      for (const [cx, cz] of cands) {
+        const nx = t.x + cx * 1.6, nz = t.z + cz * 1.6;
+        if (!this.validSpot(nx, nz, tf)) continue;
+        const fl = landAt(nx, nz, tf);
+        if (strict && Math.abs(fl - tf) > 0.5) continue;
+        f.x = nx; f.z = nz; f.y = Math.max(fl, tf); f.vy = 0; done = true; break;
+      }
+      if (done) break;
     }
     f.yaw = angleTo(f, t);
     f.forceSeq++; f.forceYaw++;
@@ -777,7 +894,7 @@ export class Sim {
         stats: f.stats,
       })),
       p: this.projectiles.map(p => ({ id: p.id, kind: p.kind, x: r(p.x), y: r(p.y), z: r(p.z), owner: p.owner })),
-      z: this.zones.map(z => ({ id: z.id, type: z.type, x: z.x, z: z.z, r: z.r, t: r(z.t), dur: z.dur, owner: z.owner })),
+      z: this.zones.map(z => ({ id: z.id, type: z.type, x: z.x, y: z.y, z: z.z, r: z.r, t: r(z.t), dur: z.dur, owner: z.owner })),
     };
   }
 }

@@ -33,7 +33,7 @@ import { Character as ProcCharacter } from './characters.js';
 import { Character as HeroCharacter, heroesReady } from './heroes.js';
 // realistic rigged champions when their assets loaded, procedural fallback otherwise
 const makeChar = cls => heroesReady() ? new HeroCharacter(cls) : new ProcCharacter(cls);
-import { PILLARS, hasBuff, angleDiff } from '../sim/sim.js';
+import { PILLARS, BRIDGE, floorAt, hasBuff, angleDiff } from '../sim/sim.js';
 import { CLASSES } from '../data/classes.js';
 
 const AB_ANIM = {
@@ -289,7 +289,7 @@ export class World {
       }
       const won = (view.state === 'roundEnd' || view.state === 'matchEnd') && f.alive && view.lastWinner === f.team;
       ch.update(dt, {
-        speed: f.alive ? cs.speed / baseSpeed : 0, back, strafe, air: f.y > 0.1, casting: !!f.cast, castProgress: f.cast ? f.cast.t / f.cast.dur : 0,
+        speed: f.alive ? cs.speed / baseSpeed : 0, back, strafe, air: f.y - floorAt(f.x, f.z, f.y) > 0.1, casting: !!f.cast, castProgress: f.cast ? f.cast.t / f.cast.dur : 0,
         stunned: hasBuff(f, 'stun'), disoriented: hasBuff(f, 'disorient'), dead: !f.alive, victory: won, tempest: hasBuff(f, 'tempest'),
       });
       // stealth visibility
@@ -302,7 +302,7 @@ export class World {
       const ring = this.rings[i];
       if (ring) {
         ring.visible = f.alive && op > 0.05;
-        ring.position.set(rp.x, 0.05, rp.z);
+        ring.position.set(rp.x, floorAt(rp.x, rp.z, rp.y) + 0.05, rp.z);
         const s = 1 + (i === myId ? Math.sin(this.time * 3) * 0.04 : 0);
         ring.scale.set(s, s, s);
       }
@@ -311,10 +311,10 @@ export class World {
     const t = me ? F[me.target] : null;
     const tv = t && t.alive && t.team !== myTeam && (!hasBuff(t, 'stealth')) && this.chars[t.id];
     this.selRing.visible = !!tv;
-    if (tv) { const p = this.chars[t.id].root.position; this.selRing.position.set(p.x, 0.07, p.z); this.selRing.rotation.z += dt * 1.2; }
+    if (tv) { const p = this.chars[t.id].root.position; this.selRing.position.set(p.x, floorAt(p.x, p.z, p.y) + 0.07, p.z); this.selRing.rotation.z += dt * 1.2; }
     const fr = me && me.friend >= 0 && me.friend !== me.id ? F[me.friend] : null;
     this.friendRing.visible = !!(fr && fr.alive && this.chars[fr.id]);
-    if (this.friendRing.visible) { const p = this.chars[fr.id].root.position; this.friendRing.position.set(p.x, 0.07, p.z); this.friendRing.rotation.z -= dt * 1.0; }
+    if (this.friendRing.visible) { const p = this.chars[fr.id].root.position; this.friendRing.position.set(p.x, floorAt(p.x, p.z, p.y) + 0.07, p.z); this.friendRing.rotation.z -= dt * 1.0; }
 
     this.vfx.syncProjectiles(view.projectiles, dt);
     this.vfx.syncZones(view.zones, dt, myTeam, F);
@@ -372,6 +372,15 @@ export class World {
       const disc = b * b - 4 * a * c;
       if (disc > 0) { const t = (-b - Math.sqrt(disc)) / (2 * a); if (t > 0 && t < dist && target.y + dir.y * t < 8.5) dist = Math.max(1.5, t - 0.2); }
     }
+    // camera collision with the bridge deck and ramps (marched along the ray)
+    { const B = BRIDGE, end = B.hx + B.ramp;
+      for (let t = 0.5; t < dist; t += 0.25) {
+        const x = target.x + dir.x * t, y = target.y + dir.y * t, z = target.z + dir.z * t, ax = Math.abs(x);
+        if (Math.abs(z) > B.hz + 0.3 || ax > end + 0.3) continue;
+        const inDeck = ax <= B.hx + 0.3 && y > B.H - B.slab - 0.3 && y < B.H + 0.15;
+        const inRamp = ax > B.hx && y < B.H * Math.max(0, Math.min(1, (end - ax) / B.ramp)) + 0.2;
+        if (inDeck || inRamp) { dist = Math.max(1.2, t - 0.3); break; }
+      } }
     const want = target.clone().addScaledVector(dir, dist);
     if (want.y < 0.4) want.y = 0.4;
     const k = 1 - Math.exp(-dt * 18);

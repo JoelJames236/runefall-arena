@@ -3,7 +3,7 @@
 // Works for 1v1 and 2v2: picks a focus target, kites the nearest threat, interrupts
 // casters, peels for and heals its teammate.
 import { CLASSES } from '../data/classes.js';
-import { PILLARS, ARENA_R, hasBuff, isStunned, angleTo, segBlocked } from './sim.js';
+import { PILLARS, ARENA_R, BRIDGE, hasBuff, isStunned, angleTo, segBlocked, floorAt, solidAt, airborne } from './sim.js';
 
 const DIFF = {
   easy: { react: 0.65, interrupt: 0.15, defensive: 0.5, kite: 0.3, dodge: 0.2, focus: 0.3 },
@@ -90,7 +90,7 @@ export class AI {
 
     // ---- choose an ability (throttled by reaction time)
     this.think -= dt;
-    if (this.think <= 0 && !me.cast && me.y < 0.05) {
+    if (this.think <= 0 && !me.cast && !airborne(me)) {
       this.think = this.d.react * (0.6 + Math.random() * 0.8);
       const pick = this.choose(me, foe, { dist, foeCC, visible, threat, td, threatCC, allies, living });
       if (pick) inp.abilities.push(pick);
@@ -106,7 +106,7 @@ export class AI {
     if (!casting) {
       if (melee) {
         const desired = visible ? 2.2 : 1.5;
-        if (dist > desired) { wantX = toX; wantZ = toZ; }
+        if (dist > desired) { const n = this.nav(me, foe); wantX = n.x; wantZ = n.z; }
         // circle behind the target for the 10% back-attack bonus (cheap flanking)
         if (dist < 4 && visible && this.d.focus > 0.5) {
           const fx = Math.sin(foe.yaw), fz = Math.cos(foe.yaw);
@@ -125,14 +125,14 @@ export class AI {
           wantX = -thX * (1 - wall * 0.7) + tX * (0.4 + wall) - me.x / r * wall * 0.6;
           wantZ = -thZ * (1 - wall * 0.7) + tZ * (0.4 + wall) - me.z / r * wall * 0.6;
           this.kiting = true;
-        } else if (dist > desired + 1.5) { wantX = toX; wantZ = toZ; }
+        } else if (dist > desired + 1.5) { const n = this.nav(me, foe); wantX = n.x; wantZ = n.z; }
         else if (!threatMelee && dist < desired - 8) { wantX = -toX * 0.5; wantZ = -toZ * 0.5; }
         // lateral strafing
         this.strafeT -= dt;
         if (this.strafeT <= 0) { this.strafe = Math.random() < 0.5 ? -1 : 1; this.strafeT = 1.5 + Math.random() * 2.5; }
         if (!this.kiting && dist <= desired + 1.5) { wantX += -toZ * this.strafe * 0.5; wantZ += toX * this.strafe * 0.5; }
         // regain line of sight
-        if (visible && segBlocked(me.x, me.z, foe.x, foe.z)) { wantX += -toZ * this.strafe; wantZ += toX * this.strafe; }
+        if (visible && segBlocked(me.x, me.z, foe.x, foe.z, me.y + 1.5, foe.y + 1.5)) { wantX += -toZ * this.strafe; wantZ += toX * this.strafe; }
         // healers stay near their partner
         if (me.cls === 'priest' && allies.length) {
           const a = allies[0], ad = sim.dist(me, a);
@@ -145,8 +145,15 @@ export class AI {
       // steer around pillars
       for (const p of PILLARS) {
         const dx = me.x - p.x, dz = me.z - p.z, d = Math.hypot(dx, dz);
-        if (d < p.r + 2.5) { wantX += dx / d * 0.9; wantZ += dz / d * 0.9; wantX += -dz / d * 0.6 * this.strafe; wantZ += dx / d * 0.6 * this.strafe; }
+        if (d < p.r + 2.5) {
+          // chasing: slide around the side that keeps us heading to the goal (no dead-lock); kiting keeps its strafe side
+          let tx = -dz / d * this.strafe, tz = dx / d * this.strafe;
+          if (!this.kiting && Math.hypot(wantX, wantZ) > 0.1 && tx * wantX + tz * wantZ < 0) { tx = -tx; tz = -tz; }
+          wantX += dx / d * 0.9 + tx * 0.6; wantZ += dz / d * 0.9 + tz * 0.6;
+        }
       }
+      // don't grind against the bridge ramps while kiting
+      { const l = Math.hypot(wantX, wantZ); if (l > 0.1 && this.pathSolid(me, me.x + wantX / l * 1.5, me.z + wantZ / l * 1.5)) wantZ += (me.z >= 0 ? 1 : -1) * 1.2; }
       // dodge enemy quake totems; stay inside friendly stoneskin
       for (const z of sim.zones) {
         const owner = sim.fighters[z.owner];
@@ -172,6 +179,44 @@ export class AI {
     this.jumpT -= dt;
     if (this.jumpT <= 0 && !casting) { inp.jump = Math.random() < 0.4; this.jumpT = 4 + Math.random() * 6; }
     return inp;
+  }
+
+  // Steering toward a goal that knows the bridge: take a ramp to get up, hop off the side to get
+  // down, and go around the ramp embankments (under the deck or past the ramp foot). Returns a unit vector.
+  nav(me, goal) {
+    const B = BRIDGE, end = B.hx + B.ramp;
+    const myF = floorAt(me.x, me.z, me.y), gF = floorAt(goal.x, goal.z, goal.y);
+    let wx = goal.x, wz = goal.z;
+    if (gF - myF > 1.2) { // goal is up on the bridge: nearer ramp foot, then straight up the ramp
+      const s = Math.hypot(me.x - end, me.z) + Math.hypot(goal.x - end, goal.z) < Math.hypot(me.x + end, me.z) + Math.hypot(goal.x + end, goal.z) ? 1 : -1;
+      if (Math.abs(me.z) <= B.hz && me.x * s > B.hx) { wx = s * (B.hx - 1); wz = 0; } else { wx = s * (end + 1.2); wz = 0; }
+    } else if (myF - gF > 1.2 && Math.hypot(goal.x - me.x, goal.z - me.z) < 5) { // we're above it: step off the side
+      wx = me.x; wz = ((goal.z || me.z) >= 0 ? 1 : -1) * (B.hz + 2);
+    }
+    if (this.pathSolid(me, wx, wz)) {
+      const s = me.x >= 0 ? 1 : -1, side = (wz - me.z >= 0 ? 1 : -1);
+      if (Math.abs(me.z) <= B.hz + 0.5) { // under the deck / in line with the ramps: leave sideways first
+        if (Math.abs(me.x) <= B.hx && Math.abs(me.x) > 3) { wx = s * 2.4; wz = me.z; } // under the deck: first toward the arch opening
+        else { wx = me.x; wz = side * (B.hz + 1.8); } // through the arch opening / off the ramp foot
+      } else { // beside the bridge: either duck under the deck or go around the ramp foot
+        const across = Math.abs(wz) > B.hz && Math.sign(wz) !== Math.sign(me.z); // the arch only helps to reach the far side
+        const ux = s * 2.2, fx = (across ? s : (wx >= 0 ? 1 : -1)) * (end + 1.5); // under the arch, or around the ramp foot
+        wx = across && Math.abs(me.x - ux) + Math.abs(ux - wx) <= Math.abs(me.x - fx) + Math.abs(fx - wx) ? ux : fx; wz = me.z;
+      }
+    }
+    const dx = wx - me.x, dz = wz - me.z, L = Math.hypot(dx, dz) || 1;
+    return { x: dx / L, z: dz / L };
+  }
+  // would walking straight to (x, z) run into a wall? (follows ramps up and down like moveFighter)
+  pathSolid(me, x, z) {
+    const n = Math.min(60, Math.max(3, Math.ceil(Math.hypot(x - me.x, z - me.z) / 0.4)));
+    let y = me.y;
+    for (let i = 1; i <= n; i++) {
+      const u = i / n, px = me.x + (x - me.x) * u, pz = me.z + (z - me.z) * u;
+      if (solidAt(px, pz, y)) return true;
+      const fl = floorAt(px, pz, y); if (fl > y || y - fl < 0.6) y = fl;
+    }
+    return false;
   }
 
   interrupt(me, e) {

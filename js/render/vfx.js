@@ -369,7 +369,7 @@ export class VFX {
   }
 
   makeZone(z, hostile) {
-    const g = new THREE.Group(); g.position.set(z.x, 0, z.z);
+    const g = new THREE.Group(); g.position.set(z.x, z.y || 0, z.z);
     if (z.type === 'quake') {
       const col = hostile ? 0xff3a2a : 0xffa040;
       const edge = new THREE.Mesh(this.G.plane, this.addMat(col, 0.9, { map: this.teleTexture }));

@@ -4,7 +4,7 @@
 // costs almost nothing per frame.
 import * as THREE from 'three';
 import { CLASSES, BUFF_ICONS } from '../data/classes.js';
-import { RULES, segBlocked } from '../sim/sim.js';
+import { RULES, segBlocked, rangeDist } from '../sim/sim.js';
 
 const $ = id => document.getElementById(id);
 const SCHOOL = { frost: '#8fd8ff', fire: '#ff9a4a', arcane: '#d29aff', holy: '#ffe680', nature: '#7ae0ff', shadow: '#c08aff', phys: '#ffffff' };
@@ -146,8 +146,8 @@ export class HUD {
     }
     // action bar
     const t = tgtVisible ? tgt : null;
-    const dist = t ? Math.hypot(me.x - t.x, me.z - t.z) : 999;
-    const los = t ? !segBlocked(me.x, me.z, t.x, t.z) : false;
+    const dist = t ? rangeDist(me, t) : 999;
+    const los = t ? !segBlocked(me.x, me.z, t.x, t.z, me.y + 1.5, t.y + 1.5) : false;
     const A = CLASSES[me.cls].auto;
     if (this.atkSlot) {
       const frac = Math.min(1, (me.autoT || 0) / A.speed);
