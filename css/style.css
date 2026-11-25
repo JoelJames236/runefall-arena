@@ -52,6 +52,8 @@ canvas#scene { position: fixed; inset: 0; width: 100vw; height: 100vh; display: 
 .menu-buttons { display: flex; flex-direction: column; gap: 9px; width: 430px; max-width: 92vw; }
 .menu-row { display: flex; gap: 8px; } .menu-row .btn { flex: 1; padding: 10px 6px; font-size: 12px; }
 .name-row { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--panel-edge); padding: 8px 14px; border-radius: 3px; }
+.arena-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.arena-row > span { font-family: var(--font-title); font-size: 12px; letter-spacing: 0.14em; color: var(--gold-dim); text-transform: uppercase; }
 .name-row label { font-family: var(--font-title); font-size: 12px; letter-spacing: 0.14em; color: var(--gold-dim); text-transform: uppercase; }
 .name-row input { background: rgba(0,0,0,0.55); border: 1px solid var(--gold-dark); color: var(--gold-hi); font-family: var(--font-title); font-size: 16px; padding: 6px 10px; width: 190px; border-radius: 2px; }
 .record { font-family: var(--font-title); font-size: 13px; letter-spacing: 0.12em; color: var(--gold-dim); text-transform: uppercase; text-shadow: 0 1px 4px #000; margin-top: -8px; }

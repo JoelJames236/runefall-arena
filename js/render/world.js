@@ -27,7 +27,7 @@ const GradeShader = {
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
     }`,
 };
-import { Arena } from './arena.js';
+import { createArena } from './arenas.js';
 import { VFX } from './vfx.js';
 import { Character as ProcCharacter } from './characters.js';
 import { Character as HeroCharacter, heroesReady } from './heroes.js';
@@ -76,7 +76,9 @@ export class World {
     this.scene.environmentIntensity = 0.35;
     this.loadSky();
 
-    this.arena = new Arena(this.scene, (JSON.parse(localStorage.getItem("runefall-settings") || "{}").quality) || "high");
+    const st = JSON.parse(localStorage.getItem("runefall-settings") || "{}");
+    this.arenaId = new URLSearchParams(location.search).get('arena') || st.arena || 'runefall';
+    this.arena = createArena(this.arenaId, this.scene, st.quality || "high");
     this.vfx = new VFX(this.scene);
 
     // post: MSAA HDR target → bloom → tone map/sRGB → colour grade + vignette
@@ -101,6 +103,17 @@ export class World {
     addEventListener('resize', () => this.resize());
     this.resize();
     this.setupPreviewControls();
+  }
+
+  // Swap the arena look. Disposes the old arena meshes.
+  setArena(id) {
+    if (id === this.arenaId) return this.arena.ready;
+    const old = this.arena;
+    this.scene.remove(old.group);
+    old.group.traverse(o => { o.geometry?.dispose(); });
+    this.arenaId = id;
+    this.arena = createArena(id, this.scene, this.quality || 'high');
+    return this.arena.ready;
   }
 
   // Dusk HDRI (Poly Haven, CC0): background sky + image-based lighting for every PBR material.
