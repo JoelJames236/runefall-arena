@@ -12,6 +12,7 @@ import { Audio, AB_SOUND, HIT_SOUND, CAST_SOUND } from './audio.js';
 import { Sim, moveFighter, RULES } from './sim/sim.js';
 import { AI } from './sim/ai.js';
 import { Net } from './net.js';
+import { ARENAS } from './render/arenas.js';
 import { CLASSES, CLASS_ORDER, BOT_NAMES } from './data/classes.js';
 
 const $ = id => document.getElementById(id);
@@ -19,7 +20,7 @@ const STEP = 1 / 60;
 const rand = a => a[Math.floor(Math.random() * a.length)];
 
 // ------------------------------------------------------------------ settings
-const DEFAULTS = { music: 55, sfx: 80, sens: 100, invert: false, quality: 'high', fps: false };
+const DEFAULTS = { music: 55, sfx: 80, sens: 100, invert: false, quality: 'high', fps: false, arena: 'runefall' };
 let settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('runefall-settings') || '{}') };
 function saveSettings() { localStorage.setItem('runefall-settings', JSON.stringify(settings)); applySettings(); }
 
@@ -28,6 +29,21 @@ const canvas = $('scene');
 let world;
 try { world = new World(canvas); }
 catch (e) { $('loadmsg').textContent = 'WebGL could not start in this browser: ' + e.message; throw e; }
+
+// Arena picker on the main menu. The choice is saved in the settings.
+function buildArenaPicker() {
+  const row = $('arenaPick'); if (!row || !world) return;
+  for (const a of ARENAS) {
+    const b = document.createElement('button');
+    b.className = 'chip' + (world.arenaId === a.id ? ' on' : ''); b.textContent = a.name; b.dataset.arena = a.id;
+    b.addEventListener('click', () => {
+      settings.arena = a.id; saveSettings(); world.setArena(a.id);
+      row.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.arena === a.id));
+    });
+    row.appendChild(b);
+  }
+}
+buildArenaPicker();
 const hud = new HUD();
 const input = new Input(canvas);
 const audio = new Audio();
