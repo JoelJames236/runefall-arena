@@ -3,7 +3,7 @@
 // Works for 1v1 and 2v2: picks a focus target, kites the nearest threat, interrupts
 // casters, peels for and heals its teammate.
 import { CLASSES } from '../data/classes.js';
-import { PILLARS, ARENA_R, BRIDGE, hasBuff, isStunned, angleTo, segBlocked, floorAt, solidAt, airborne } from './sim.js';
+import { PILLARS, ARENA_R, BRIDGE, ARCH_OPEN, hasBuff, isStunned, angleTo, segBlocked, floorAt, solidAt, airborne } from './sim.js';
 
 const DIFF = {
   easy: { react: 0.65, interrupt: 0.15, defensive: 0.5, kite: 0.3, dodge: 0.2, focus: 0.3 },
@@ -12,6 +12,7 @@ const DIFF = {
 };
 
 const MELEE_CLASSES = new Set(['rogue', 'warrior', 'berserker']);
+const HEALERS = new Set(['priest']);
 const INTERRUPTS = { berserker: [], warrior: ['shield_slam'], rogue: ['skull_crack'], priest: ['blinding_light'], mage: [], shaman: ['quake_totem'] };
 
 export class AI {
@@ -25,19 +26,42 @@ export class AI {
   idx(f, id) { return CLASSES[f.cls].abilities.findIndex(a => a.id === id); }
   ok(f, id, tid) { const i = this.idx(f, id); return i >= 0 && !this.sim.check(f, i, true, tid !== undefined ? { tid } : {}) ? i : -1; }
 
-  pickFocus(me, enemies, allies) {
+  // How hard an enemy is to kill right now: health through armor and damage reduction, plus shields.
+  effectiveHp(e) {
+    let ehp = e.hp / (1 - (CLASSES[e.cls].defense || 0));
+    for (const b of e.buffs) {
+      if ((b.type === 'dr' || b.type === 'stoneskin') && b.value) ehp /= 1 - b.value;
+      if (b.type === 'absorb' && b.value) ehp += b.value;
+    }
+    return ehp;
+  }
+  // Kill-target score (lower = better). Same inputs give the same answer every round, so a bot
+  // keeps a consistent, sensible focus: the softest reachable target, healers a bit preferred,
+  // never one it can't see or reach, and the target its partner is already hitting.
+  focusScore(me, e, allies) {
     const sim = this.sim;
+    if (!sim.visibleTo(e, me)) return Infinity;
+    let score = this.effectiveHp(e) / 12;                      // ~83 for a full mage, ~135 for a full warrior
+    score += sim.dist(me, e) * (MELEE_CLASSES.has(me.cls) ? 1.4 : 0.6);
+    if (!sim.los(me, e)) score += 25;                                                  // hiding behind cover: worth switching
+    if (HEALERS.has(e.cls)) score -= 15 * this.d.focus;                                // pressure the healer
+    if (e.buffs.some(b => b.type === 'stun' || b.type === 'root')) score -= 10;        // free damage
+    if (e.buffs.some(b => b.type === 'disorient' && sim.fighters[b.src]?.team === me.team)) score += 60; // don't break our own CC
+    if (sim.fightT > 1.5) for (const a of allies) if (a.alive && a.target === e.id) score -= 22 * this.d.focus; // team up
+    return score;
+  }
+  pickFocus(me, enemies, allies) {
     let best = null, bestScore = Infinity;
-    const allyTarget = allies.length ? allies[0].target : -1;
     for (const e of enemies) {
       if (!e.alive) continue;
-      const vis = sim.visibleTo(e, me);
-      let score = (e.hp / e.maxHp) * 100 + sim.dist(me, e) * 1.2;
-      if (!vis) score += 80;
-      if (e.id === allyTarget) score -= 25 * this.d.focus; // team up on one target
-      if (e.cls === 'priest') score -= 8 * this.d.focus;   // pressure healers
-      if (e.id === this.focus) score -= 10;                // stickiness
-      if (score < bestScore) { bestScore = score; best = e; }
+      const s = this.focusScore(me, e, allies);
+      if (s < bestScore) { bestScore = s; best = e; }
+    }
+    // only switch away from a valid current focus for a clearly better target (no flip-flopping)
+    const cur = this.sim.fighters[this.focus];
+    if (best && cur && cur.alive && cur !== best && cur.team !== me.team) {
+      const cs = this.focusScore(me, cur, allies);
+      if (cs < Infinity && cs - bestScore < 18) return cur;
     }
     return best;
   }
@@ -50,7 +74,8 @@ export class AI {
     const living = enemies.filter(e => e.alive);
     if (!living.length) return inp;
 
-    // ---- focus target
+    // ---- focus target (chosen fresh each round: last round's kill order must not carry over)
+    if (this.round !== sim.round) { this.round = sim.round; this.focus = -1; this.focusT = 0; this.seenCasts.clear(); }
     this.focusT -= dt;
     let foe = sim.fighters[this.focus];
     if (!foe || !foe.alive || this.focusT <= 0 || !sim.visibleTo(foe, me)) {
@@ -152,6 +177,14 @@ export class AI {
           wantX += dx / d * 0.9 + tx * 0.6; wantZ += dz / d * 0.9 + tz * 0.6;
         }
       }
+      // step around a teammate in the way (e.g. one standing still to cast) instead of pushing into them
+      for (const a of allies) {
+        const dx = me.x - a.x, dz = me.z - a.z, d = Math.hypot(dx, dz);
+        if (d < 1.9 && d > 1e-3 && Math.abs(a.y - me.y) < 1.6) {
+          const tx = -dz / d, tz = dx / d, s = tx * wantX + tz * wantZ >= 0 ? 1 : -1;
+          wantX += dx / d * 0.7 + tx * s * 0.9; wantZ += dz / d * 0.7 + tz * s * 0.9;
+        }
+      }
       // don't grind against the bridge ramps while kiting
       { const l = Math.hypot(wantX, wantZ); if (l > 0.1 && this.pathSolid(me, me.x + wantX / l * 1.5, me.z + wantZ / l * 1.5)) wantZ += (me.z >= 0 ? 1 : -1) * 1.2; }
       // dodge enemy quake totems; stay inside friendly stoneskin
@@ -163,6 +196,12 @@ export class AI {
       }
     }
 
+    // watchdog: wanting to move but pinned (pillar, wall, teammate) for 0.8 s -> go around the other way
+    if (Math.hypot(wantX, wantZ) > 0.3 && !casting && !me.dash) {
+      if (!this.pin || Math.hypot(me.x - this.pin.x, me.z - this.pin.z) > 0.5) this.pin = { x: me.x, z: me.z, t: 0 };
+      else if ((this.pin.t += dt) > 0.8) { this.strafe = -this.strafe; this.strafeT = 2; this.pin = null; this.unpin = 0.6; }
+    } else this.pin = null;
+    if (this.unpin > 0) { this.unpin -= dt; const l = Math.hypot(wantX, wantZ) || 1, px = -wantZ / l, pz = wantX / l; wantX += px * this.strafe * 1.2; wantZ += pz * this.strafe * 1.2; }
     const wl = Math.hypot(wantX, wantZ);
     let yaw = angleTo(me, foe);
     if (wl > 0.1) {
@@ -182,27 +221,44 @@ export class AI {
   }
 
   // Steering toward a goal that knows the bridge: take a ramp to get up, hop off the side to get
-  // down, and go around the ramp embankments (under the deck or past the ramp foot). Returns a unit vector.
+  // down, and go around the ramp embankments (through the arch or past the ramp foot). Returns a unit vector.
   nav(me, goal) {
     const B = BRIDGE, end = B.hx + B.ramp;
     const myF = floorAt(me.x, me.z, me.y), gF = floorAt(goal.x, goal.z, goal.y);
     let wx = goal.x, wz = goal.z;
     if (gF - myF > 1.2) { // goal is up on the bridge: nearer ramp foot, then straight up the ramp
       const s = Math.hypot(me.x - end, me.z) + Math.hypot(goal.x - end, goal.z) < Math.hypot(me.x + end, me.z) + Math.hypot(goal.x + end, goal.z) ? 1 : -1;
-      if (Math.abs(me.z) <= B.hz && me.x * s > B.hx) { wx = s * (B.hx - 1); wz = 0; } else { wx = s * (end + 1.2); wz = 0; }
+      if (Math.abs(me.z) <= B.hz && me.x * s > B.hx) { wx = s * (B.hx - 1); wz = 0; } else { wx = s * (end + 2); wz = 0; }
     } else if (myF - gF > 1.2 && Math.hypot(goal.x - me.x, goal.z - me.z) < 5) { // we're above it: step off the side
       wx = me.x; wz = ((goal.z || me.z) >= 0 ? 1 : -1) * (B.hz + 2);
     }
     if (this.pathSolid(me, wx, wz)) {
-      const s = me.x >= 0 ? 1 : -1, side = (wz - me.z >= 0 ? 1 : -1);
-      if (Math.abs(me.z) <= B.hz + 0.5) { // under the deck / in line with the ramps: leave sideways first
-        if (Math.abs(me.x) <= B.hx && Math.abs(me.x) > 3) { wx = s * 2.4; wz = me.z; } // under the deck: first toward the arch opening
-        else { wx = me.x; wz = side * (B.hz + 1.8); } // through the arch opening / off the ramp foot
-      } else { // beside the bridge: either duck under the deck or go around the ramp foot
+      const W = B.hz + 0.25, O = ARCH_OPEN - 0.8;
+      const side = Math.abs(wz) > W ? Math.sign(wz) : Math.sign(me.z || 1); // goal beyond the bridge side, else our own side
+      const ux = Math.max(-O, Math.min(O, (me.x + wx) / 2)); // where to pass through the arch
+      if (Math.abs(me.z) <= W + 0.6) { // inside the arch / in line with the ramps: leave toward the goal's side
+        wx = Math.abs(me.x) <= B.hx ? Math.max(-O, Math.min(O, me.x)) : me.x; wz = side * (W + 1.6);
+      } else { // beside the bridge: through the arch, or around the ramp foot
         const across = Math.abs(wz) > B.hz && Math.sign(wz) !== Math.sign(me.z); // the arch only helps to reach the far side
-        const ux = s * 2.2, fx = (across ? s : (wx >= 0 ? 1 : -1)) * (end + 1.5); // under the arch, or around the ramp foot
-        wx = across && Math.abs(me.x - ux) + Math.abs(ux - wx) <= Math.abs(me.x - fx) + Math.abs(fx - wx) ? ux : fx; wz = me.z;
+        const fx = (across ? (me.x >= 0 ? 1 : -1) : (wx >= 0 ? 1 : -1)) * (end + 1.5);
+        const viaArch = across && Math.abs(me.x - ux) + Math.abs(ux - wx) <= Math.abs(me.x - fx) + Math.abs(fx - wx) + 4;
+        if (viaArch) { wx = ux; wz = Math.sign(me.z) * (W + 1.4); } // the arch entrance on our side (then straight through)
+        else { wx = fx; wz = me.z; }
       }
+      // already standing on the detour point (arch entrance / beyond the ramp foot): go through
+      if (Math.hypot(wx - me.x, wz - me.z) < 0.8) wz = -Math.sign(me.z || 1) * (W + 1.6); // reached it: cross to the other side
+    }
+    // a pillar in the way: aim past its side instead (the side we're already on)
+    for (const p of PILLARS) {
+      const sx = wx - me.x, sz = wz - me.z, L2 = sx * sx + sz * sz || 1e-6;
+      const t = ((p.x - me.x) * sx + (p.z - me.z) * sz) / L2;
+      if (t <= 0 || t >= 1) continue;
+      const cx = me.x + sx * t - p.x, cz = me.z + sz * t - p.z, cd = Math.hypot(cx, cz);
+      if (cd >= p.r + 1.0) continue;
+      const L = Math.sqrt(L2); let px = -sz / L, pz = sx / L; // perpendicular to the path
+      if (px * cx + pz * cz < 0) { px = -px; pz = -pz; }
+      wx = p.x + px * (p.r + 1.8); wz = p.z + pz * (p.r + 1.8);
+      break;
     }
     const dx = wx - me.x, dz = wz - me.z, L = Math.hypot(dx, dz) || 1;
     return { x: dx / L, z: dz / L };

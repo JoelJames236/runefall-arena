@@ -35,42 +35,59 @@ export function angleDiff(a, b) { let d = (b - a) % (Math.PI * 2); if (d > Math.
 export const isBehind = (src, tgt) => Math.abs(angleDiff(tgt.yaw, angleTo(tgt, src))) > 1.92;
 
 // ---------------------------------------------------------------- the central bridge
-// A stone bridge across the middle along the x axis (between the two spawns, which sit on the z axis).
-// Deck: |x| <= hx, |z| <= hz at height H — walk on top or run underneath it.
+// A stone arch bridge across the middle along the x axis (between the two spawns, which sit on the z axis).
+// Deck: |x| <= hx, |z| <= hz at height H — walk on top, or run through the vaulted arch underneath.
 // Ramps: hx < |x| <= hx + ramp, solid embankments sloping from H down to the floor.
-export const BRIDGE = { hx: 6.5, hz: 1.9, H: 3.2, ramp: 7.5, slab: 0.45 };
-const BR = BRIDGE, BR_END = BRIDGE.hx + BRIDGE.ramp;
+export const BRIDGE = { hx: 6.5, hz: 1.9, H: 4.4, ramp: 9, slab: 0.45 };
+const BR = BRIDGE, BR_END = BRIDGE.hx + BRIDGE.ramp, BW = BRIDGE.hz + 0.25; // BW: half width incl. parapets
+// one edge for everything: inside it you either stand on the bridge or are blocked by it (never trapped in between)
+export const EDGE = BW + 0.3;
 export const rampH = ax => BR.H * Math.max(0, Math.min(1, (BR_END - ax) / BR.ramp));
 // height of the walkable surface under a fighter whose feet are at y
 export function floorAt(x, z, y) {
-  if (Math.abs(z) > BR.hz + 0.15) return 0;
+  if (Math.abs(z) > EDGE) return 0;
   const ax = Math.abs(x);
   if (ax <= BR.hx) return y >= BR.H - 0.9 ? BR.H : 0;
   if (ax <= BR_END) { const h = rampH(ax); return y >= h - 0.75 ? h : 0; }
   return 0;
 }
-// the arch under the deck: opening height at |x| (0 at the abutments); the side spandrels are solid stone
-export const archY = ax => ax >= BR.hx ? 0 : (BR.H - BR.slab - 0.25) * Math.sqrt(1 - (ax / BR.hx) ** 2);
-const ARCH_PASS = 2.05; // you can cross under the deck from the side where the arch is at least this high
-export const SPAN_Z = BRIDGE.hz + 0.1; // spandrel plane (each side)
-// true when a fighter with feet at y can't stand here (inside a ramp embankment or an arch spandrel)
+// The arch: a barrel vault through the whole bridge. archY = height of its underside at |x|
+// (flattened ellipse, so the opening is wide). Above it, up to the deck, is solid stone.
+const ARCH_TOP = BRIDGE.H - BRIDGE.slab - 0.3, ARCH_P = 2.6;
+export const archY = ax => ax >= BR.hx ? 0 : ARCH_TOP * Math.pow(1 - Math.pow(ax / BR.hx, ARCH_P), 1 / ARCH_P);
+export const HEAD_ROOM = 2.35; // tallest champion (horns included) fits where the vault is at least this high
+// half width of the walkable passage through the arch (body radius included)
+export const ARCH_OPEN = BRIDGE.hx * Math.pow(1 - Math.pow(HEAD_ROOM / ARCH_TOP, ARCH_P), 1 / ARCH_P) - 0.35;
+// true when a fighter with feet at y can't stand here (inside a ramp embankment or the arch masonry)
 export function solidAt(x, z, y) {
   const ax = Math.abs(x), az = Math.abs(z);
-  if (ax <= BR.hx) return y < BR.H - 0.9 && az > BR.hz - 0.55 && az < BR.hz + 0.8 && archY(ax) < ARCH_PASS;
-  if (az > BR.hz + 0.45) return false;
+  if (az > EDGE) return false;
+  if (ax <= BR.hx) return y < BR.H - 0.9 && ax > ARCH_OPEN;
   return ax <= BR_END + 0.3 && y < rampH(ax) - 0.75;
 }
 // where a leap/teleport ending at height y comes to rest (never inside a ramp)
 export function landAt(x, z, y) {
-  if (Math.abs(z) > BR.hz + 0.15) return 0;
+  if (Math.abs(z) > EDGE) return 0;
   const ax = Math.abs(x);
   if (ax <= BR.hx) return y >= BR.H - 1.4 ? BR.H : 0;
   return ax <= BR_END ? rampH(ax) : 0;
 }
-// under the deck: head room is limited (jumps bump the ceiling)
-export const underDeck = (x, z, y) => Math.abs(x) <= BR.hx + 0.2 && Math.abs(z) <= BR.hz + 0.3 && y < BR.H - 0.9;
-export const DECK_CEIL = BRIDGE.H - BRIDGE.slab - 2.0;
+// under the vault a jump bumps the ceiling: highest feet position at this spot (Infinity = open sky)
+export function ceilAt(x, z, y) {
+  const ax = Math.abs(x);
+  if (ax > BR.hx + 0.2 || Math.abs(z) > EDGE || y >= BR.H - 0.9) return Infinity;
+  return Math.max(0, archY(Math.min(BR.hx, ax + 0.3)) - 2.1);
+}
 export const airborne = f => f.y - floorAt(f.x, f.z, f.y) > 0.05;
+// shoved into the masonry (by another fighter, a pillar push, lag...): move out the shortest way
+export function unstick(f) {
+  if (!solidAt(f.x, f.z, f.y)) return;
+  const ax = Math.abs(f.x), az = Math.abs(f.z);
+  const opts = [{ c: EDGE + 0.02 - az, go: () => { f.z = Math.sign(f.z || 1) * (EDGE + 0.02); } }];
+  if (ax <= BR.hx) opts.push({ c: ax - ARCH_OPEN + 0.02, go: () => { f.x = Math.sign(f.x) * (ARCH_OPEN - 0.02); } });
+  else { const h = rampH(ax); opts.push({ c: (h - f.y) * 0.6, go: () => { f.y = h; f.vy = 0; } }); }
+  opts.sort((a, b) => a.c - b.c)[0].go();
+}
 // distance used for ranges: a level difference counts double (no melee from under the bridge)
 export function rangeDist(a, b) {
   const dh = floorAt(a.x, a.z, a.y) - floorAt(b.x, b.z, b.y);
@@ -88,26 +105,27 @@ function clipSeg(A, D, planes) {
   }
   return true;
 }
-const BW = BRIDGE.hz + 0.25, RS = BRIDGE.H * BR_END - 0.1 * BRIDGE.ramp;
-const BRIDGE_SOLIDS = [
-  // deck slab
-  [[1, 0, 0, BR.hx + 0.3], [-1, 0, 0, BR.hx + 0.3], [0, 0, 1, BW], [0, 0, -1, BW], [0, 1, 0, BR.H - 0.05], [0, -1, 0, -(BR.H - BR.slab)]],
-  // ramps (triangular prisms): x beyond the deck, under the slope
+const RS = BRIDGE.H * BR_END - 0.1 * BRIDGE.ramp;
+const RAMP_SOLIDS = [ // triangular prisms: x beyond the deck, under the slope
   [[-1, 0, 0, -BR.hx], [0, 0, 1, BW], [0, 0, -1, BW], [BR.H, BR.ramp, 0, RS]],
   [[1, 0, 0, -BR.hx], [0, 0, 1, BW], [0, 0, -1, BW], [-BR.H, BR.ramp, 0, RS]],
 ];
-// does the 3D segment a->b pass through the deck, a ramp or an arch spandrel?
+// does the 3D segment a->b pass through the bridge masonry (ramps, or deck + vault above the arch)?
 function bridgeBlocks(ax, ay, az, bx, by, bz) {
   if ((ax > BR_END && bx > BR_END) || (ax < -BR_END && bx < -BR_END) || (az > BW && bz > BW) || (az < -BW && bz < -BW)) return false;
   const A = [ax, ay, az], D = [bx - ax, by - ay, bz - az];
-  for (const s of BRIDGE_SOLIDS) if (clipSeg(A, D, s)) return true;
-  // spandrels: thin walls in the planes z = ±SPAN_Z, between the arch curve and the deck
-  if (Math.abs(D[2]) > 1e-9) for (const zp of [SPAN_Z, -SPAN_Z]) {
-    const t = (zp - az) / D[2]; if (t < 0 || t > 1) continue;
-    const x = Math.abs(ax + D[0] * t), y = ay + D[1] * t;
-    if (x <= BR.hx && y < BR.H - BR.slab && y > archY(x)) return true;
+  for (const s of RAMP_SOLIDS) if (clipSeg(A, D, s)) return true;
+  // middle section: clip to |x| <= hx, |z| <= BW. Below the arch (a convex tunnel) and above the deck
+  // (a half-space) are open; anything else is stone. So test the clipped endpoints only.
+  let t0 = 0, t1 = 1;
+  for (const [p, d, h] of [[ax, D[0], BR.hx], [az, D[2], BW]]) {
+    if (Math.abs(d) < 1e-9) { if (Math.abs(p) > h) return false; continue; }
+    let u0 = (-h - p) / d, u1 = (h - p) / d; if (u0 > u1) [u0, u1] = [u1, u0];
+    t0 = Math.max(t0, u0); t1 = Math.min(t1, u1); if (t0 > t1) return false;
   }
-  return false;
+  const kind = t => { const x = Math.abs(ax + D[0] * t), y = ay + D[1] * t; return y >= BR.H - 0.05 ? 'A' : y <= archY(x) ? 'T' : 'S'; };
+  const k0 = kind(t0), k1 = kind(t1);
+  return k0 === 'S' || k1 === 'S' || k0 !== k1;
 }
 
 // line of sight between eye points (y = eye height; defaults to standing on the floor)
@@ -137,6 +155,7 @@ export function collide(f, others) {
     const dx = f.x - o.x, dz = f.z - o.z, dd = Math.hypot(dx, dz), min = FIGHTER_R * 2;
     if (dd < min && Math.abs(f.y - o.y) < 1.6) { const k = (min - dd) / (dd || 1e-6); f.x += dx * k; f.z += dz * k; }
   }
+  unstick(f);
 }
 
 // Shared movement integration (used by the host sim and by guests for prediction).
@@ -173,7 +192,7 @@ export function moveFighter(f, inp, dt, others, canAct = true) {
       if (f.y <= fl) { f.y = fl; f.vy = 0; }
     }
   } else if (f.y < fl) f.y = fl; // step up onto a ramp
-  if (underDeck(f.x, f.z, f.y) && f.y > DECK_CEIL) { f.y = DECK_CEIL; f.vy = Math.min(0, f.vy); }
+  { const c = ceilAt(f.x, f.z, f.y); if (f.y > c) { f.y = c; f.vy = Math.min(0, f.vy); } } // bump the vault
   collide(f, others);
   const moved = Math.hypot(f.x - ox, f.z - oz);
   f.moving = moved > 0.2 * dt;
@@ -611,7 +630,11 @@ export class Sim {
     if (!blocked) {
       f.x = nx; f.z = nz;
       if (!d.arc) { const fl = floorAt(nx, nz, f.y); if (fl > f.y || f.y - fl < 0.6) f.y = fl; } // dashes follow ramps
-      if (!d.arc && underDeck(f.x, f.z, f.y) && f.y > DECK_CEIL) f.y = DECK_CEIL;
+      if (!d.arc) f.y = Math.min(f.y, ceilAt(f.x, f.z, f.y));
+      else if (Math.abs(f.z) <= BW + 0.5 && Math.abs(f.x) <= BR_END + 0.3) { // leaps sail over the bridge, not through it
+        const ax = Math.abs(f.x), top = ax <= BR.hx ? BR.H : rampH(ax);
+        if (f.y < top + 0.1 && f.y > archY(ax) - 2.1) f.y = top + 0.1;
+      }
     }
     if (blocked || d.t <= 0) this.endDash(f, false);
   }

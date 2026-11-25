@@ -33,7 +33,9 @@ import { Character as ProcCharacter } from './characters.js';
 import { Character as HeroCharacter, heroesReady } from './heroes.js';
 // realistic rigged champions when their assets loaded, procedural fallback otherwise
 const makeChar = cls => heroesReady() ? new HeroCharacter(cls) : new ProcCharacter(cls);
-import { PILLARS, BRIDGE, floorAt, hasBuff, angleDiff } from '../sim/sim.js';
+import { PILLARS, BRIDGE, archY, floorAt, hasBuff, angleDiff } from '../sim/sim.js';
+// height for ground rings: on a sloped ramp lift them so the flat ring isn't half buried
+const ringY = (x, z, y, off) => { const fl = floorAt(x, z, y); return fl + (fl > 0.01 && fl < BRIDGE.H - 0.01 ? 0.42 : off); };
 import { CLASSES } from '../data/classes.js';
 
 const AB_ANIM = {
@@ -302,7 +304,7 @@ export class World {
       const ring = this.rings[i];
       if (ring) {
         ring.visible = f.alive && op > 0.05;
-        ring.position.set(rp.x, floorAt(rp.x, rp.z, rp.y) + 0.05, rp.z);
+        ring.position.set(rp.x, ringY(rp.x, rp.z, rp.y, 0.05), rp.z);
         const s = 1 + (i === myId ? Math.sin(this.time * 3) * 0.04 : 0);
         ring.scale.set(s, s, s);
       }
@@ -311,10 +313,10 @@ export class World {
     const t = me ? F[me.target] : null;
     const tv = t && t.alive && t.team !== myTeam && (!hasBuff(t, 'stealth')) && this.chars[t.id];
     this.selRing.visible = !!tv;
-    if (tv) { const p = this.chars[t.id].root.position; this.selRing.position.set(p.x, floorAt(p.x, p.z, p.y) + 0.07, p.z); this.selRing.rotation.z += dt * 1.2; }
+    if (tv) { const p = this.chars[t.id].root.position; this.selRing.position.set(p.x, ringY(p.x, p.z, p.y, 0.07), p.z); this.selRing.rotation.z += dt * 1.2; }
     const fr = me && me.friend >= 0 && me.friend !== me.id ? F[me.friend] : null;
     this.friendRing.visible = !!(fr && fr.alive && this.chars[fr.id]);
-    if (this.friendRing.visible) { const p = this.chars[fr.id].root.position; this.friendRing.position.set(p.x, floorAt(p.x, p.z, p.y) + 0.07, p.z); this.friendRing.rotation.z -= dt * 1.0; }
+    if (this.friendRing.visible) { const p = this.chars[fr.id].root.position; this.friendRing.position.set(p.x, ringY(p.x, p.z, p.y, 0.07), p.z); this.friendRing.rotation.z -= dt * 1.0; }
 
     this.vfx.syncProjectiles(view.projectiles, dt);
     this.vfx.syncZones(view.zones, dt, myTeam, F);
@@ -376,8 +378,8 @@ export class World {
     { const B = BRIDGE, end = B.hx + B.ramp;
       for (let t = 0.5; t < dist; t += 0.25) {
         const x = target.x + dir.x * t, y = target.y + dir.y * t, z = target.z + dir.z * t, ax = Math.abs(x);
-        if (Math.abs(z) > B.hz + 0.3 || ax > end + 0.3) continue;
-        const inDeck = ax <= B.hx + 0.3 && y > B.H - B.slab - 0.3 && y < B.H + 0.15;
+        if (Math.abs(z) > B.hz + 0.55 || ax > end + 0.3) continue;
+        const inDeck = ax <= B.hx + 0.3 && y > archY(Math.min(B.hx, ax)) - 0.25 && y < B.H + 0.15; // deck + vault masonry
         const inRamp = ax > B.hx && y < B.H * Math.max(0, Math.min(1, (end - ax) / B.ramp)) + 0.2;
         if (inDeck || inRamp) { dist = Math.max(1.2, t - 0.3); break; }
       } }

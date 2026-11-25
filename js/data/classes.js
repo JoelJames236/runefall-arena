@@ -61,7 +61,7 @@ export const CLASSES = {
       { id: 'skull_crack', name: 'Skull Crack', glyph: '✸', color: '#ffd27a', school: 'phys', cost: 25, cd: 20, gcd: true, cast: 0, range: MELEE, target: true, melee: true, needsCp: true,
         desc: 'Finisher. Stun the target for 1 sec plus 0.5 sec per combo point. Interrupts spellcasting.',
         exec(sim, c, t) { const n = c.cp; c.cp = 0; sim.damage(c, t, 15, { school: 'phys', ab: 'skull_crack' }); sim.interrupt(t, c); sim.addBuff(t, 'stun', 1 + 0.5 * n, { src: c.id, cc: 'cc', name: 'Skull Crack', icon: '✸' }); } },
-      { id: 'shadow_leap', name: 'Shadow Leap', glyph: '☾', color: '#a36bff', school: 'shadow', cost: 0, cd: 18, gcd: false, cast: 0, range: 25, target: true,
+      { id: 'shadow_leap', name: 'Shadow Leap', glyph: '☾', color: '#a36bff', school: 'shadow', cost: 0, cd: 18, gcd: false, cast: 0, range: 20, target: true,
         desc: 'Step through the shadows to appear behind your target, gaining 40% movement speed for 2 sec.',
         exec(sim, c, t) { sim.shadowLeap(c, t); sim.addBuff(c, 'speed', 2, { value: 0.4, src: c.id, name: 'Shadow Haste', icon: '☾' }); } },
       { id: 'fade', name: 'Fade', glyph: '◐', color: '#6b5a8f', school: 'shadow', cost: 0, cd: 35, gcd: false, cast: 0, range: 0, target: false, allowRooted: true, keepStealth: true,

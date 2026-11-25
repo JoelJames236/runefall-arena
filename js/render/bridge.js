@@ -3,7 +3,7 @@
 // so what you see is exactly what blocks movement and line of sight.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BRIDGE, archY, SPAN_Z } from '../sim/sim.js';
+import { BRIDGE, archY } from '../sim/sim.js';
 
 const TEX_DIR = 'assets/tex/'; // relative: the site is served from a sub-path
 const loader = new THREE.TextureLoader();
@@ -55,26 +55,27 @@ export function buildBridge() {
     // abutment piers where ramp meets deck (frame the arch)
     trim.push(boxAt(0.7, Hb + 0.05, 2 * W + 0.3, s * (hx + 0.2), Hb / 2, 0));
   }
-  // arch spandrels on both faces: fill between the arch curve and the deck bottom
-  const N = 28, arch = [];
-  for (let i = 0; i <= N; i++) { const x = hx - (2 * hx) * i / N; arch.push([x, archY(Math.abs(x))]); }
-  const span = [[-hx, 0], [-hx, Hb], [hx, Hb], ...arch];
-  for (const zf of [1, -1]) stone.push(extrudeZ(span, zf > 0 ? SPAN_Z - 0.15 : -SPAN_Z - 0.15, 0.3));
-  // arch ring (voussoirs) following the curve, slightly proud of the face
-  for (const zf of [1, -1]) for (let i = 0; i < 15; i++) {
-    const a0 = i / 15, a1 = (i + 1) / 15, ang = (a0 + a1) / 2 * Math.PI;
-    const ex = hx * 0.97, ey = archY(0) + 0.0;
-    const cx = Math.cos(ang) * ex, cy = Math.sin(ang) * ey;
-    const len = Math.hypot(Math.cos(a1 * Math.PI) - Math.cos(a0 * Math.PI), Math.sin(a1 * Math.PI) - Math.sin(a0 * Math.PI)) * ex * 0.92;
-    const g = new THREE.BoxGeometry(len, 0.42, 0.42);
-    const nx = Math.cos(ang) / ex, ny = Math.sin(ang) / ey; // ellipse normal
-    g.rotateZ(Math.atan2(ny, nx) - Math.PI / 2);
-    const nl = Math.hypot(nx, ny);
-    g.translate(cx + nx / nl * 0.2, cy + ny / nl * 0.2, zf * (SPAN_Z + 0.08));
+  // the vault: solid masonry between the arch curve and the deck, through the whole bridge width
+  // (the curve is sampled by angle so the steep ends of the flattened arch stay smooth)
+  const P = 2.6, A = archY(0), curve = [];
+  for (let i = 0; i <= 40; i++) {
+    const th = Math.PI * i / 40, c = Math.cos(th), s = Math.sin(th);
+    curve.push([hx * Math.sign(c) * Math.pow(Math.abs(c), 2 / P), A * Math.pow(s, 2 / P)]);
+  }
+  stone.push(extrudeZ([[-hx, 0], [-hx, Hb], [hx, Hb], ...curve], -W, 2 * W));
+  // arch ring (voussoirs) on both faces, following the curve and standing slightly proud of the face
+  for (const zf of [1, -1]) for (let i = 0; i < 40; i += 2) {
+    const [x0, y0] = curve[i], [x1, y1] = curve[i + 2];
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, len = Math.hypot(x1 - x0, y1 - y0) * 0.94;
+    let nx = -(y1 - y0), ny = x1 - x0; const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+    if (nx * mx + ny * my < 0) { nx = -nx; ny = -ny; } // point into the masonry
+    const g = new THREE.BoxGeometry(len, 0.42, 0.16);
+    g.rotateZ(Math.atan2(y1 - y0, x1 - x0));
+    g.translate(mx + nx * 0.21, my + ny * 0.21, zf * (W + 0.06));
     trim.push(g);
   }
   // keystone with an emblem disc
-  for (const zf of [1, -1]) trim.push(boxAt(0.6, 0.7, 0.5, 0, archY(0) + 0.3, zf * (SPAN_Z + 0.12)));
+  for (const zf of [1, -1]) trim.push(boxAt(0.6, 0.7, 0.3, 0, A + 0.3, zf * (W + 0.1)));
   // cornice band under the deck edge
   for (const zf of [1, -1]) trim.push(boxAt(2 * hx + 0.8, 0.16, 0.24, 0, Hb + 0.02, zf * (W + 0.04)));
 
@@ -116,7 +117,7 @@ export function buildBridge() {
   const embl = new THREE.MeshStandardMaterial({ color: 0x8a6a2a, metalness: 1, roughness: 0.35, emissive: 0xffb040, emissiveIntensity: 0.25 });
   for (const zf of [1, -1]) {
     const d = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.06, 20), embl);
-    d.rotation.x = Math.PI / 2; d.position.set(0, archY(0) + 0.3, zf * (SPAN_Z + 0.39)); group.add(d);
+    d.rotation.x = Math.PI / 2; d.position.set(0, archY(0) + 0.3, zf * (W + 0.27)); group.add(d);
   }
   group.userData.update = (t) => { glowMat.emissiveIntensity = 3 + Math.sin(t * 9) * 0.4 + Math.sin(t * 23) * 0.25; };
   return group;

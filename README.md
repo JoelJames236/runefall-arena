@@ -62,8 +62,8 @@ their champion so the match can finish.
 - **Hits from behind deal 10% more damage.** Direct hits and heals can **crit** (8%, +50%).
 - Cast-time spells require standing still; moving or jumping cancels them. The four rune pillars block
   line of sight.
-- **The bridge** spans the middle of the arena: run up a ramp and fight on the deck, or duck under the
-  arch. Deck, ramps and arch block line of sight; melee can't reach between deck and floor, and charges
+- **The bridge** spans the middle of the arena: run up a ramp and fight on the deck (4.4 m up), or run through the
+  wide vaulted arch underneath. Deck, ramps and arch block line of sight; melee can't reach between deck and floor, and charges
   stop short of a target on the other level. Drop off the side to escape.
 - 1.0 s global cooldown with a short spell-queue window.
 - Crowd control has diminishing returns (100% → 50% → 25% → immune, resets after 15 s).
@@ -86,8 +86,8 @@ Full numbers live in [`js/data/classes.js`](js/data/classes.js) and are shown in
 
 Open <http://localhost:8080/balance.html> to run headless AI-vs-AI simulations: a 1v1 win-rate matrix, or
 every 2v2 team composition against every other. It measures the AI's play rather than expert human play,
-so use it as a guide. Latest runs (hard AI): **1v1** — every class between 40% and 60% overall;
-**2v2** — every class between 42% and 54%, strongest composition Rogue + Priest (~65%).
+so use it as a guide. Latest runs (hard AI, with the bridge): **1v1** — classes between 39% and 62% overall;
+**2v2** — classes between 37% (Warrior) and 57%, strongest compositions Shaman + Shaman and Rogue + Priest (~76%).
 
 ## Project layout
 
