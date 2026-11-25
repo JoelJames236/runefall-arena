@@ -1,15 +1,32 @@
-// In-game interface: unit frames, action bar with cooldown sweeps, cast bars,
-// round score, nameplate, floating combat text and announcements.
+// In-game interface: unit frames (player / target / party / arena enemies), action bar with
+// cooldown sweeps and a basic-attack swing timer, cast bars, round score, nameplates,
+// floating combat text (with crits) and announcements. DOM writes are cached so the HUD
+// costs almost nothing per frame.
 import * as THREE from 'three';
 import { CLASSES, BUFF_ICONS } from '../data/classes.js';
 import { RULES, segBlocked } from '../sim/sim.js';
 
 const $ = id => document.getElementById(id);
 const SCHOOL = { frost: '#8fd8ff', fire: '#ff9a4a', arcane: '#d29aff', holy: '#ffe680', nature: '#7ae0ff', shadow: '#c08aff', phys: '#ffffff' };
+const RES_NAME = { mana: 'Mana', energy: 'Energy', rage: 'Rage' };
 
 export function iconHTML(ab, size) {
   const c = ab.color;
-  return `<div class="icon" style="${size ? `width:${size}px;height:${size}px;font-size:${size * 0.52}px;` : ''}background:radial-gradient(circle at 35% 30%, ${c}cc, ${c}55 45%, #120c18 100%);color:${c}"><span class="glyph">${ab.glyph}</span></div>`;
+  return `<div class="icon" style="${size ? `width:${size}px;height:${size}px;font-size:${size * 0.52}px;` : ''}background:radial-gradient(circle at 35% 30%, ${c}dd, ${c}55 45%, #120c18 100%);color:${c}"><span class="glyph">${ab.glyph}</span></div>`;
+}
+export function emblemStyle(C) { return `border-color:${C.color};color:${C.color};background:radial-gradient(circle at 40% 35%, ${C.color}55, #120c18 75%)`; }
+
+// cached DOM setters
+const cache = new WeakMap();
+function setStyle(el, prop, v) { let c = cache.get(el); if (!c) cache.set(el, c = {}); if (c[prop] !== v) { c[prop] = v; el.style[prop] = v; } }
+function setText(el, v) { let c = cache.get(el); if (!c) cache.set(el, c = {}); if (c._t !== v) { c._t = v; el.textContent = v; } }
+function setCls(el, cls, on) { let c = cache.get(el); if (!c) cache.set(el, c = {}); const k = 'c_' + cls; if (c[k] !== on) { c[k] = on; el.classList.toggle(cls, on); } }
+
+function buffsHTML(list, small) {
+  return list.map(b => {
+    const meta = BUFF_ICONS[b.type] || { icon: '?', color: '#888' };
+    return `<div class="buff ${meta.debuff ? 'debuff' : ''}" title="${b.name}" style="background:radial-gradient(circle at 35% 30%, ${meta.color}aa, #120c18 90%)">${b.icon || meta.icon}${small ? '' : `<b>${b.t < 60 ? Math.ceil(b.t) : ''}</b>`}</div>`;
+  }).join('');
 }
 
 export class HUD {
@@ -19,59 +36,124 @@ export class HUD {
     this.texts = [];
     this.errT = 0;
     this.v = new THREE.Vector3();
-    this.nameplate = document.createElement('div');
-    this.nameplate.className = 'nameplate';
-    this.nameplate.innerHTML = '<div class="np-name"></div><div class="np-bar"><div></div></div><div class="np-cast"><div></div></div>';
-    this.floaters.appendChild(this.nameplate);
-    this.lastCd = [];
+    this.plates = [];
+    this.lastBuffKey = {};
   }
 
-  show(v) { this.root.classList.toggle('hidden', !v); this.nameplate.style.display = v ? '' : 'none'; if (!v) this.clearTexts(); }
+  show(v) { this.root.classList.toggle('hidden', !v); for (const p of this.plates) p.el.style.display = 'none'; if (!v) this.clearTexts(); }
 
-  setup(fighters, myId, names) {
+  setup(fighters, myId) {
     this.myId = myId;
-    const me = fighters[myId], foe = fighters[1 - myId];
-    const CM = CLASSES[me.cls], CF = CLASSES[foe.cls];
-    $('nameA').textContent = names[myId]; $('nameB').textContent = names[1 - myId];
-    $('classA').textContent = CM.name; $('classB').textContent = CF.name;
-    $('scoreNameA').textContent = names[myId]; $('scoreNameB').textContent = names[1 - myId];
-    for (const [el, C] of [[$('portA'), CM], [$('portB'), CF]]) { el.textContent = C.emblem; el.style.borderColor = C.color; el.style.color = C.color; el.style.background = `radial-gradient(circle at 40% 35%, ${C.color}55, #120c18 75%)`; }
-    for (const [el, f] of [[$('resA'), me], [$('resB'), foe]]) el.className = 'fill res-' + f.resType;
-    this.nameplate.querySelector('.np-name').textContent = names[1 - myId];
+    const me = fighters[myId], CM = CLASSES[me.cls];
+    this.myTeam = me.team;
+    setText($('nameA'), me.name); setText($('classA'), CM.name);
+    const pA = $('portA'); pA.firstChild && pA.firstChild.nodeType === 3 && pA.removeChild(pA.firstChild);
+    pA.innerHTML = `${CM.emblem}<span class="lvl">60</span>`; pA.style.cssText = emblemStyle(CM) + ';font-size:34px';
+    $('resA').className = 'fill res-' + me.resType;
+    const two = fighters.length > 2;
+    setText($('scoreNameA'), two ? 'Your Team' : me.name);
+    const foes = fighters.filter(f => f.team !== me.team);
+    setText($('scoreNameB'), two ? 'Enemy Team' : foes[0]?.name || 'Enemy');
+    // nameplates for everyone but me
+    for (const p of this.plates) p.el.remove();
+    this.plates = fighters.map(f => {
+      if (f.id === myId) return null;
+      const el = document.createElement('div');
+      el.className = 'nameplate ' + (f.team === me.team ? 'ally' : 'foe');
+      el.innerHTML = `<div class="np-name">${f.name}</div><div class="np-bar"><div></div></div><div class="np-cast"><div></div></div>`;
+      this.floaters.appendChild(el);
+      return { el, bar: el.querySelector('.np-bar div'), cast: el.querySelector('.np-cast'), castFill: el.querySelector('.np-cast div') };
+    }).filter(Boolean).map((p, i, arr) => p);
+    this.plateFor = {};
+    let k = 0; for (const f of fighters) if (f.id !== myId) this.plateFor[f.id] = this.plates[k++];
+    // party (allies) and arena (enemies) mini frames
+    const mini = (f, kind, key) => `<div class="mini ${kind}" data-id="${f.id}"><span class="mkey">${key}</span><div class="mic" style="${emblemStyle(CLASSES[f.cls])}">${CLASSES[f.cls].emblem}</div>
+      <div><div class="mname"><span>${f.name}</span><i>${CLASSES[f.cls].name}</i></div><div class="bar hp"><div class="fill"></div><span></span></div><div class="bar res"><div class="fill res-${f.resType}"></div></div><div class="mcast"><div></div></div><div class="mbuffs"></div></div></div>`;
+    const allies = fighters.filter(f => f.team === me.team && f.id !== myId);
+    $('partyFrames').innerHTML = allies.map(f => mini(f, 'ally', 'F2')).join('');
+    $('arenaFrames').innerHTML = two ? foes.map((f, i) => mini(f, 'foe', 'Arena ' + (i + 1))).join('') : '';
+    this.minis = [...document.querySelectorAll('#partyFrames .mini, #arenaFrames .mini')].map(el => ({
+      el, id: +el.dataset.id, hp: el.querySelector('.bar.hp .fill'), hpt: el.querySelector('.bar.hp span'), res: el.querySelector('.bar.res .fill'), cast: el.querySelector('.mcast div'), buffs: el.querySelector('.mbuffs'),
+    }));
+    // action bar: basic attack + six abilities
     const bar = $('actionbar'); bar.innerHTML = '';
+    const tip = (ab, meta) => `<div class="tip"><div class="tn" style="color:${ab.color}">${ab.name}</div><div class="tm">${meta}</div>${ab.desc}</div>`;
+    const A = CM.auto;
+    const atk = document.createElement('div'); atk.className = 'slot atk';
+    atk.innerHTML = `${iconHTML(A)}<div class="cd"></div><div class="cdtext"></div><div class="key">LMB</div>${tip(A, `${A.ranged ? A.range + ' yd' : 'Melee'} · ${A.speed}s attack speed`)}`;
+    bar.appendChild(atk);
+    this.atkSlot = { el: atk, cd: atk.querySelector('.cd') };
     this.slots = CM.abilities.map((ab, i) => {
       const s = document.createElement('div'); s.className = 'slot';
-      s.innerHTML = `${iconHTML(ab)}<div class="cd"></div><div class="cdtext"></div><div class="key">${i + 1}</div><div class="cost">${ab.cost || ''}</div>`;
-      s.title = `${ab.name}: ${ab.desc}`;
+      const meta = [ab.cost ? `${ab.cost} ${RES_NAME[CM.resType]}` : 'No cost', ab.cast ? `${ab.cast}s cast` : 'Instant', ab.cd ? `${ab.cd}s cooldown` : '', ab.range ? `${ab.range} yd` : ''].filter(Boolean).join(' · ');
+      s.innerHTML = `${iconHTML(ab)}<div class="cd"></div><div class="cdtext"></div><div class="key">${i + 1}</div><div class="cost">${ab.cost || ''}</div>${tip(ab, meta)}`;
       bar.appendChild(s);
       return { el: s, cd: s.querySelector('.cd'), txt: s.querySelector('.cdtext'), ab, wasCd: false };
     });
-    const pips = n => Array.from({ length: RULES.winsNeeded }, () => '<div class="pip"></div>').join('');
+    const pips = () => Array.from({ length: RULES.winsNeeded }, () => '<div class="pip"></div>').join('');
     $('pipsA').innerHTML = pips(); $('pipsB').innerHTML = pips();
     $('cpA').style.display = me.cls === 'rogue' ? '' : 'none';
     $('cpA').innerHTML = '<i></i>'.repeat(5);
-    this.lastBuffKey = ['', ''];
-    this.hintT = 12; $('controlsHint').style.opacity = 1;
+    this.lastBuffKey = {};
+    this.hintT = 14; $('controlsHint').style.opacity = 1;
   }
 
   flashSlot(i) { const s = this.slots && this.slots[i]; if (!s) return; s.el.classList.remove('flash'); void s.el.offsetWidth; s.el.classList.add('flash'); }
 
   update(dt, view, camera, myId) {
-    const F = view.fighters, me = F[myId], foe = F[1 - myId];
-    if (!me || !foe) return;
-    // frames
-    this.frame('A', me);
-    this.frame('B', foe, true);
-    // combo points
-    if (me.cls === 'rogue') [...$('cpA').children].forEach((c, i) => c.classList.toggle('on', i < me.cp));
-    // cast bars
-    this.castbar($('castA'), me);
-    this.castbar($('castB'), foe);
-    // stamina
-    $('stamFill').style.width = (me.stamina ?? 100) + '%';
+    const F = view.fighters, me = F[myId];
+    if (!me) return;
+    const tgt = me.target >= 0 ? F[me.target] : null;
+    const tgtVisible = tgt && tgt.alive && tgt.team !== me.team && !tgt.buffs.some(b => b.type === 'stealth');
+    this.frame('A', me, 'A');
+    // target frame
+    const tf = $('frameB');
+    setCls(tf, 'empty', !tgtVisible);
+    if (tgtVisible) {
+      const C = CLASSES[tgt.cls];
+      if (this.lastTarget !== tgt.id) {
+        this.lastTarget = tgt.id;
+        $('portB').innerHTML = C.emblem; $('portB').style.cssText = emblemStyle(C) + ';font-size:34px';
+        $('resB').className = 'fill res-' + tgt.resType;
+        setText($('nameB'), tgt.name); setText($('classB'), C.name);
+        $('nameB').parentElement.className = 'uf-name hostile';
+        this.lastBuffKey.B = '';
+      }
+      this.frame('B', tgt, 'B', true);
+      this.castbar($('castB'), tgt);
+    } else if (this.lastTarget !== -1) {
+      this.lastTarget = -1;
+      setText($('nameB'), 'No Target'); setText($('classB'), ''); $('portB').innerHTML = '?'; $('portB').style.cssText = 'font-size:30px;color:#666';
+      setStyle($('hpB'), 'width', '0%'); setStyle($('resB'), 'width', '0%'); setText($('hpTextB'), ''); setText($('resTextB'), ''); $('buffsB').innerHTML = ''; $('castB').classList.add('hidden');
+    }
+    if (me.cls === 'rogue') [...$('cpA').children].forEach((c, i) => setCls(c, 'on', i < me.cp));
+    this.castbar($('castA'), me, true);
+    setStyle($('stamFill'), 'width', (me.stamina ?? 100) + '%');
+    // mini frames
+    for (const m of this.minis || []) {
+      const f = F[m.id]; if (!f) continue;
+      const stealth = f.team !== me.team && f.buffs.some(b => b.type === 'stealth');
+      setStyle(m.hp, 'width', (stealth ? 100 : Math.max(0, f.hp) / f.maxHp * 100) + '%');
+      setText(m.hpt, stealth ? 'Stealthed' : f.alive ? `${Math.round(Math.max(0, f.hp) / f.maxHp * 100)}%` : 'Dead');
+      setStyle(m.res, 'width', (f.res / f.maxRes * 100) + '%');
+      setStyle(m.cast, 'width', f.cast ? (f.cast.t / f.cast.dur * 100) + '%' : '0%');
+      setCls(m.el, 'dead', !f.alive);
+      setCls(m.el, 'targeted', me.target === f.id && f.team !== me.team);
+      setCls(m.el, 'friended', me.friend === f.id);
+      const key = stealth ? '' : f.buffs.map(b => b.type + b.name).join('|');
+      if (this.lastBuffKey['m' + m.id] !== key) { this.lastBuffKey['m' + m.id] = key; m.buffs.innerHTML = stealth ? '' : buffsHTML(f.buffs.slice(0, 7), true); }
+    }
     // action bar
-    const dist = Math.hypot(me.x - foe.x, me.z - foe.z);
-    const foeVisible = foe.alive && !foe.buffs.some(b => b.type === 'stealth');
+    const t = tgtVisible ? tgt : null;
+    const dist = t ? Math.hypot(me.x - t.x, me.z - t.z) : 999;
+    const los = t ? !segBlocked(me.x, me.z, t.x, t.z) : false;
+    const A = CLASSES[me.cls].auto;
+    if (this.atkSlot) {
+      const frac = Math.min(1, (me.autoT || 0) / A.speed);
+      setStyle(this.atkSlot.cd, 'background', frac > 0.02 ? `conic-gradient(transparent ${(1 - frac) * 360}deg, rgba(0,0,0,0.6) 0)` : 'none');
+      setCls(this.atkSlot.el, 'active', !!me.autoOn);
+      setCls(this.atkSlot.el, 'oor', !t || dist > A.range + 0.3 || (A.ranged && !los));
+    }
     this.slots && this.slots.forEach((s, i) => {
       const ab = s.ab;
       const cd = me.cds[i];
@@ -79,93 +161,89 @@ export class HUD {
       if (ab.gcd && me.gcd > cd) { rem = me.gcd; tot = RULES.gcd; }
       if (rem > 0.05 && tot > 0) {
         const frac = Math.min(1, rem / tot);
-        s.cd.style.background = `conic-gradient(transparent ${(1 - frac) * 360}deg, rgba(0,0,0,0.72) 0)`;
-        s.txt.textContent = cd > 1.5 ? Math.ceil(cd) : '';
-      } else { s.cd.style.background = 'none'; s.txt.textContent = ''; }
+        setStyle(s.cd, 'background', `conic-gradient(transparent ${((1 - frac) * 360).toFixed(1)}deg, rgba(0,0,0,0.72) 0)`);
+        setText(s.txt, cd > 1.5 ? String(Math.ceil(cd)) : cd > 0.05 ? cd.toFixed(1) : '');
+      } else { setStyle(s.cd, 'background', 'none'); setText(s.txt, ''); }
       if (s.wasCd && cd <= 0) { s.el.classList.remove('ready'); void s.el.offsetWidth; s.el.classList.add('ready'); }
       s.wasCd = cd > 0;
-      s.el.classList.toggle('nores', ab.cost > me.res || (ab.needsCp && me.cp < 1));
-      s.el.classList.toggle('oor', !!(ab.target && (!foeVisible || dist > ab.range + 0.3 || (ab.minRange && dist < ab.minRange) || (!ab.melee && segBlocked(me.x, me.z, foe.x, foe.z)))));
+      setCls(s.el, 'nores', ab.cost > me.res || (ab.needsCp && me.cp < 1));
+      setCls(s.el, 'oor', !!(ab.target && t && (dist > ab.range + 0.3 || (ab.minRange && dist < ab.minRange) || (!ab.melee && !los))));
     });
     // score
-    const sA = view.score[myId], sB = view.score[1 - myId];
-    [...$('pipsA').children].forEach((p, i) => p.classList.toggle('won', i < sA));
-    [...$('pipsB').children].forEach((p, i) => p.classList.toggle('won', i < sB));
-    $('roundLabel').textContent = `Round ${view.round}`;
-    const t = Math.floor(view.fightT || 0);
-    $('roundTimer').textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+    const sA = view.score[me.team], sB = view.score[1 - me.team];
+    [...$('pipsA').children].forEach((p, i) => setCls(p, 'won', i < sA));
+    [...$('pipsB').children].forEach((p, i) => setCls(p, 'won', i < sB));
+    setText($('roundLabel'), `Round ${view.round}`);
+    const tt = Math.floor(view.fightT || 0);
+    setText($('roundTimer'), `${Math.floor(tt / 60)}:${String(tt % 60).padStart(2, '0')}`);
     const dl = $('dampLabel');
-    if (view.damp > 0) { dl.classList.remove('hidden'); dl.textContent = `Dampening ${Math.round(view.damp)}%`; } else dl.classList.add('hidden');
-    // error fade
+    if (view.damp > 0) { setCls(dl, 'hidden', false); setText(dl, `Dampening ${Math.round(view.damp)}%`); } else setCls(dl, 'hidden', true);
     if (this.errT > 0) { this.errT -= dt; if (this.errT <= 0) $('errorText').classList.remove('show'); }
     if (this.hintT > 0) { this.hintT -= dt; if (this.hintT <= 0) $('controlsHint').style.opacity = 0; }
-    // nameplate
-    this.updateNameplate(camera, foe, me);
+    this.updateNameplates(camera, F, me);
     this.updateTexts(dt, camera);
   }
 
-  frame(s, f, isFoe) {
+  frame(s, f, key, isFoe) {
     const hp = Math.max(0, f.hp) / f.maxHp;
-    $('hp' + s).style.width = (hp * 100) + '%';
+    setStyle($('hp' + s), 'width', (hp * 100) + '%');
+    setCls($('hp' + s).parentElement, 'low', hp < 0.25 && f.alive);
     const abs = f.buffs.reduce((a, b) => a + (b.type === 'absorb' ? b.value : 0), 0);
     const absEl = $('abs' + s);
-    absEl.style.left = (hp * 100) + '%'; absEl.style.width = Math.min(100 - hp * 100, abs / f.maxHp * 100) + '%';
-    if (abs > 0 && hp > 0.98) { absEl.style.left = (100 - Math.min(100, abs / f.maxHp * 100)) + '%'; }
-    $('hpText' + s).textContent = `${Math.max(0, Math.round(f.hp))} / ${f.maxHp}${abs > 0 ? `  (+${Math.round(abs)})` : ''}`;
-    $('res' + s).style.width = (f.res / f.maxRes * 100) + '%';
-    $('resText' + s).textContent = `${Math.round(f.res)} / ${f.maxRes}`;
-    // buffs (rebuild only when the set changes)
-    const stealthed = isFoe && f.buffs.some(b => b.type === 'stealth');
-    const list = stealthed ? [] : f.buffs.filter(b => b.type !== 'stoneskin' || true);
-    const key = list.map(b => b.type + b.name + Math.ceil(b.t)).join('|');
-    const idx = s === 'A' ? 0 : 1;
-    if (key !== this.lastBuffKey[idx]) {
-      this.lastBuffKey[idx] = key;
-      $('buffs' + s).innerHTML = list.map(b => {
-        const meta = BUFF_ICONS[b.type] || { icon: '?', color: '#888' };
-        const icon = b.icon || meta.icon;
-        return `<div class="buff ${meta.debuff ? 'debuff' : ''}" title="${b.name}" style="background:radial-gradient(circle at 35% 30%, ${meta.color}aa, #120c18 90%)">${icon}<b>${b.t < 60 ? Math.ceil(b.t) : ''}</b></div>`;
-      }).join('');
-    }
+    const aw = Math.min(100, abs / f.maxHp * 100);
+    setStyle(absEl, 'left', (Math.min(hp * 100, 100 - aw)) + '%'); setStyle(absEl, 'width', aw + '%');
+    setText($('hpText' + s), `${Math.max(0, Math.round(f.hp))} / ${f.maxHp}${abs > 0 ? `  (+${Math.round(abs)})` : ''}`);
+    setStyle($('res' + s), 'width', (f.res / f.maxRes * 100) + '%');
+    setText($('resText' + s), `${Math.round(f.res)} / ${f.maxRes}`);
+    const list = f.buffs;
+    const k = list.map(b => b.type + b.name + Math.ceil(b.t)).join('|');
+    if (k !== this.lastBuffKey[key]) { this.lastBuffKey[key] = k; $('buffs' + s).innerHTML = buffsHTML(list); }
   }
 
-  castbar(el, f) {
+  castbar(el, f, mine) {
     if (f.cast) {
       const ab = CLASSES[f.cls].abilities[f.cast.idx];
-      el.classList.remove('hidden', 'interrupted');
-      el.querySelector('.fill').style.width = Math.min(100, f.cast.t / f.cast.dur * 100) + '%';
-      el.querySelector('span').textContent = ab.name;
-      el._hideT = 0;
+      el.classList.remove('hidden', 'interrupted', 'done');
+      setStyle(el.querySelector('.fill'), 'width', Math.min(100, f.cast.t / f.cast.dur * 100) + '%');
+      setText(el.querySelector('span'), ab.name);
+      const ct = el.querySelector('.ct'); if (ct) setText(ct, Math.max(0, f.cast.dur - f.cast.t).toFixed(1));
+      el._hideT = 0; el._had = true;
     } else if (!el.classList.contains('hidden')) {
-      if (el.classList.contains('interrupted')) { el._hideT = (el._hideT || 0) + 1 / 60; if (el._hideT > 0.6) el.classList.add('hidden'); }
+      if (el.classList.contains('interrupted') || el.classList.contains('done')) { el._hideT = (el._hideT || 0) + 1 / 60; if (el._hideT > 0.5) el.classList.add('hidden'); }
+      else if (el._had && mine) { el.classList.add('done'); el._had = false; el._hideT = 0.2; }
       else el.classList.add('hidden');
     }
   }
   castInterrupted(isMe) {
     const el = $(isMe ? 'castA' : 'castB');
-    el.classList.remove('hidden'); el.classList.add('interrupted'); el.querySelector('span').textContent = 'Interrupted'; el._hideT = 0;
+    el.classList.remove('hidden', 'done'); el.classList.add('interrupted'); el.querySelector('span').textContent = 'Interrupted'; el._hideT = 0; el._had = false;
   }
 
-  updateNameplate(camera, foe, me) {
-    const np = this.nameplate;
-    const stealthed = foe.buffs.some(b => b.type === 'stealth');
-    this.v.set(foe.x, foe.y + 2.75, foe.z).project(camera);
-    if (this.v.z > 1 || stealthed || !foe.alive && false) { np.style.display = 'none'; return; }
-    np.style.display = '';
-    np.style.left = ((this.v.x * 0.5 + 0.5) * innerWidth) + 'px';
-    np.style.top = ((-this.v.y * 0.5 + 0.5) * innerHeight) + 'px';
-    np.querySelector('.np-bar div').style.width = (Math.max(0, foe.hp) / foe.maxHp * 100) + '%';
-    np.querySelector('.np-cast').style.visibility = foe.cast ? 'visible' : 'hidden';
-    if (foe.cast) np.querySelector('.np-cast div').style.width = (foe.cast.t / foe.cast.dur * 100) + '%';
-    np.classList.toggle('targeted', me.target === foe.id || me.target === (1 - this.myId));
+  updateNameplates(camera, F, me) {
+    for (const f of F) {
+      const p = this.plateFor && this.plateFor[f.id]; if (!p) continue;
+      const hostile = f.team !== me.team;
+      const stealthed = hostile && f.buffs.some(b => b.type === 'stealth');
+      this.v.set(f.x, f.y + 2.75, f.z).project(camera);
+      if (this.v.z > 1 || stealthed || !f.alive) { setStyle(p.el, 'display', 'none'); continue; }
+      setStyle(p.el, 'display', '');
+      const x = (this.v.x * 0.5 + 0.5) * innerWidth - 60, y = (-this.v.y * 0.5 + 0.5) * innerHeight - 30;
+      p.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+      setStyle(p.bar, 'width', (Math.max(0, f.hp) / f.maxHp * 100) + '%');
+      setStyle(p.cast, 'visibility', f.cast ? 'visible' : 'hidden');
+      if (f.cast) setStyle(p.castFill, 'width', (f.cast.t / f.cast.dur * 100) + '%');
+      setCls(p.el, 'targeted', hostile ? me.target === f.id : me.friend === f.id);
+    }
   }
 
   // ------------------------------------------------------------ floating combat text
-  floatText(pos, text, color, size = '', side = 0) {
+  floatText(pos, text, color, cls = '', side = 0) {
+    if (this.texts.length > 40) { const old = this.texts.shift(); old.el.remove(); }
     const el = document.createElement('div');
-    el.className = 'ftext ' + size; el.textContent = text; el.style.color = color;
+    el.className = 'ftext ' + cls; el.textContent = text; el.style.color = color;
     this.floaters.appendChild(el);
-    this.texts.push({ el, x: pos.x, y: pos.y, z: pos.z, t: 0, dur: size === 'big' ? 1.5 : 1.15, dx: (Math.random() - 0.5) * 60 + side * 40 });
+    const big = cls.includes('crit') || cls.includes('big');
+    this.texts.push({ el, x: pos.x, y: pos.y, z: pos.z, t: 0, dur: big ? 1.5 : 1.1, dx: (Math.random() - 0.5) * 60 + side * 40, pop: big ? 2.2 : 1.6 });
   }
   updateTexts(dt, camera) {
     for (let i = this.texts.length - 1; i >= 0; i--) {
@@ -176,25 +254,30 @@ export class HUD {
       if (this.v.z > 1) { t.el.style.display = 'none'; continue; }
       t.el.style.display = '';
       const x = (this.v.x * 0.5 + 0.5) * innerWidth + t.dx * u, y = (-this.v.y * 0.5 + 0.5) * innerHeight - 70 * u;
-      const sc = u < 0.12 ? 1.6 - u * 5 : 1;
-      t.el.style.transform = `translate(${x}px, ${y}px) translate(-50%,-50%) scale(${sc})`;
-      t.el.style.left = '0'; t.el.style.top = '0';
-      t.el.style.opacity = u > 0.7 ? (1 - u) / 0.3 : 1;
+      const sc = u < 0.12 ? t.pop - (t.pop - 1) * (u / 0.12) : 1;
+      t.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%,-50%) scale(${sc.toFixed(2)})`;
+      t.el.style.opacity = u > 0.7 ? ((1 - u) / 0.3).toFixed(2) : '1';
     }
   }
   clearTexts() { for (const t of this.texts) t.el.remove(); this.texts = []; }
 
+  // show numbers involving me (dealt or taken) prominently; others' fights small
   combatText(ev, F, myId) {
     const tgt = F[ev.id]; if (!tgt) return;
+    const me = F[myId];
     const pos = { x: tgt.x, y: tgt.y + 2.2, z: tgt.z };
-    const mine = ev.id === myId;
+    const mine = ev.id === myId, byMe = ev.src === myId;
+    const relevant = mine || byMe || (me && F[ev.src] && F[ev.src].team === me.team);
     if (ev.e === 'dmg') {
+      if (!relevant && !ev.big) return;
       if (ev.amt <= 0 && ev.abs > 0) { this.floatText(pos, 'Absorb', '#9ac8ff', 'small', mine ? -1 : 1); return; }
       const col = mine ? '#ff5a4a' : (SCHOOL[ev.school] || '#fff');
-      const size = ev.big ? 'big' : ev.dot || ev.ab === 'auto' ? 'small' : '';
-      this.floatText(pos, (mine ? '-' : '') + ev.amt + (ev.abs ? ` (${ev.abs})` : ''), col, size, mine ? -1 : 1);
+      let cls = ev.crit ? 'crit' : ev.big ? 'big' : ev.dot || ev.ab === 'auto' ? 'small' : '';
+      if (!byMe && !mine) cls += ' small';
+      this.floatText(pos, (mine ? '-' : '') + ev.amt + (ev.abs ? ` (${ev.abs})` : '') + (ev.back && byMe ? '' : ''), col, cls, mine ? -1 : 1);
     } else if (ev.e === 'heal' && ev.amt > 0) {
-      this.floatText(pos, '+' + ev.amt, '#6aff7a', ev.amt > 150 ? 'big' : '', 0);
+      if (!relevant && tgt.team !== me?.team) return;
+      this.floatText(pos, '+' + ev.amt, '#6aff7a', 'heal' + (ev.crit ? ' crit' : ev.amt > 150 ? ' big' : ''), 0);
     } else if (ev.e === 'immune') {
       this.floatText(pos, 'Immune', '#ffffff', 'small');
     } else if (ev.e === 'buff' && ['stun', 'root', 'silence', 'disorient'].includes(ev.type)) {
@@ -204,15 +287,15 @@ export class HUD {
     }
   }
 
-  error(msg) {
-    const el = $('errorText'); el.textContent = msg; el.classList.add('show'); this.errT = 1.4;
-  }
+  error(msg) { const el = $('errorText'); el.textContent = msg; el.classList.add('show'); this.errT = 1.4; }
 
-  announce(text, cls = '', hold = false) {
+  announce(text, cls = '', hold = false, sub = '') {
     const el = $('announce');
     el.className = 'announce'; void el.offsetWidth;
     el.textContent = text;
-    el.classList.add(hold ? 'hold' : 'show'); if (cls) el.classList.add(cls);
+    el.classList.add(hold ? 'hold' : 'show'); for (const c of cls.split(' ')) if (c) el.classList.add(c);
+    const s = $('subAnnounce'); s.textContent = sub; s.classList.toggle('show', !!sub);
+    clearTimeout(this._subT); if (sub && !hold) this._subT = setTimeout(() => s.classList.remove('show'), 1800);
   }
-  clearAnnounce() { $('announce').className = 'announce'; }
+  clearAnnounce() { $('announce').className = 'announce'; $('subAnnounce').classList.remove('show'); }
 }

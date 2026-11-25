@@ -26,30 +26,30 @@ export class World {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.1;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x4a3040, 120, 1100);
+    this.scene.fog = new THREE.Fog(0x5e4660, 90, 1000);
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2000);
     this.camera.position.set(0, 20, 50);
 
     // lighting: warm sunset key light, cool moon fill, sky/ground hemisphere
-    this.hemi = new THREE.HemisphereLight(0x9a9ac8, 0x4a3a30, 1.6); this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffc89a, 2.6);
-    this.sun.position.set(-35, 45, 28);
+    this.hemi = new THREE.HemisphereLight(0x8a8ad0, 0x5a4030, 1.5); this.scene.add(this.hemi);
+    this.sun = new THREE.DirectionalLight(0xffb27a, 2.8);
+    this.sun.position.set(-40, 32, 34);
     this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera; sc.left = -38; sc.right = 38; sc.top = 38; sc.bottom = -38; sc.near = 1; sc.far = 140;
     this.sun.shadow.bias = -0.0005; this.sun.shadow.normalBias = 0.03;
     this.scene.add(this.sun); this.scene.add(this.sun.target);
-    const moon = new THREE.DirectionalLight(0x8aa0ff, 0.7); moon.position.set(30, 30, -40); this.scene.add(moon);
+    const moon = new THREE.DirectionalLight(0x7a90ff, 0.6); moon.position.set(30, 30, -40); this.scene.add(moon);
 
     // image-based lighting so metals and armor have something to reflect
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environmentIntensity = 0.35;
 
-    this.arena = new Arena(this.scene);
+    this.arena = new Arena(this.scene, (JSON.parse(localStorage.getItem("runefall-settings") || "{}").quality) || "high");
     this.vfx = new VFX(this.scene);
 
     this.composer = new EffectComposer(this.renderer);
@@ -75,6 +75,7 @@ export class World {
   setQuality(q) {
     this.quality = q;
     this.useBloom = q === 'high';
+    this.vfx.setQuality(q);
     this.renderer.shadowMap.enabled = q !== 'low';
     this.sun.castShadow = q !== 'low';
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, q === 'low' ? 1 : q === 'medium' ? 1.25 : 1.75));
@@ -94,25 +95,44 @@ export class World {
   // ------------------------------------------------------------------ characters
   clearChars() {
     for (const c of this.chars) if (c) this.scene.remove(c.root);
-    this.chars = [null, null];
+    for (const r of this.rings || []) this.scene.remove(r);
+    this.chars = []; this.rings = [];
     if (this.preview.char) { this.scene.remove(this.preview.char.root); this.preview.char = null; }
     this.vfx.clearAll();
   }
 
-  setFighters(clsA, clsB) {
+  // specs: [{ cls, team }] — one entry per fighter (index = fighter id)
+  setFighters(specs, myId) {
     this.clearChars();
-    this.chars = [new Character(clsA), new Character(clsB)];
-    for (const c of this.chars) { c.root.traverse(o => { if (o.isMesh) o.castShadow = true; }); this.scene.add(c.root); }
-    this.charState = [{ px: 0, pz: 0, speed: 0, faceYaw: 0, faceT: 0 }, { px: 0, pz: 0, speed: 0, faceYaw: 0, faceT: 0 }];
+    const myTeam = specs[myId]?.team ?? 0;
+    this.chars = specs.map(s => new Character(s.cls));
+    for (const c of this.chars) this.scene.add(c.root);
+    // team rings under each champion: gold = you, blue = ally, red = enemy
+    this.rings = specs.map((s, i) => {
+      const col = i === myId ? 0xffc04a : s.team === myTeam ? 0x4aa8ff : 0xff3a2a;
+      const m = new THREE.Mesh(this.ringGeo || (this.ringGeo = new THREE.RingGeometry(0.62, 0.78, 40)), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2; m.renderOrder = 2;
+      this.scene.add(m); return m;
+    });
+    this.charState = specs.map(() => ({ speed: 0, faceT: 0 }));
+    if (!this.selRing) {
+      // WoW-style selection circles: rotating red (hostile target) and green (friendly target)
+      const tex = this.vfx.selectionTexture();
+      this.selRing = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6), new THREE.MeshBasicMaterial({ map: tex, color: 0xff3a2a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      this.selRing.rotation.x = -Math.PI / 2; this.selRing.renderOrder = 3;
+      this.friendRing = new THREE.Mesh(this.selRing.geometry, new THREE.MeshBasicMaterial({ map: tex, color: 0x5aff7a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.8 }));
+      this.friendRing.rotation.x = -Math.PI / 2; this.friendRing.renderOrder = 3;
+    }
+    this.scene.add(this.selRing, this.friendRing);
+    this.selRing.visible = this.friendRing.visible = false;
   }
 
   showMenuScene() {
     this.mode = 'menu';
     this.clearChars();
-    const a = new Character('warrior'), b = new Character('mage');
-    a.root.position.set(0, 0, -3.5); b.root.position.set(0, 0, 3.5); b.root.rotation.y = Math.PI;
-    this.scene.add(a.root, b.root);
-    this.chars = [a, b];
+    if (this.selRing) { this.scene.remove(this.selRing, this.friendRing); }
+    const line = [['warrior', -2.2, -3.5, 0], ['priest', 2.2, -4.5, 0], ['mage', 2.2, 3.5, Math.PI], ['rogue', -2.2, 4.2, Math.PI]];
+    this.chars = line.map(([cls, x, z, yaw]) => { const c = new Character(cls); c.root.position.set(x, 0, z); c.root.rotation.y = yaw; this.scene.add(c.root); return c; });
     this.menuT = 0;
   }
 
@@ -127,6 +147,30 @@ export class World {
     c.play('raise', 0.9);
     this.vfx.burst(0, 1, 0, [CLASSES[cls].color === undefined ? 0xffffff : new THREE.Color(CLASSES[cls].color).getHex(), 0xffffff], 50, 4, 0.8, 0.5, { up: 1 });
     this.vfx.groundRing(0, 0, new THREE.Color(CLASSES[cls].color).getHex(), 0.5, 3, 0.8);
+  }
+
+  previewAttack() {
+    const c = this.preview.char; if (!c) return;
+    c.play('attack', 0.5);
+    const col = new THREE.Color(CLASSES[c.cls].auto.color).getHex();
+    const p = c.focusWorld();
+    this.vfx.burst(p.x, p.y, p.z, [col, 0xffffff], 24, 3, 0.5, 0.35);
+  }
+
+  // victory fireworks over the winners
+  celebrate(winners) {
+    let k = 0;
+    const fire = () => {
+      if (k++ > 7) return;
+      for (const f of winners) {
+        const x = f.x + (Math.random() - 0.5) * 6, z = f.z + (Math.random() - 0.5) * 6, y = 7 + Math.random() * 4;
+        const cols = [[0xffd27a, 0xffffff], [0x8ad0ff, 0xffffff], [0xff8a5a, 0xffe0a0]][k % 3];
+        this.vfx.burst(x, y, z, cols, 60, 9, 1.3, 0.35, { gravity: 4, drag: 1.2, grow: -0.4 });
+        this.vfx.flash(x, y, z, cols[0], 40, 0.6);
+      }
+      setTimeout(fire, 260);
+    };
+    fire();
   }
 
   previewAbility(ab) {
@@ -149,10 +193,11 @@ export class World {
 
   // ------------------------------------------------------------------ per-frame
   // view: { fighters, projectiles, zones, state, winner }
-  updateGame(dt, view, myId, input) {
+  updateGame(dt, view, myId, input, followId = myId) {
     this.mode = 'game';
     const F = view.fighters;
-    for (let i = 0; i < 2; i++) {
+    const me = F[myId], myTeam = me ? me.team : 0;
+    for (let i = 0; i < F.length; i++) {
       const f = F[i], ch = this.chars[i]; if (!f || !ch) continue;
       const cs = this.charState[i];
       // smooth remote positions slightly to hide network jitter
@@ -168,8 +213,8 @@ export class World {
       const baseSpeed = CLASSES[f.cls].speed;
       // facing: face the target briefly when casting or after using an ability
       let yaw = f.yaw;
-      const o = F[1 - i];
-      if ((f.cast || cs.faceT > 0) && o && f.alive) yaw = Math.atan2(o.x - f.x, o.z - f.z);
+      const o = F[f.cast && f.cast.tid >= 0 ? f.cast.tid : f.target];
+      if ((f.cast || cs.faceT > 0) && o && o !== f && f.alive) yaw = Math.atan2(o.x - f.x, o.z - f.z);
       cs.faceT -= dt;
       if (cs.yaw === undefined) cs.yaw = yaw;
       cs.yaw += angleDiff(cs.yaw, yaw) * (1 - Math.exp(-dt * 16));
@@ -181,7 +226,7 @@ export class World {
         back = Math.abs(d) > 2.0;
         strafe = Math.abs(d) > 0.6 && Math.abs(d) < 2.5 ? Math.sign(d) : 0;
       }
-      const won = (view.state === 'roundEnd' || view.state === 'matchEnd') && f.alive && view.lastWinner === i;
+      const won = (view.state === 'roundEnd' || view.state === 'matchEnd') && f.alive && view.lastWinner === f.team;
       ch.update(dt, {
         speed: f.alive ? cs.speed / baseSpeed : 0, back, strafe, air: f.y > 0.1, casting: !!f.cast, castProgress: f.cast ? f.cast.t / f.cast.dur : 0,
         stunned: hasBuff(f, 'stun'), disoriented: hasBuff(f, 'disorient'), dead: !f.alive, victory: won, tempest: hasBuff(f, 'tempest'),
@@ -189,16 +234,51 @@ export class World {
       // stealth visibility
       let op = 1;
       if (hasBuff(f, 'stealth')) {
-        if (i === myId) op = 0.3;
-        else { const me = F[myId]; const d = me ? Math.hypot(me.x - f.x, me.z - f.z) : 99; op = d < 5 ? 0.12 : 0; }
+        if (f.team === myTeam) op = 0.3;
+        else { const d = me ? Math.hypot(me.x - f.x, me.z - f.z) : 99; op = d < 5 ? 0.12 : 0; }
       }
       ch.setOpacity(op);
+      const ring = this.rings[i];
+      if (ring) {
+        ring.visible = f.alive && op > 0.05;
+        ring.position.set(rp.x, 0.05, rp.z);
+        const s = 1 + (i === myId ? Math.sin(this.time * 3) * 0.04 : 0);
+        ring.scale.set(s, s, s);
+      }
     }
+    // selection circles under the hostile target and the friendly target
+    const t = me ? F[me.target] : null;
+    const tv = t && t.alive && t.team !== myTeam && (!hasBuff(t, 'stealth')) && this.chars[t.id];
+    this.selRing.visible = !!tv;
+    if (tv) { const p = this.chars[t.id].root.position; this.selRing.position.set(p.x, 0.07, p.z); this.selRing.rotation.z += dt * 1.2; }
+    const fr = me && me.friend >= 0 && me.friend !== me.id ? F[me.friend] : null;
+    this.friendRing.visible = !!(fr && fr.alive && this.chars[fr.id]);
+    if (this.friendRing.visible) { const p = this.chars[fr.id].root.position; this.friendRing.position.set(p.x, 0.07, p.z); this.friendRing.rotation.z -= dt * 1.0; }
+
     this.vfx.syncProjectiles(view.projectiles, dt);
-    this.vfx.syncZones(view.zones, dt);
+    this.vfx.syncZones(view.zones, dt, myTeam, F);
     // stealth: never reveal an invisible enemy through their buff effects
-    this.vfx.syncBuffs(F.map((f, i) => (i !== myId && hasBuff(f, 'stealth')) ? { ...f, buffs: [] } : f), this.chars, dt, this.time);
-    this.updateGameCamera(dt, F[myId], input);
+    this.vfx.syncCasts(F, this.chars, f => CLASSES[f.cls].abilities[f.cast.idx]?.school, dt, this.time);
+    this.vfx.syncBuffs(F.map(f => (f.team !== myTeam && hasBuff(f, 'stealth')) ? { ...f, buffs: [] } : f), this.chars, dt, this.time);
+    this.updateGameCamera(dt, F[followId] || me, input);
+  }
+
+  // Screen-space pick: the visible enemy closest to the crosshair (for click-targeting).
+  pickEnemy(view, myId, sx = 0.5, sy = 0.45) {
+    const F = view.fighters, me = F[myId]; if (!me) return -1;
+    let best = -1, bestD = 0.09;
+    const v = new THREE.Vector3();
+    for (const f of F) {
+      if (f.team === me.team || !f.alive || hasBuff(f, 'stealth') || !this.chars[f.id]) continue;
+      const p = this.chars[f.id].root.position;
+      for (const h of [0.6, 1.2, 1.8]) {
+        v.set(p.x, p.y + h, p.z).project(this.camera);
+        if (v.z > 1) continue;
+        const d = Math.hypot((v.x * 0.5 + 0.5) - sx, ((-v.y * 0.5 + 0.5) - sy) * (innerHeight / innerWidth));
+        if (d < bestD) { bestD = d; best = f.id; }
+      }
+    }
+    return best;
   }
 
   onAbilityAnim(id, ab) {
@@ -207,8 +287,12 @@ export class World {
     if (kind) ch.play(kind, kind === 'raise' ? 0.7 : kind === 'slam' ? 0.6 : 0.42);
     if (this.charState[id]) this.charState[id].faceT = 0.5;
   }
-  onAuto(id) { const ch = this.chars[id]; if (!ch) return; ch.play(ch.cls === 'rogue' ? 'stab' : 'slash', ch.cls === 'rogue' ? 0.35 : 0.5); }
-  onHitFlinch(id) { const ch = this.chars[id]; if (ch && !ch.act) ch.hit(); }
+  onAuto(id) {
+    const ch = this.chars[id]; if (!ch) return;
+    ch.play('attack', { rogue: 0.36, warrior: 0.55, mage: 0.42, priest: 0.42, shaman: 0.45 }[ch.cls] || 0.45);
+    if (this.charState[id]) this.charState[id].faceT = 0.35;
+  }
+  onHitFlinch(id, crit) { const ch = this.chars[id]; if (ch && (!ch.act || crit)) ch.hit(crit ? 2 : 1); }
   onDash(id, fx) { const ch = this.chars[id]; if (ch) ch.play(fx === 'bull_rush' ? 'charge' : 'dash', fx === 'bull_rush' ? 0.6 : 0.35); }
 
   updateGameCamera(dt, me, input) {

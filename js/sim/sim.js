@@ -1,5 +1,6 @@
 // Authoritative combat simulation. Runs on the host (or locally vs. AI).
 // Pure logic — no rendering — so it can be serialized and driven over the network.
+// Supports any number of fighters split into two teams (1v1 and 2v2).
 import { CLASSES } from '../data/classes.js';
 
 export const ARENA_R = 29;
@@ -7,11 +8,12 @@ export const PILLARS = [0, 1, 2, 3].map(i => {
   const a = Math.PI / 4 + i * Math.PI / 2;
   return { x: Math.sin(a) * 13, z: Math.cos(a) * 13, r: 2.0 };
 });
-export const RULES = { winsNeeded: 4, countdown: 3.5, roundEnd: 4.0, dampStart: 60, dampRate: 1.2, gcd: 1.0 };
+export const RULES = { winsNeeded: 4, countdown: 3.5, roundEnd: 4.0, dampStart: 60, dampRate: 1.2, gcd: 1.0, critChance: 0.08, critMult: 1.5, backMult: 1.1 };
 export const FIGHTER_R = 0.6;
 const MOVE_ABS = new Set(['arcane_shift', 'shadow_leap', 'bull_rush', 'gale_dash']);
 const STUNLIKE = ['stun', 'disorient'];
 const RES_NAME = { mana: 'mana', energy: 'energy', rage: 'rage' };
+const MELEE_AUTO_RANGE = 4.5;
 
 // ---------------------------------------------------------------- helpers
 export const getBuff = (f, type) => f.buffs.find(b => b.type === type);
@@ -27,6 +29,8 @@ export function speedMult(f) {
 }
 export const angleTo = (a, b) => Math.atan2(b.x - a.x, b.z - a.z);
 export function angleDiff(a, b) { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; }
+// true when `src` stands behind `tgt` (outside the target's front ~220° arc)
+export const isBehind = (src, tgt) => Math.abs(angleDiff(tgt.yaw, angleTo(tgt, src))) > 1.92;
 
 export function segBlocked(ax, az, bx, bz) {
   for (const p of PILLARS) {
@@ -40,25 +44,27 @@ export function segBlocked(ax, az, bx, bz) {
   return false;
 }
 
-export function collide(f, other) {
+// others: array of fighters to keep distance from (may include f itself; it is skipped)
+export function collide(f, others) {
   for (const p of PILLARS) {
     const dx = f.x - p.x, dz = f.z - p.z, d = Math.hypot(dx, dz), min = p.r + FIGHTER_R;
     if (d < min) { const k = (min - d) / (d || 1e-6); f.x += dx * k; f.z += dz * k; }
   }
   const d = Math.hypot(f.x, f.z), max = ARENA_R - FIGHTER_R;
   if (d > max) { f.x *= max / d; f.z *= max / d; }
-  if (other && other.alive) {
-    const dx = f.x - other.x, dz = f.z - other.z, dd = Math.hypot(dx, dz), min = FIGHTER_R * 2;
-    if (dd < min && Math.abs(f.y - other.y) < 1.6) { const k = (min - dd) / (dd || 1e-6); f.x += dx * k; f.z += dz * k; }
+  if (others) for (const o of others) {
+    if (!o || o === f || o.id === f.id || !o.alive) continue;
+    const dx = f.x - o.x, dz = f.z - o.z, dd = Math.hypot(dx, dz), min = FIGHTER_R * 2;
+    if (dd < min && Math.abs(f.y - o.y) < 1.6) { const k = (min - dd) / (dd || 1e-6); f.x += dx * k; f.z += dz * k; }
   }
 }
 
-// Shared movement integration (used by the host sim and by the guest for prediction).
+// Shared movement integration (used by the host sim and by guests for prediction).
 // inp: { mx (strafe right +), mz (forward +), yaw, jump, sprint }
-export function moveFighter(f, inp, dt, other, canAct = true) {
+export function moveFighter(f, inp, dt, others, canAct = true) {
   if (!f.alive) return;
   const stunned = isStunned(f), rooted = hasBuff(f, 'root');
-  if (!stunned) f.yaw = inp.yaw;
+  if (!stunned && inp.yaw !== undefined) f.yaw = inp.yaw;
   let mx = inp.mx || 0, mz = inp.mz || 0;
   const len = Math.hypot(mx, mz);
   if (len > 1) { mx /= len; mz /= len; }
@@ -73,33 +79,38 @@ export function moveFighter(f, inp, dt, other, canAct = true) {
   const vx = (sy * mz - cy * mx) * speed, vz = (cy * mz + sy * mx) * speed;
   const ox = f.x, oz = f.z;
   f.x += vx * dt; f.z += vz * dt;
-  // jumping & gravity
   if (inp.jump && f.y <= 0.001 && canAct && !stunned && !rooted && !f.locked) { f.vy = 7.8; }
   if (f.y > 0 || f.vy > 0) { f.vy -= 24 * dt; f.y += f.vy * dt; if (f.y <= 0) { f.y = 0; f.vy = 0; } }
-  collide(f, other);
+  collide(f, others);
   const moved = Math.hypot(f.x - ox, f.z - oz);
   f.moving = moved > 0.2 * dt;
   f.moveDir = f.moving ? { x: (f.x - ox) / moved, z: (f.z - oz) / moved } : null;
 }
 
 // ---------------------------------------------------------------- fighter
-function makeFighter(id, cls) {
-  const C = CLASSES[cls];
+const freshStats = () => ({ dmg: 0, heal: 0, absorbed: 0, ccs: 0, interrupts: 0, crits: 0, kills: 0 });
+
+function makeFighter(id, spec) {
+  const C = CLASSES[spec.cls];
   return {
-    id, cls, x: 0, y: 0, z: 0, vy: 0, yaw: 0, hp: C.hp, maxHp: C.hp,
+    id, cls: spec.cls, team: spec.team, name: spec.name || C.name, bot: !!spec.bot,
+    x: 0, y: 0, z: 0, vy: 0, yaw: 0, hp: C.hp, maxHp: C.hp,
     res: C.resStart ?? C.res, maxRes: C.res, resType: C.resType,
     cds: [0, 0, 0, 0, 0, 0], gcd: 0, cast: null, buffs: [], cp: 0, stamina: 100, alive: true,
-    moving: false, sprinting: false, autoT: 0, forceSeq: 0, forceYaw: 0, locked: false, dash: null,
-    target: 1 - id, dr: {}, queued: null, moveDir: null,
-    stats: { dmg: 0, heal: 0, absorbed: 0, ccs: 0, interrupts: 0 },
+    moving: false, sprinting: false, autoT: 0, autoOn: false, forceSeq: 0, forceYaw: 0, locked: false, dash: null,
+    target: -1, friend: -1, dr: {}, queued: null, moveDir: null,
+    stats: freshStats(),
   };
 }
 
 let NEXT_ID = 1;
 
 export class Sim {
-  constructor(clsA, clsB) {
-    this.fighters = [makeFighter(0, clsA), makeFighter(1, clsB)];
+  // roster: [{ cls, team, name, bot }]  — or legacy (clsA, clsB) for a 1v1
+  constructor(roster, clsB) {
+    if (typeof roster === 'string') roster = [{ cls: roster, team: 0 }, { cls: clsB, team: 1 }];
+    this.fighters = roster.map((s, i) => makeFighter(i, s));
+    this.teamSize = [0, 1].map(t => this.fighters.filter(f => f.team === t).length);
     this.projectiles = [];
     this.zones = [];
     this.events = [];
@@ -115,6 +126,13 @@ export class Sim {
   }
 
   // ------------------------------------------------------------ flow
+  spawnOf(f) {
+    const mates = this.fighters.filter(o => o.team === f.team);
+    const k = mates.indexOf(f), n = mates.length;
+    const x = n === 1 ? 0 : (k - (n - 1) / 2) * 7;
+    return { x: f.team === 0 ? x : -x, z: f.team === 0 ? -20 : 20, yaw: f.team === 0 ? 0 : Math.PI };
+  }
+
   startRound() {
     this.round++;
     this.projectiles = []; this.zones = [];
@@ -122,19 +140,27 @@ export class Sim {
       const C = CLASSES[f.cls];
       Object.assign(f, {
         hp: C.hp, maxHp: C.hp, res: C.resStart ?? C.res, maxRes: C.res, cds: [0, 0, 0, 0, 0, 0], gcd: 0, cast: null, buffs: [],
-        cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, target: 1 - f.id,
+        cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, autoOn: false,
+        target: this.defaultTarget(f), friend: -1,
       });
-      f.x = 0; f.z = f.id === 0 ? -20 : 20; f.yaw = f.id === 0 ? 0 : Math.PI;
+      const s = this.spawnOf(f);
+      f.x = s.x; f.z = s.z; f.yaw = s.yaw;
       f.forceSeq++; f.forceYaw++;
     }
     this.state = 'countdown'; this.stateT = RULES.countdown; this.fightT = 0; this.damp = 0;
     this.event({ e: 'roundStart', round: this.round });
   }
 
-  resetMatch(clsA, clsB) {
-    if (clsA) { this.fighters[0] = makeFighter(0, clsA); }
-    if (clsB) { this.fighters[1] = makeFighter(1, clsB); }
-    for (const f of this.fighters) f.stats = { dmg: 0, heal: 0, absorbed: 0, ccs: 0, interrupts: 0 };
+  defaultTarget(f) {
+    const foes = this.fighters.filter(o => o.team !== f.team);
+    if (!foes.length) return -1;
+    // face-off: target the enemy standing opposite you
+    const mates = this.fighters.filter(o => o.team === f.team);
+    return foes[Math.min(foes.length - 1, mates.indexOf(f))].id;
+  }
+
+  resetMatch() {
+    for (const f of this.fighters) f.stats = freshStats();
     this.score = [0, 0]; this.round = 0; this.winner = -1;
     this.startRound();
   }
@@ -142,7 +168,8 @@ export class Sim {
   event(ev) { this.events.push(ev); }
   drainEvents() { const e = this.events; this.events = []; return e; }
 
-  // inputs[i]: { mx, mz, yaw, jump, sprint, abilities: [{i, dir}], targetReq, remote: {x,y,z,yaw,moving,ack} }
+  // inputs[i]: { mx, mz, yaw, jump, sprint, abilities: [{i, dir, tid}], attack, setTarget, setFriend, targetReq,
+  //              remote: {x,y,z,yaw,moving,ack} }
   step(dt, inputs) {
     this.time += dt;
     if (this.state === 'countdown') {
@@ -150,6 +177,7 @@ export class Sim {
       for (const f of this.fighters) {
         const inp = inputs[f.id] || {};
         if (inp.remote) { f.yaw = inp.remote.yaw; } else if (inp.yaw !== undefined) f.yaw = inp.yaw;
+        this.applyTargeting(f, inp);
       }
       if (this.stateT <= 0) { this.state = 'fight'; this.fightT = 0; this.event({ e: 'fight' }); }
       return;
@@ -174,8 +202,9 @@ export class Sim {
     for (const f of this.fighters) {
       const inp = inputs[f.id] || {};
       this.moveStep(f, inp, dt, true);
-      if (inp.targetReq) this.retarget(f);
-      if (inp.abilities) for (const a of inp.abilities) this.tryAbility(f, a.i, a);
+      this.applyTargeting(f, inp);
+      if (f.alive && inp.abilities) for (const a of inp.abilities) this.tryAbility(f, a.i, a);
+      if (f.alive && inp.attack) this.startAttack(f, true);
     }
     for (const f of this.fighters) this.updateFighter(f, dt);
     this.updateProjectiles(dt);
@@ -183,8 +212,19 @@ export class Sim {
     this.checkDeaths();
   }
 
+  applyTargeting(f, inp) {
+    if (inp.setTarget !== undefined && inp.setTarget !== null) {
+      const t = this.fighters[inp.setTarget];
+      if (t && t.team !== f.team && this.visibleTo(t, f)) f.target = t.id;
+    }
+    if (inp.setFriend !== undefined && inp.setFriend !== null) {
+      const a = this.fighters[inp.setFriend];
+      f.friend = (a && a.team === f.team) ? a.id : -1;
+    }
+    if (inp.targetReq) this.cycleTarget(f);
+  }
+
   moveStep(f, inp, dt, canAct) {
-    const other = this.fighters[1 - f.id];
     if (f.dash) { this.updateDash(f, dt); return; }
     if (inp.remote) {
       const r = inp.remote;
@@ -196,34 +236,68 @@ export class Sim {
         if (!stunned) f.yaw = r.yaw;
         f.moving = !!r.moving && canAct && !stunned && !rooted;
         f.sprinting = !!r.sprinting; f.stamina = r.stamina ?? f.stamina;
-        collide(f, other);
+        collide(f, this.fighters);
       }
     } else {
-      moveFighter(f, inp, dt, other, canAct && this.state === 'fight');
+      moveFighter(f, inp, dt, this.fighters, canAct && this.state === 'fight');
     }
   }
 
-  retarget(f) {
-    const o = this.fighters[1 - f.id];
-    if (this.visibleTo(o, f)) f.target = o.id;
+  // Tab: cycle through visible enemies (nearest first after the current one)
+  cycleTarget(f) {
+    const list = this.enemiesOf(f).filter(o => this.visibleTo(o, f)).sort((a, b) => this.dist(f, a) - this.dist(f, b));
+    if (!list.length) return;
+    const i = list.findIndex(o => o.id === f.target);
+    f.target = list[(i + 1) % list.length].id;
   }
 
   // ------------------------------------------------------------ queries
-  enemiesOf(f) { return this.fighters.filter(o => o.id !== f.id && o.alive); }
+  enemiesOf(f) { return this.fighters.filter(o => o.team !== f.team && o.alive); }
+  alliesOf(f) { return this.fighters.filter(o => o.team === f.team && o.id !== f.id && o.alive); }
   dist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
   los(a, b) { return !segBlocked(a.x, a.z, b.x, b.z); }
   forward(f) { return { x: Math.sin(f.yaw), z: Math.cos(f.yaw) }; }
-  visibleTo(t, viewer) { return t.alive && !hasBuff(t, 'stealth'); }
+  visibleTo(t, viewer) { return !!t && t.alive && (!hasBuff(t, 'stealth') || (viewer && t.team === viewer.team)); }
   shieldAmt(v) { return Math.round(v * (1 - this.damp / 100)); }
 
+  // Current hostile target, or the best visible enemy (in front, nearest) when there is none.
+  hostileFor(f, tid, autoPick = true) {
+    const pick = tid ?? f.target;
+    const t = this.fighters[pick];
+    if (t && t.team !== f.team && this.visibleTo(t, f)) return t;
+    if (!autoPick) return null;
+    let best = null, bestScore = Infinity;
+    for (const o of this.enemiesOf(f)) {
+      if (!this.visibleTo(o, f)) continue;
+      const facing = Math.abs(angleDiff(f.yaw, angleTo(f, o)));
+      const score = this.dist(f, o) + facing * 8;
+      if (score < bestScore) { bestScore = score; best = o; }
+    }
+    return best;
+  }
+
+  // Friendly target for ally-cast spells: explicit tid / selected friend if valid, else self.
+  friendlyFor(f, tid) {
+    const pick = tid ?? f.friend;
+    const a = this.fighters[pick];
+    if (a && a.team === f.team && a.alive) return a;
+    return f;
+  }
+
+  resolveTarget(f, ab, opts = {}) {
+    if (ab.target) return this.hostileFor(f, opts.tid);
+    if (ab.ally) return this.friendlyFor(f, opts.tid);
+    return null;
+  }
+
   // Dry-run check; returns an error string or null.
-  check(f, idx, ignoreGcd = false) {
+  check(f, idx, ignoreGcd = false, opts = {}) {
     const ab = CLASSES[f.cls].abilities[idx];
     if (!ab || this.state !== 'fight' || !f.alive) return 'Not now';
     if (f.dash) return 'Busy';
     if (f.cast && ab.gcd) return 'Already casting';
-    if (isStunned(f) && !ab.allowCC) return 'You can\'t do that while stunned';
-    if (hasBuff(f, 'tempest') && ab.id !== 'steel_tempest') return 'Can\'t do that while spinning';
+    if (isStunned(f) && !ab.allowCC) return "You can't do that while stunned";
+    if (hasBuff(f, 'tempest') && ab.id !== 'steel_tempest') return "Can't do that while spinning";
     if (hasBuff(f, 'silence') && ab.school !== 'phys') return 'You are silenced';
     if (hasBuff(f, 'root') && MOVE_ABS.has(ab.id) && !ab.allowRooted) return 'You are rooted';
     if (ab.cast > 0 && f.y > 0.05) return "You can't cast while jumping";
@@ -232,13 +306,20 @@ export class Sim {
     if (ab.cost > f.res) return `Not enough ${RES_NAME[f.resType]}`;
     if (ab.needsCp && f.cp < 1) return 'No combo points';
     if (ab.target) {
-      const t = this.fighters[1 - f.id];
-      if (!this.visibleTo(t, f)) return 'No target';
+      const t = this.hostileFor(f, opts.tid);
+      if (!t) return 'No target';
       const d = this.dist(f, t);
       if (d > ab.range + 0.3) return 'Out of range';
       if (ab.minRange && d < ab.minRange) return 'Too close';
       if (!ab.melee && !this.los(f, t)) return 'Target not in line of sight';
       if (ab.melee && Math.abs(angleDiff(f.yaw, angleTo(f, t))) > 1.45) return 'You must face your target';
+    }
+    if (ab.ally) {
+      const a = this.friendlyFor(f, opts.tid);
+      if (a !== f) {
+        if (this.dist(f, a) > ab.range + 0.3) return 'Ally out of range';
+        if (!this.los(f, a)) return 'Ally not in line of sight';
+      }
     }
     return null;
   }
@@ -248,36 +329,35 @@ export class Sim {
     if (!ab) return 'bad';
     if (this.state !== 'fight') return 'Not now';
     if (f.cast && !ab.gcd && MOVE_ABS.has(ab.id)) this.cancelCast(f, false);
-    const err = this.check(f, idx);
+    const err = this.check(f, idx, false, opts);
     if (err) {
       if (err === 'GCD') {
         // Spell queue window: buffer the press so it fires the moment the GCD ends.
-        if (f.gcd <= 0.4) f.queued = { i: idx, dir: opts.dir, t: 0.5 };
+        if (f.gcd <= 0.4) f.queued = { i: idx, dir: opts.dir, tid: opts.tid, t: 0.5 };
         return null;
       }
       if (err !== 'Not now') this.event({ e: 'err', id: f.id, msg: err });
       return err;
     }
-    const t = this.fighters[1 - f.id];
-    if (ab.target) f.target = t.id;
+    const t = this.resolveTarget(f, ab, opts);
+    if (ab.target && t) { f.target = t.id; if (ab.melee) f.autoOn = true; }
     if (ab.gcd) f.gcd = RULES.gcd;
     if (ab.cast > 0) {
-      f.cast = { idx, t: 0, dur: ab.cast };
-      this.event({ e: 'caststart', id: f.id, ab: ab.id, dur: ab.cast });
+      f.cast = { idx, t: 0, dur: ab.cast, tid: t ? t.id : -1 };
+      this.event({ e: 'caststart', id: f.id, ab: ab.id, dur: ab.cast, tid: t ? t.id : -1 });
       return null;
     }
-    this.execute(f, idx, opts);
+    this.execute(f, idx, t, opts);
     return null;
   }
 
-  execute(f, idx, opts) {
+  execute(f, idx, t, opts) {
     const ab = CLASSES[f.cls].abilities[idx];
-    const t = this.fighters[1 - f.id];
     f.res -= ab.cost;
     f.cds[idx] = ab.cd;
     if (!ab.keepStealth) this.removeBuff(f, 'stealth');
-    this.event({ e: 'ab', id: f.id, ab: ab.id, tid: ab.target ? t.id : -1 });
-    ab.exec(this, f, t, opts || {});
+    this.event({ e: 'ab', id: f.id, ab: ab.id, tid: t ? t.id : -1 });
+    ab.exec(this, f, t || f, opts || {});
   }
 
   cancelCast(f, interrupted) {
@@ -287,14 +367,47 @@ export class Sim {
     this.event({ e: interrupted ? 'interrupted' : 'castfail', id: f.id, ab: ab.id });
   }
 
-  interrupt(t, lock) { if (t.cast) { this.cancelCast(t, true); const src = this.fighters[1 - t.id]; src.stats.interrupts++; } }
+  interrupt(t, src) { if (t.cast) { this.cancelCast(t, true); if (src && src.stats) src.stats.interrupts++; } }
 
   dropTarget(c) {
-    for (const o of this.fighters) if (o.id !== c.id && o.target === c.id) o.target = -1;
-    for (const o of this.fighters) if (o.id !== c.id && o.cast) {
-      const ab = CLASSES[o.cls].abilities[o.cast.idx];
-      if (ab.target) { this.cancelCast(o, false); this.event({ e: 'err', id: o.id, msg: 'Your target vanished' }); }
+    for (const o of this.fighters) if (o.team !== c.team && o.target === c.id) { o.target = -1; o.autoOn = false; }
+    for (const o of this.fighters) if (o.team !== c.team && o.cast && o.cast.tid === c.id) {
+      this.cancelCast(o, false); this.event({ e: 'err', id: o.id, msg: 'Your target vanished' });
     }
+  }
+
+  // ------------------------------------------------------------ basic attacks
+  // Left click: turn on auto-attack against the current (or best) target. The swing timer
+  // limits the rate, so clicking faster never attacks faster.
+  startAttack(f, explicit) {
+    if (!f.alive || this.state !== 'fight') return;
+    const t = this.hostileFor(f);
+    if (!t) { if (explicit) this.event({ e: 'err', id: f.id, msg: 'No target' }); return; }
+    f.target = t.id;
+    f.autoOn = true;
+    if (explicit) {
+      const A = CLASSES[f.cls].auto, d = this.dist(f, t);
+      if (d > A.range + 0.3) this.event({ e: 'err', id: f.id, msg: 'Out of range' });
+      else if (A.ranged && !this.los(f, t)) this.event({ e: 'err', id: f.id, msg: 'Target not in line of sight' });
+      else if (!A.ranged && Math.abs(angleDiff(f.yaw, angleTo(f, t))) > 1.45) this.event({ e: 'err', id: f.id, msg: 'You must face your target' });
+    }
+  }
+
+  updateAuto(f, dt) {
+    const A = CLASSES[f.cls].auto;
+    f.autoT = Math.max(0, f.autoT - dt);
+    if (!A || !f.autoOn) return;
+    const t = this.fighters[f.target];
+    if (!t || t.team === f.team || !this.visibleTo(t, f)) { f.autoOn = false; return; }
+    if (f.autoT > 0 || isStunned(f) || f.cast || f.dash || hasBuff(f, 'tempest')) return;
+    const d = this.dist(f, t);
+    if (A.ranged) { if (d > A.range + 0.3 || !this.los(f, t)) return; }
+    else if (d > MELEE_AUTO_RANGE || Math.abs(angleDiff(f.yaw, angleTo(f, t))) > 1.45) return;
+    f.autoT = A.speed;
+    this.removeBuff(f, 'stealth');
+    this.event({ e: 'auto', id: f.id, tid: t.id, ranged: !!A.ranged });
+    if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true }));
+    else this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
   }
 
   // ------------------------------------------------------------ per-tick fighter logic
@@ -303,9 +416,7 @@ export class Sim {
     const C = CLASSES[f.cls];
     f.gcd = Math.max(0, f.gcd - dt);
     for (let i = 0; i < 6; i++) f.cds[i] = Math.max(0, f.cds[i] - dt);
-    // resource
-    if (f.resType === 'rage') f.res = Math.min(f.maxRes, f.res + C.regen * dt);
-    else f.res = Math.min(f.maxRes, f.res + C.regen * dt);
+    f.res = Math.min(f.maxRes, f.res + C.regen * dt);
     // queued ability
     if (f.queued) {
       f.queued.t -= dt;
@@ -315,36 +426,29 @@ export class Sim {
     // casting
     if (f.cast) {
       if (f.moving || f.y > 0.05) { this.cancelCast(f, false); }
-      else if (isStunned(f) || (hasBuff(f, 'silence'))) { this.cancelCast(f, true); }
+      else if (isStunned(f) || hasBuff(f, 'silence')) { this.cancelCast(f, true); }
       else {
         f.cast.t += dt;
         if (f.cast.t >= f.cast.dur) {
-          const idx = f.cast.idx, ab = C.abilities[idx];
+          const { idx, tid } = f.cast, ab = C.abilities[idx];
           f.cast = null;
-          const t = this.fighters[1 - f.id];
+          let t = tid >= 0 ? this.fighters[tid] : null;
           let err = null;
           if (ab.cost > f.res) err = `Not enough ${RES_NAME[f.resType]}`;
           else if (ab.target) {
             if (!this.visibleTo(t, f)) err = 'No target';
             else if (this.dist(f, t) > ab.range + 2) err = 'Out of range';
             else if (!this.los(f, t)) err = 'Target not in line of sight';
+          } else if (ab.ally) {
+            if (!t || !t.alive) t = f;
+            if (t !== f && (this.dist(f, t) > ab.range + 2 || !this.los(f, t))) err = 'Ally out of range';
           }
           if (err) { this.event({ e: 'castfail', id: f.id, ab: ab.id }); this.event({ e: 'err', id: f.id, msg: err }); }
-          else this.execute(f, idx, {});
+          else this.execute(f, idx, t, {});
         }
       }
     }
-    // auto attack
-    if (C.auto) {
-      f.autoT = Math.max(0, f.autoT - dt);
-      const t = this.fighters[1 - f.id];
-      if (f.autoT <= 0 && f.target === t.id && this.visibleTo(t, f) && !isStunned(f) && !f.cast && !f.dash && !hasBuff(f, 'stealth') && !hasBuff(f, 'tempest')
-        && this.dist(f, t) <= 4.5 && Math.abs(angleDiff(f.yaw, angleTo(f, t))) < 1.45) {
-        f.autoT = C.auto.speed;
-        this.event({ e: 'auto', id: f.id, tid: t.id });
-        this.damage(f, t, C.auto.dmg, { school: 'phys', ab: 'auto', auto: true });
-      }
-    }
+    this.updateAuto(f, dt);
     // buffs
     for (let i = f.buffs.length - 1; i >= 0; i--) {
       const b = f.buffs[i];
@@ -365,8 +469,8 @@ export class Sim {
         b.data.tick -= dt;
         if (b.data.tick <= 0) {
           b.data.tick += 1.2;
-          const t = this.fighters[1 - f.id];
-          if (this.visibleTo(t, f) && this.dist(f, t) <= 32 && this.los(f, t)) {
+          const t = this.hostileFor(f);
+          if (t && this.dist(f, t) <= 32 && this.los(f, t)) {
             this.event({ e: 'fx', fx: 'spirit_cast', id: f.id });
             this.spawnProjectile(f, t, 'spirit_bolt', 30, () => this.damage(f, t, 40, { school: 'fire', ab: 'fire_spirit' }), 1.0);
           }
@@ -388,11 +492,10 @@ export class Sim {
   updateDash(f, dt) {
     const d = f.dash;
     d.t -= dt;
-    let tx, tz;
-    if (d.homing !== undefined) { const t = this.fighters[d.homing]; tx = t.x; tz = t.z; }
     let vx = d.vx, vz = d.vz;
     if (d.homing !== undefined) {
-      const dx = tx - f.x, dz = tz - f.z, L = Math.hypot(dx, dz);
+      const t = this.fighters[d.homing];
+      const dx = t.x - f.x, dz = t.z - f.z, L = Math.hypot(dx, dz);
       if (L <= 1.8) { this.endDash(f, true); return; }
       vx = dx / L; vz = dz / L; f.yaw = Math.atan2(vx, vz);
     }
@@ -414,11 +517,18 @@ export class Sim {
   // ------------------------------------------------------------ effects API (used by abilities)
   damage(src, tgt, amount, o = {}) {
     if (!tgt.alive || this.state !== 'fight') return 0;
-    let amt = amount * (0.93 + Math.random() * 0.14);
+    let amt = amount * (0.94 + Math.random() * 0.12);
+    const direct = !o.dot && !o.tick;
     const amb = getBuff(src, 'ambush');
-    if (amb && !o.dot && !o.auto && !o.tick) { amt *= 1.6; this.removeBuff(src, 'ambush'); o.big = true; }
+    if (amb && direct && !o.auto) { amt *= 1.4; this.removeBuff(src, 'ambush'); o.big = true; }
+    // positional bonus: hits from behind deal 10% more damage
+    const back = src !== tgt && !o.dot && isBehind(src, tgt);
+    if (back) amt *= RULES.backMult;
+    const crit = direct && !o.noCrit && Math.random() < RULES.critChance;
+    if (crit) { amt *= RULES.critMult; src.stats.crits++; }
     amt *= 1 - CLASSES[tgt.cls].defense;
     for (const b of tgt.buffs) if (b.type === 'dr' || b.type === 'stoneskin') amt *= 1 - b.value;
+    if (this.shieldwall(tgt)) amt *= 0.9;
     amt = Math.max(1, Math.round(amt));
     let absorbed = 0;
     for (const b of tgt.buffs) {
@@ -430,10 +540,10 @@ export class Sim {
     src.stats.dmg += amt;
     tgt.stats.absorbed += absorbed;
     if (src.resType === 'rage') src.res = Math.min(src.maxRes, src.res + (amt + absorbed) * 0.075);
-    if (tgt.resType === 'rage') tgt.res = Math.min(tgt.maxRes, tgt.res + (amt + absorbed) * 0.06);
+    if (tgt.resType === 'rage') tgt.res = Math.min(tgt.maxRes, tgt.res + (amt + absorbed) * 0.07);
     if (!o.noMark) {
       const m = tgt.buffs.find(b => b.type === 'mark' && b.src === src.id);
-      if (m) m.data.stored = Math.round(m.data.stored + (amt + absorbed) * 0.35);
+      if (m) m.data.stored = Math.round(m.data.stored + (amt + absorbed) * 0.3);
     }
     if (!o.dot) {
       // direct damage breaks disorient and stealth
@@ -441,20 +551,32 @@ export class Sim {
       if (dis) { this.removeBuff(tgt, 'disorient'); }
       if (hasBuff(tgt, 'stealth')) this.removeBuff(tgt, 'stealth');
     }
-    this.event({ e: 'dmg', id: tgt.id, src: src.id, amt, abs: absorbed, school: o.school || 'phys', ab: o.ab, big: !!o.big, dot: !!o.dot });
-    if (tgt.hp <= 0) tgt.hp = 0;
+    this.event({ e: 'dmg', id: tgt.id, src: src.id, amt, abs: absorbed, school: o.school || 'phys', ab: o.ab, big: !!o.big, dot: !!o.dot, crit, back });
+    if (tgt.hp <= 0) { tgt.hp = 0; tgt.killer = src.id; }
     return amt;
+  }
+
+  // Warrior passive (team play only): a warrior and an ally within 10 yards of each other both take 10% less damage
+  shieldwall(t) {
+    if (this.teamSize[t.team] < 2) return false;
+    for (const w of this.fighters) {
+      if (w.cls !== 'warrior' || !w.alive || w.team !== t.team) continue;
+      if (w.id !== t.id ? this.dist(w, t) <= 10 : this.alliesOf(t).some(a => this.dist(a, t) <= 10)) return true;
+    }
+    return false;
   }
 
   heal(src, tgt, amount, ab) {
     if (!tgt.alive) return 0;
     let amt = amount * (0.95 + Math.random() * 0.1);
+    const crit = Math.random() < RULES.critChance;
+    if (crit) amt *= RULES.critMult;
     const hr = tgt.buffs.reduce((m, b) => b.type === 'healred' ? Math.max(m, b.value) : m, 0);
     amt *= (1 - hr) * (1 - this.damp / 100);
     amt = Math.round(Math.min(amt, tgt.maxHp - tgt.hp));
     tgt.hp += amt;
     src.stats.heal += amt;
-    this.event({ e: 'heal', id: tgt.id, amt, ab });
+    this.event({ e: 'heal', id: tgt.id, src: src.id, amt, ab, crit });
     return amt;
   }
 
@@ -468,7 +590,7 @@ export class Sim {
       if (n >= 3) { this.event({ e: 'immune', id: f.id }); return null; }
       dur *= [1, 0.5, 0.25][n];
       f.dr[o.cc] = { n: n + 1, t: 0 };
-      this.fighters[o.src]?.stats && (this.fighters[o.src].stats.ccs++);
+      const s = this.fighters[o.src]; if (s) s.stats.ccs++;
     }
     // refresh same-named buff from the same source
     const ex = f.buffs.find(b => b.type === type && b.name === o.name && b.src === o.src);
@@ -490,13 +612,15 @@ export class Sim {
 
   removeBuff(f, type) {
     const had = f.buffs.some(b => b.type === type);
+    if (!had) return;
     f.buffs = f.buffs.filter(b => b.type !== type);
-    if (had) this.event({ e: 'buffEnd', id: f.id, type });
+    this.event({ e: 'buffEnd', id: f.id, type });
   }
 
+  // remove harmful effects of the given types (anything applied by an enemy)
   cleanse(f, types) {
     const before = f.buffs.length;
-    f.buffs = f.buffs.filter(b => !(types.includes(b.type) && b.src !== f.id));
+    f.buffs = f.buffs.filter(b => !(types.includes(b.type) && this.fighters[b.src]?.team !== f.team));
     if (f.buffs.length !== before) this.event({ e: 'cleanse', id: f.id });
   }
 
@@ -510,7 +634,7 @@ export class Sim {
       const p = this.projectiles[i];
       const t = this.fighters[p.target];
       p.life -= dt;
-      if (!t.alive || hasBuff(t, 'stealth') || p.life <= 0) {
+      if (!t.alive || (hasBuff(t, 'stealth')) || p.life <= 0) {
         this.event({ e: 'fizzle', kind: p.kind, x: p.x, y: p.y, z: p.z });
         this.projectiles.splice(i, 1); continue;
       }
@@ -540,15 +664,17 @@ export class Sim {
         this.event({ e: 'fx', fx: 'quake_erupt', id: z.owner, x: z.x, z: z.z });
         for (const f of this.enemiesOf(owner)) if (Math.hypot(f.x - z.x, f.z - z.z) <= z.r && f.y < 1.5) {
           this.damage(owner, f, 35, { school: 'nature', ab: 'quake_totem' });
-          this.interrupt(f, 0);
+          this.interrupt(f, owner);
           this.addBuff(f, 'stun', 1.75, { src: owner.id, cc: 'cc', name: 'Quaked', icon: '⛰' });
         }
       } else if (z.type === 'stoneskin') {
-        if (owner.alive && Math.hypot(owner.x - z.x, owner.z - z.z) <= z.r) {
-          const b = owner.buffs.find(b => b.type === 'stoneskin');
-          if (b) b.t = 0.3; else this.addBuff(owner, 'stoneskin', 0.3, { value: 0.2, src: owner.id, name: 'Stoneskin', icon: '⬢' });
-          z.data.acc = (z.data.acc || 0) + dt;
-          if (z.data.acc >= 1) { z.data.acc -= 1; this.heal(owner, owner, 25, 'stoneskin'); }
+        z.data.acc = (z.data.acc || 0) + dt;
+        const tick = z.data.acc >= 1; if (tick) z.data.acc -= 1;
+        for (const a of this.fighters) {
+          if (!a.alive || a.team !== owner.team || Math.hypot(a.x - z.x, a.z - z.z) > z.r) continue;
+          const b = a.buffs.find(b => b.type === 'stoneskin');
+          if (b) b.t = 0.3; else this.addBuff(a, 'stoneskin', 0.3, { value: 0.2, src: owner.id, name: 'Stoneskin', icon: '⬢' });
+          if (tick) this.heal(owner, a, 20, 'stoneskin');
         }
         for (const e of this.enemiesOf(owner)) if (Math.hypot(e.x - z.x, e.z - z.z) <= z.r) {
           const s = e.buffs.find(b => b.type === 'slow' && b.name === 'Earthbound');
@@ -609,10 +735,16 @@ export class Sim {
   checkDeaths() {
     const dead = this.fighters.filter(f => f.alive && f.hp <= 0);
     if (!dead.length) return;
-    for (const f of dead) { f.alive = false; f.cast = null; f.dash = null; f.locked = false; this.event({ e: 'death', id: f.id }); }
-    const alive = this.fighters.filter(f => f.alive);
+    for (const f of dead) {
+      f.alive = false; f.cast = null; f.dash = null; f.locked = false; f.autoOn = false; f.buffs = [];
+      const k = this.fighters[f.killer]; if (k && k.team !== f.team) k.stats.kills++;
+      this.event({ e: 'death', id: f.id, killer: f.killer ?? -1 });
+      for (const o of this.fighters) if (o.target === f.id) { o.autoOn = false; if (o.cast && o.cast.tid === f.id) this.cancelCast(o, false); }
+    }
+    const aliveTeams = [0, 1].map(t => this.fighters.some(f => f.team === t && f.alive));
+    if (aliveTeams[0] && aliveTeams[1]) return;
     let winner = -1;
-    if (alive.length === 1) { winner = alive[0].id; this.score[winner]++; }
+    if (aliveTeams[0] !== aliveTeams[1]) { winner = aliveTeams[0] ? 0 : 1; this.score[winner]++; }
     this.state = 'roundEnd'; this.stateT = RULES.roundEnd;
     this.event({ e: 'roundEnd', winner, score: [...this.score], round: this.round });
   }
@@ -623,10 +755,12 @@ export class Sim {
     return {
       s: this.state, st: r(this.stateT), r: this.round, sc: this.score, ft: r(this.fightT), dp: r(this.damp), w: this.winner,
       f: this.fighters.map(f => ({
-        cls: f.cls, x: r(f.x), y: r(f.y), z: r(f.z), yaw: r(f.yaw), hp: Math.round(f.hp), maxHp: f.maxHp, res: Math.round(f.res), maxRes: f.maxRes, resType: f.resType,
-        cds: f.cds.map(r), gcd: r(f.gcd), cast: f.cast ? { idx: f.cast.idx, t: r(f.cast.t), dur: f.cast.dur } : null,
+        id: f.id, cls: f.cls, team: f.team, name: f.name, bot: f.bot,
+        x: r(f.x), y: r(f.y), z: r(f.z), yaw: r(f.yaw), hp: Math.round(f.hp), maxHp: f.maxHp, res: Math.round(f.res), maxRes: f.maxRes, resType: f.resType,
+        cds: f.cds.map(r), gcd: r(f.gcd), cast: f.cast ? { idx: f.cast.idx, t: r(f.cast.t), dur: f.cast.dur, tid: f.cast.tid } : null,
         buffs: f.buffs.map(b => ({ type: b.type, t: r(b.t), dur: r(b.dur), value: r(b.value), name: b.name, icon: b.icon, src: b.src, fx: b.fx })),
-        cp: f.cp, alive: f.alive, forceSeq: f.forceSeq, forceYaw: f.forceYaw, locked: f.locked, target: f.target, moving: f.moving, sprinting: f.sprinting, stamina: Math.round(f.stamina),
+        cp: f.cp, alive: f.alive, forceSeq: f.forceSeq, forceYaw: f.forceYaw, locked: f.locked, target: f.target, friend: f.friend,
+        autoOn: f.autoOn, autoT: r(f.autoT), moving: f.moving, sprinting: f.sprinting, stamina: Math.round(f.stamina),
         stats: f.stats,
       })),
       p: this.projectiles.map(p => ({ id: p.id, kind: p.kind, x: r(p.x), y: r(p.y), z: r(p.z), owner: p.owner })),

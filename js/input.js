@@ -4,7 +4,8 @@ export class Input {
     this.canvas = canvas;
     this.keys = new Set();
     this.pressed = []; // ability presses since last poll
-    this.jumpPressed = false; this.tabPressed = false; this.clickTarget = false;
+    this.jumpPressed = false; this.tabPressed = false; this.attackPressed = false; this.friendKey = 0;
+    this.clickPos = { x: 0.5, y: 0.45 }; this.mouseHeld = false;
     this.yaw = 0; this.pitch = 0.32; this.zoom = 9;
     this.sens = 1; this.invert = false;
     this.enabled = false;
@@ -17,6 +18,7 @@ export class Input {
       if (!this.enabled) return;
       if (e.code === 'Tab') { e.preventDefault(); this.tabPressed = true; return; }
       if (e.code === 'Escape') { this.onEscape && this.onEscape(); return; }
+      if (e.code === 'F1' || e.code === 'F2') { e.preventDefault(); this.friendKey = e.code === 'F1' ? 1 : 2; return; }
       if (e.repeat) return;
       this.keys.add(e.code);
       const m = /^Digit([1-6])$/.exec(e.code) || /^Numpad([1-6])$/.exec(e.code);
@@ -26,12 +28,16 @@ export class Input {
       if (e.code === 'Space') { this.jumpPressed = true; e.preventDefault(); }
     });
     addEventListener('keyup', e => this.keys.delete(e.code));
+    addEventListener('mouseup', e => { if (e.button === 0) this.mouseHeld = false; });
     addEventListener('blur', () => this.keys.clear());
     canvas.addEventListener('contextmenu', e => { if (this.enabled) e.preventDefault(); });
     canvas.addEventListener('mousedown', e => {
       if (!this.enabled) return;
       if (!this.locked && !this.fallback) { this.requestLock(); return; }
-      if (e.button === 0) this.clickTarget = true;
+      if (e.button === 0) {
+        this.attackPressed = true; this.mouseHeld = true;
+        this.clickPos = this.locked ? { x: 0.5, y: 0.45 } : { x: e.clientX / innerWidth, y: e.clientY / innerHeight };
+      }
       if (this.fallback) e.preventDefault();
     });
     addEventListener('mousemove', e => {
@@ -67,8 +73,8 @@ export class Input {
     const k = this.keys;
     const mz = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const mx = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    const out = { mx, mz, yaw: this.yaw, jump: this.jumpPressed, sprint: k.has('ShiftLeft') || k.has('ShiftRight'), abilities: this.pressed.slice(), targetReq: this.tabPressed || this.clickTarget };
-    this.pressed.length = 0; this.jumpPressed = false; this.tabPressed = false; this.clickTarget = false;
+    const out = { mx, mz, yaw: this.yaw, jump: this.jumpPressed, sprint: k.has('ShiftLeft') || k.has('ShiftRight'), abilities: this.pressed.slice(), targetReq: this.tabPressed, attack: this.attackPressed, clickPos: this.clickPos, friendKey: this.friendKey };
+    this.pressed.length = 0; this.jumpPressed = false; this.tabPressed = false; this.attackPressed = false; this.friendKey = 0;
     return out;
   }
 }

@@ -152,6 +152,12 @@ export class Audio {
       case 'defeat': this.fanfare(t, o, [62, 61, 57, 53, 50], false); break;
       case 'round_win': [69, 74, 78].forEach((n, i) => this.osc('sawtooth', NOTE(n), t + i * 0.12, 0.6, 0.08, o, { lp: 2000, rev: R })); break;
       case 'round_lose': [62, 58, 55].forEach((n, i) => this.osc('sawtooth', NOTE(n), t + i * 0.15, 0.7, 0.07, o, { lp: 1200, rev: R })); break;
+      case 'auto_mage': this.osc('sine', 700, t, 0.18, 0.12, o, { to: 1400 }); this.noise(t, 0.12, 0.12, o, { f: 3000, to: 5000, q: 3 }); break;
+      case 'auto_priest': this.osc('sine', 1046, t, 0.25, 0.08, o, { rev: R }); this.osc('sine', 1318, t + 0.03, 0.22, 0.06, o, { rev: R }); break;
+      case 'auto_shaman': this.noise(t, 0.12, 0.35, o, { type: 'highpass', f: 3500 }); this.osc('square', 220, t, 0.06, 0.05, o, { to: 110, lp: 2000 }); break;
+      case 'spark_hit': this.osc('triangle', 1600, t, 0.12, 0.07, o, { to: 900 }); this.noise(t, 0.08, 0.15, o, { f: 4000 }); break;
+      case 'zap_hit': this.noise(t, 0.1, 0.4, o, { type: 'highpass', f: 4000 }); break;
+      case 'crit': this.noise(t, 0.15, 0.5, o, { type: 'lowpass', f: 3000, to: 400 }); this.osc('sine', 90, t, 0.25, 0.5, o, { to: 40 }); this.osc('triangle', 2200, t, 0.12, 0.06, o, { to: 1500 }); break;
       case 'crowd': this.crowd(t, opts.big ? 2.8 : 1.6, opts.big ? 0.35 : 0.18); break;
     }
   }
@@ -274,5 +280,5 @@ export const AB_SOUND = {
   sacred_bolt: 'holy_bolt', mend: 'heal', divine_aegis: 'aegis', seraph_step: 'seraph', blinding_light: 'blinding', halo_judgment: 'halo',
   lightning_lash: 'lightning', magma_burst: 'magma', quake_totem: 'totem', gale_dash: 'gale', stoneskin_totem: 'stoneskin', fire_spirit: 'spirit',
 };
-export const HIT_SOUND = { frost_lance: 'frost_hit', flame_burst: 'fire_hit', arcane_comet: 'arcane_hit', sacred_bolt: 'holy_hit', magma_burst: 'fire_hit', spirit_bolt: 'fire_hit' };
+export const HIT_SOUND = { frost_lance: 'frost_hit', flame_burst: 'fire_hit', arcane_comet: 'arcane_hit', sacred_bolt: 'holy_hit', magma_burst: 'fire_hit', spirit_bolt: 'fire_hit', arcane_bolt: 'spark_hit', holy_spark: 'spark_hit', static_bolt: 'zap_hit' };
 export const CAST_SOUND = { frost: 'cast_frost', arcane: 'cast_arcane', holy: 'cast_holy', nature: 'cast_nature', fire: 'cast_fire' };
