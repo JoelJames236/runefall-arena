@@ -15,9 +15,9 @@ const PROJ_STYLE = {
   sacred_bolt: { color: 0xffd860, core: 0xffffff, size: 0.42, trail: 0xffe890, rays: true },
   magma_burst: { color: 0xff5a1a, core: 0xffb050, size: 0.5, trail: 0xff3a0a, rock: true, smoke: true },
   spirit_bolt: { color: 0xff9a2a, core: 0xffe8b0, size: 0.3, trail: 0xff6a1a },
-  arcane_bolt: { color: 0xb98cff, core: 0xf4e8ff, size: 0.24, trail: 0x8a5aff, small: true },
-  holy_spark: { color: 0xffe680, core: 0xffffff, size: 0.22, trail: 0xfff0b0, small: true },
-  static_bolt: { color: 0x7ae0ff, core: 0xeaffff, size: 0.22, trail: 0x4ad8ff, small: true, zap: true },
+  arcane_bolt: { color: 0xb98cff, core: 0xf4e8ff, size: 0.36, trail: 0x8a5aff, caster: true, stretch: 1.8, orbit: 3 },
+  holy_spark: { color: 0xffe680, core: 0xffffff, size: 0.34, trail: 0xfff0b0, caster: true, rays: true, halo: true },
+  static_bolt: { color: 0x7ae0ff, core: 0xeaffff, size: 0.32, trail: 0x4ad8ff, caster: true, zap: true, arc: true },
   axe_throw: { color: 0x9a8a7a, core: 0xb8b0a8, size: 0.42, trail: 0x6a5a4a, axe: true, small: true },
 };
 const SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff7a2a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff, phys: 0xffffff };
@@ -296,6 +296,12 @@ export class VFX {
         if (st.axe) { core.scale.set(st.size * 0.7, st.size * 0.25, st.size * 1.1); halo.scale.setScalar(st.size * 0.6); halo.material.opacity = 0.15; }
         g.add(core, halo);
         if (st.big) { const ring = new THREE.Mesh(this.G.torus, this.addMat(st.color, 0.8)); ring.scale.setScalar(st.size * 1.3); g.add(ring); g.userData.ring = ring; }
+        if (st.orbit || st.halo) { // caster bolts: orbiting motes / a spinning ring of light around the flight axis
+          const sp = new THREE.Group();
+          for (let i = 0; i < (st.orbit || 0); i++) { const a = i / st.orbit * Math.PI * 2, m2 = new THREE.Mesh(this.G.sphereLo, this.addMat(st.core, 0.95)); m2.scale.setScalar(st.size * 0.2); m2.position.set(Math.cos(a) * st.size * 0.95, Math.sin(a) * st.size * 0.95, 0); sp.add(m2); }
+          if (st.halo) { const ring = new THREE.Mesh(this.G.torus, this.addMat(st.color, 0.85)); ring.scale.setScalar(st.size * 1.05); sp.add(ring); }
+          g.add(sp); g.userData.spin = sp;
+        }
         g.position.set(p.x, p.y, p.z);
         g.userData.prev = new THREE.Vector3(p.x, p.y, p.z);
         g.userData.core = core;
@@ -308,11 +314,13 @@ export class VFX {
       if (m.userData.ring) { m.userData.ring.rotation.x += dt * 6; m.userData.ring.rotation.y += dt * 4; }
       if (st.rock) m.userData.core.rotation.x += dt * 10;
       if (st.axe) m.userData.core.rotation.x += dt * 28;
+      if (m.userData.spin) { m.userData.spin.rotation.z += dt * 14; const pu = 1 + Math.sin(performance.now() * 0.025) * 0.15; m.userData.spin.scale.setScalar(pu); }
+      if (st.arc && Math.random() < 0.3) { const a = new THREE.Vector3(p.x, p.y, p.z), b = new THREE.Vector3(p.x - dx * 3 + (Math.random() - 0.5) * 0.6, p.y - dy * 3 + (Math.random() - 0.5) * 0.6, p.z - dz * 3 + (Math.random() - 0.5) * 0.6); this.beam(a, b, st.color, 0.1, 0.02, 0.35); }
       // trail
-      const steps = st.big ? 6 : st.small ? 2 : 3;
+      const steps = st.big ? 6 : st.caster ? 4 : st.small ? 2 : 3;
       for (let k = 0; k < steps; k++) {
         const u = k / steps, j = st.size * 0.5;
-        this.glow.emit({ x: prev.x + dx * u + (Math.random() - 0.5) * j, y: prev.y + dy * u + (Math.random() - 0.5) * j, z: prev.z + dz * u + (Math.random() - 0.5) * j, vx: (Math.random() - 0.5), vy: (Math.random() - 0.5), vz: (Math.random() - 0.5), life: st.big ? 0.8 : st.small ? 0.25 : 0.4, size: st.size * (st.big ? 2.2 : 1.6), color: k % 2 ? st.trail : st.color, grow: -0.7, drag: 2 });
+        this.glow.emit({ x: prev.x + dx * u + (Math.random() - 0.5) * j, y: prev.y + dy * u + (Math.random() - 0.5) * j, z: prev.z + dz * u + (Math.random() - 0.5) * j, vx: (Math.random() - 0.5), vy: (Math.random() - 0.5), vz: (Math.random() - 0.5), life: st.big ? 0.8 : st.caster ? 0.38 : st.small ? 0.25 : 0.4, size: st.size * (st.big ? 2.2 : st.caster ? 1.3 : 1.6), color: k % 2 ? st.trail : st.color, grow: -0.7, drag: 2 });
       }
       if (st.smoke && Math.random() < 0.6) this.smoke.emit({ x: prev.x, y: prev.y, z: prev.z, vy: 0.6, life: 0.7, size: st.size * 2, color: 0x2a1a14, grow: 1.2, drag: 1, alpha: 0.45 });
       if (st.zap && Math.random() < 0.5) this.glow.emit({ x: p.x + (Math.random() - 0.5) * 0.5, y: p.y + (Math.random() - 0.5) * 0.5, z: p.z + (Math.random() - 0.5) * 0.5, life: 0.08, size: 0.25, color: 0xffffff });
@@ -626,7 +634,7 @@ export class VFX {
     if (ev.ranged) {
       const p = handPos(ev.id);
       const c = { mage: 0xb98cff, priest: 0xffe680, shaman: 0x7ae0ff }[src.cls] || 0xffffff;
-      this.burst(p.x, p.y, p.z, [c, 0xffffff], 10, 2.5, 0.3, 0.25);
+      this.burst(p.x, p.y, p.z, [c, 0xffffff], 16, 3, 0.35, 0.3, { drag: 3 }); this.sphereFlash(p.x, p.y, p.z, c, 0.1, 0.55, 0.16, 0.45);
       if (src.cls === 'shaman') { const T = at(ev.tid); this.beam(p.clone(), new THREE.Vector3(p.x + (T.x - p.x) * 0.15, p.y, p.z + (T.z - p.z) * 0.15), 0x7ae0ff, 0.12, 0.03, 0.4); }
     } else {
       // weapon trail sparks for melee swings
@@ -660,9 +668,9 @@ export class VFX {
         this.burst(ev.x, ev.y, ev.z, [0xffe070, 0xffffff], 26, 5, 0.5, 0.45); this.sphereFlash(ev.x, ev.y, ev.z, 0xffe080, 0.2, 1.4, 0.3);
         this.lightRays(ev.x, ev.y - 1.2, ev.z, 0xfff0a0, 3, 4, 0.5); this.flash(ev.x, ev.y, ev.z, 0xffe070, 25, 0.25);
         break;
-      case 'arcane_bolt': this.burst(ev.x, ev.y, ev.z, [0xb98cff, 0xffffff], 12, 3.5, 0.3, 0.25); break;
-      case 'holy_spark': this.burst(ev.x, ev.y, ev.z, [0xffe680, 0xffffff], 12, 3.5, 0.3, 0.25); break;
-      case 'static_bolt': this.burst(ev.x, ev.y, ev.z, [0x7ae0ff, 0xffffff], 12, 4, 0.25, 0.22); for (let i = 0; i < 2; i++) { const a = new THREE.Vector3(ev.x, ev.y, ev.z); this.beam(a, a.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6)), 0x7ae0ff, 0.1, 0.02, 0.3); } break;
+      case 'arcane_bolt': this.burst(ev.x, ev.y, ev.z, [0xb98cff, 0xffffff, 0x8a5aff], 22, 5, 0.4, 0.3, { drag: 3 }); this.sphereFlash(ev.x, ev.y, ev.z, 0xb98cff, 0.2, 1.1, 0.22, 0.5); this.flash(ev.x, ev.y, ev.z, 0xb98cff, 14, 0.2); break;
+      case 'holy_spark': this.burst(ev.x, ev.y, ev.z, [0xffe680, 0xffffff], 22, 5, 0.4, 0.3, { drag: 3 }); this.sphereFlash(ev.x, ev.y, ev.z, 0xffe680, 0.2, 1.1, 0.22, 0.5); this.flash(ev.x, ev.y, ev.z, 0xffe680, 14, 0.2); break;
+      case 'static_bolt': this.burst(ev.x, ev.y, ev.z, [0x7ae0ff, 0xffffff], 22, 6, 0.3, 0.26, { drag: 3 }); this.flash(ev.x, ev.y, ev.z, 0x7ae0ff, 14, 0.15); for (let i = 0; i < 3; i++) { const a = new THREE.Vector3(ev.x, ev.y, ev.z); this.beam(a, a.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6)), 0x7ae0ff, 0.1, 0.02, 0.3); } break;
       default: this.burst(ev.x, ev.y, ev.z, [c, 0xffd080], 24, 6, 0.5, 0.5, { up: 1 }); this.flash(ev.x, ev.y, ev.z, c, 30, 0.3);
     }
   }

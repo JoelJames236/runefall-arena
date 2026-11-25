@@ -1,7 +1,7 @@
 # Runefall Arena
 
-A browser-based 3D fantasy **arena PvP** game in the spirit of classic MMO arenas: five classes,
-30 abilities plus a basic attack each, **1v1 duels and 2v2 team fights**, bots, parties, matchmaking and
+A browser-based 3D fantasy **arena PvP** game in the spirit of classic MMO arenas: six classes,
+36 abilities plus a basic attack each, **1v1 duels and 2v2 team fights**, bots, parties, matchmaking and
 peer-to-peer online play via a shareable link. No install, no build step.
 
 **▶ Play now: https://joeljames236.github.io/runefall-arena/**
@@ -92,7 +92,7 @@ so use it as a guide. Latest runs (hard AI): **1v1** — every class between 40%
 index.html               UI markup + import map (Three.js, PeerJS from CDN)
 css/style.css            Menus, lobby & HUD styling (responsive)
 js/main.js               App flow: screens, modes, rooms/parties, matchmaking hand-off, game loop, net glue
-js/data/classes.js       Classes, stats, basic attacks and all 30 abilities (gameplay in each ability's exec)
+js/data/classes.js       Classes, stats, basic attacks and all 36 abilities (gameplay in each ability's exec)
 js/sim/sim.js            Authoritative combat simulation for N fighters in two teams (no rendering)
 js/sim/ai.js             Bots (same inputs and rules as players): focus targeting, kiting, interrupts, healing
 js/net.js                PeerJS star network (host + up to 3 guests) and serverless 2v2 matchmaking
@@ -100,7 +100,9 @@ js/input.js              Keyboard + mouse, pointer lock with drag-to-look fallba
 js/audio.js              Synthesized SFX + generative orchestral music (Web Audio)
 js/render/world.js       Scene, lighting, post-processing, camera, team rings, selection circles
 js/render/arena.js       Procedural arena, sky, terrain, crowd, banners, statues, backdrop
-js/render/characters.js  Procedural champion models + procedural animation
+js/render/heroes.js      Rigged champions (outfits, animation mixer, weapon grips)
+js/render/armory.js      Class armor sets + weapons (built in code, merged per bone for few draw calls)
+js/render/characters.js  Procedural fallback champion models
 js/render/vfx.js         Pooled particles (glow + smoke), projectiles, casting circles, spell effects
 js/ui/hud.js             Unit/party/arena frames, action bar, cast bars, nameplates, combat text
 balance.html             Balance lab

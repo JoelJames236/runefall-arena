@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { makeMaterials, makeClassWeapon, equipArmor } from './armory.js';
 
 const M = 'assets/models/', P = 'assets/props/', TX = 'assets/tex/';
 const GL = {};        // loaded glTFs by name
@@ -21,17 +22,17 @@ let ready = false;
 // ------------------------------------------------------------------ class looks
 const LOOKS = {
   warrior: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: ['Hair_Buzzed', 'Hair_Beard'], hide: ['Head_Hood'],
-    tint: [0.34, 0.31, 0.3], tintAmt: 0.55, skinTint: [1, 0.92, 0.86], scale: 1.06, weapons: ['sword', 'shield'], idle: 'Idle_Shield_Loop' },
+    tint: [0.34, 0.31, 0.3], tintAmt: 0.55, skinTint: [1, 0.92, 0.86], scale: 1.06, weapons: ['runesword', 'kiteshield'], idle: 'Idle_Shield_Loop' },
   rogue: { outfit: 'Female_Ranger', head: 'Superhero_Female_FullBody', hair: [], hide: [],
-    tint: [0.16, 0.13, 0.2], tintAmt: 0.82, skinTint: [0.95, 0.88, 0.85], scale: 0.98, weapons: ['daggerR', 'daggerL'], idle: 'Crouch_Idle_Loop' },
+    tint: [0.16, 0.13, 0.2], tintAmt: 0.82, skinTint: [0.95, 0.88, 0.85], scale: 0.98, weapons: ['fang', 'fangL'], idle: 'Crouch_Idle_Loop' },
   mage: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: ['Hair_Beard'], hide: [],
-    tint: [0.16, 0.2, 0.46], tintAmt: 0.8, skinTint: [1, 0.95, 0.92], scale: 1.0, weapons: ['staff'], idle: 'Idle_Loop', glow: 0xa070ff },
+    tint: [0.16, 0.2, 0.46], tintAmt: 0.8, skinTint: [1, 0.95, 0.92], scale: 1.0, weapons: ['archstaff'], idle: 'Idle_Loop', glow: 0xa070ff },
   berserker: { outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], hair: ['Hair_Long', 'Hair_Beard'], hide: [],
-    tint: [0.22, 0.16, 0.12], tintAmt: 0.65, skinTint: [0.96, 0.82, 0.72], scale: 1.13, weapons: ['axe', 'axeL'], idle: 'Sword_Idle', weaponScale: 1.35, axeTint: [0.5, 0.48, 0.46] },
+    tint: [0.22, 0.16, 0.12], tintAmt: 0.65, skinTint: [0.96, 0.82, 0.72], scale: 1.13, weapons: ['warAxe', 'warAxeL'], idle: 'Sword_Idle', weaponScale: 1.15, axeTint: [0.5, 0.48, 0.46] },
   priest: { outfit: 'Female_Peasant', head: 'Superhero_Female_FullBody', hair: ['Hair_Buns'], hide: [],
-    tint: [0.9, 0.85, 0.72], tintAmt: 0.72, skinTint: [1, 0.96, 0.94], scale: 1.0, weapons: ['mace'], idle: 'Idle_Loop', halo: true, glow: 0xffd98a },
+    tint: [0.9, 0.85, 0.72], tintAmt: 0.72, skinTint: [1, 0.96, 0.94], scale: 1.0, weapons: ['sunmace'], idle: 'Idle_Loop', halo: true, glow: 0xffd98a },
   shaman: { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: ['Hair_Long', 'Hair_Beard'], hide: ['Arms_1'],
-    tint: [0.42, 0.3, 0.2], tintAmt: 0.6, skinTint: [0.86, 0.72, 0.62], scale: 1.03, weapons: ['axe', 'fireOrb'], idle: 'Idle_Loop', glow: 0x4ad8ff },
+    tint: [0.42, 0.3, 0.2], tintAmt: 0.6, skinTint: [0.86, 0.72, 0.62], scale: 1.03, weapons: ['stormaxe', 'fireOrb'], idle: 'Idle_Loop', glow: 0x4ad8ff },
 };
 
 // one-shot actions: kind -> per-class clip list (alternated) + whether it should use the full body
@@ -156,6 +157,7 @@ function propClone(name, gradeTint) {
   return g;
 }
 function makeWeapon(kind, look) {
+  if (ARMORY_KINDS.has(kind)) return makeClassWeapon(kind, makeMaterials(TEX), look);
   const g = new THREE.Group();
   let tip = new THREE.Object3D();
   switch (kind) {
@@ -207,6 +209,7 @@ function makeWeapon(kind, look) {
 // How each weapon is held, in WORLD terms at the idle pose of a champion facing +Z:
 //   dir  = where the weapon's +Y (blade / shaft) points,  side = where its +X points,
 //   palm = offset from the bone toward the fingers (m),   up/fwd = extra world offsets.
+const ARMORY_KINDS = new Set(['runesword', 'kiteshield', 'warAxe', 'warAxeL', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
 const GRIP = {
   sword: { bone: 'hand_r', dir: [0, 0.55, 1], side: [-1, 0, 0], palm: 0.085 },
   axe: { bone: 'hand_r', dir: [0, 0.35, 1], side: [-1, 0, 0], palm: 0.085 },
@@ -218,6 +221,10 @@ const GRIP = {
   shield: { bone: 'lowerarm_l', dir: [0, 1, 0], side: [0, 0, -1], palm: 0.14, out: [0.14, 0, 0.05] },
   fireOrb: { bone: 'hand_l', dir: [0, 1, 0], side: [1, 0, 0], palm: 0.06, up: 0.05 },
 };
+Object.assign(GRIP, { runesword: GRIP.sword, kiteshield: GRIP.shield, fang: GRIP.daggerR, fangL: GRIP.daggerL, archstaff: GRIP.staff, sunmace: GRIP.mace, 
+  // axes held upright-forward with the cutting edge facing the enemy
+  warAxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 }, warAxeL: { bone: 'hand_l', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 },
+  stormaxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 } });
 export const GRIPS = GRIP; // exposed for tuning
 
 const _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
@@ -297,6 +304,8 @@ export class Character {
       bone.add(wp);
       this.weapons[w] = wp;
     }
+    // class armor, fitted to this body in the same rest pose
+    this.armor = equipArmor(this, cls, makeMaterials(TEX));
     rest.stop(); this.mixer0.uncacheRoot(body); this.mixer0 = null;
     if (look.halo) {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.008, 6, 40), glowMat(0xffe2a0, 2.5));
@@ -312,9 +321,10 @@ export class Character {
     this.loco = { name: null, prev: null, fade: 1 };
     this.cur = null;   // active one-shot { kind, name, t, dur, full, weight }
     this.deadT = 0; this.vic = false; this.hitT = 0; this.hitBig = 0;
-    this.focus = this.weapons.staff?.userData.tip || this.weapons.mace?.userData.tip || this.weapons.fireOrb || this.weapons.axe?.userData.tip || this.weapons.sword?.userData.tip || this.bones.hand_r;
-    this.tipR = (this.weapons.sword || this.weapons.daggerR || this.weapons.axe || this.weapons.mace || this.weapons.staff)?.userData.tip;
-    this.tipL = this.weapons.daggerL?.userData.tip;
+    const W = this.weapons, tipOf = k => W[k] && (W[k].userData.tip || W[k]);
+    this.focus = ['archstaff', 'sunmace', 'fireOrb', 'stormaxe', 'runesword', 'warAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
+    this.tipR = ['runesword', 'warAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
+    this.tipL = (W.fangL || W.warAxeL)?.userData.tip;
     this.tmpQ = new THREE.Quaternion(); this.tmpE = new THREE.Euler();
     this.setLoco(look.idle, 0);
   }
@@ -460,9 +470,12 @@ export class Character {
     for (const w of Object.values(this.weapons)) {
       if (w.userData.pulse) w.userData.pulse.scale.setScalar(1 + Math.sin(T * 4) * 0.12 + (st.casting ? 0.7 : 0));
       if (w.userData.crystal) w.userData.crystal.rotation.y += dt * 1.5;
+      if (w.userData.spin) { w.userData.spin.rotation.y += dt * 1.8; w.userData.spin.rotation.z = Math.sin(T * 0.7) * 0.3; }
+      if (w.userData.drop) w.userData.drop.position.y = 0.4 - ((T * 0.6) % 1) * 0.12;
       if (w.userData.fire) w.scale.setScalar(0.85 + Math.sin(T * 13) * 0.12 + Math.sin(T * 7) * 0.08);
     }
     if (this.halo) this.halo.rotation.z += dt * 0.6;
+    if (this.armor) this.armor.update(dt, st, this.time);
   }
 
   // turn the body toward the strafe direction while running sideways (no strafe clips in the kit)
