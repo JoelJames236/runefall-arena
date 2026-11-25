@@ -15,7 +15,7 @@ export const CLASSES = {
   mage: {
     id: 'mage', name: 'Mage', role: 'Ranged Elemental Caster', emblem: '✦', color: '#7fb8ff', accent: '#b98cff',
     desc: 'A master of frost and arcane power. Devastating at range and able to lock enemies in place, but fragile when caught. Positioning and timing are everything.',
-    weapon: 'Runed Starstaff with an arcane crystal', armor: 'Embroidered astral robes and hood',
+    weapon: 'Gnarled wooden staff cradling an arcane crystal', armor: 'Hooded indigo leathers',
     hp: 1000, defense: 0.0, speed: 7.0, resType: 'mana', res: 1000, regen: 16,
     auto: { name: 'Arcane Bolt', dmg: 28, speed: 1.8, range: 30, ranged: true, school: 'arcane', proj: 'arcane_bolt', projSpeed: 42, glyph: '✧', color: '#b98cff',
       desc: 'Basic attack: fire a small bolt of arcane energy from your staff (28 damage, 30 yd, every 1.8 sec). Usable while moving.' },
@@ -46,7 +46,7 @@ export const CLASSES = {
   rogue: {
     id: 'rogue', name: 'Rogue', role: 'Shadow Assassin', emblem: '🗡', color: '#9be36a', accent: '#5a2a7a',
     desc: 'A lethal shadow that builds combo points with quick strikes and unleashes them in brutal finishers. Unmatched mobility and stealth, but little room for error. Strikes from behind hurt the most.',
-    weapon: 'Twin venom-etched daggers', armor: 'Dark hooded leathers with a face mask',
+    weapon: 'Twin venom-edged daggers', armor: 'Black hooded leathers',
     hp: 1050, defense: 0.08, speed: 7.8, resType: 'energy', res: 100, regen: 16,
     auto: { name: 'Twin Slashes', dmg: 30, speed: 1.3, range: 4.5, ranged: false, school: 'phys', glyph: '⚔', color: '#9be36a',
       desc: 'Basic attack: alternating dagger slashes (30 damage every 1.3 sec). Melee range, must face the target.' },
@@ -76,7 +76,7 @@ export const CLASSES = {
   warrior: {
     id: 'warrior', name: 'Warrior', role: 'Armored Juggernaut', emblem: '⛨', color: '#e0604a', accent: '#c9c9d4',
     desc: 'A towering wall of steel who wins in close quarters. Generates rage from dealing and taking damage, and closes the gap with charges and crippling blows. Passive — Shieldwall: in team play, you and any ally within 10 yards of you take 10% less damage.',
-    weapon: 'Rune-forged longsword and tower shield', armor: 'Full plate with horned helm and crimson tabard',
+    weapon: 'Steel longsword and iron-rimmed round shield', armor: 'Weathered leather and iron pauldron',
     hp: 1420, defense: 0.15, speed: 6.8, resType: 'rage', res: 100, resStart: 20, regen: 1,
     auto: { name: 'Sword Swing', dmg: 45, speed: 2.0, range: 4.5, ranged: false, school: 'phys', glyph: '🗡', color: '#e0604a',
       desc: 'Basic attack: heavy alternating sword swings (45 damage every 2.0 sec). Melee range, generates rage.' },
@@ -106,7 +106,7 @@ export const CLASSES = {
   priest: {
     id: 'priest', name: 'Priest', role: 'Holy Battle-Cleric', emblem: '✚', color: '#ffe9a8', accent: '#ffffff',
     desc: 'A radiant cleric who outlasts foes with healing, shields and blinding light. Lower damage, but relentless sustain — and the best partner in 2v2, able to heal and shield an ally.',
-    weapon: 'Sunforged mace with a radiant head', armor: 'White-and-gold vestments crowned by a halo',
+    weapon: 'Gilded flanged mace with a radiant core', armor: 'Pale vestments, crowned by a halo of light',
     hp: 1150, defense: 0.05, speed: 7.0, resType: 'mana', res: 1100, regen: 18,
     auto: { name: 'Holy Spark', dmg: 24, speed: 1.8, range: 30, ranged: true, school: 'holy', proj: 'holy_spark', projSpeed: 40, glyph: '✦', color: '#ffe680',
       desc: 'Basic attack: flick a spark of holy light from your mace (24 damage, 30 yd, every 1.8 sec). Usable while moving.' },
@@ -140,7 +140,7 @@ export const CLASSES = {
   shaman: {
     id: 'shaman', name: 'Shaman', role: 'Elemental Warcaller', emblem: '⚡', color: '#4ad8ff', accent: '#ff7a2a',
     desc: 'A versatile caller of storm, fire and earth. Plants totems to control the battlefield and protect the team, while lightning and magma wear the enemy down.',
-    weapon: 'Carved spirit-totem staff crackling with lightning', armor: 'Fur mantle, bone fetishes and a horned beast-skull helm',
+    weapon: 'Bronze war axe and a fist of spirit fire', armor: 'Earthen tunic, bare arms, braided hair and beard',
     hp: 1250, defense: 0.12, speed: 7.0, resType: 'mana', res: 1100, regen: 17,
     auto: { name: 'Static Shock', dmg: 28, speed: 1.8, range: 30, ranged: true, school: 'nature', proj: 'static_bolt', projSpeed: 48, glyph: 'ϟ', color: '#7ae0ff',
       desc: 'Basic attack: jab your totem staff to loose a crackling static bolt (28 damage, 30 yd, every 1.8 sec). Usable while moving.' },

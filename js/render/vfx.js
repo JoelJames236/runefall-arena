@@ -89,11 +89,11 @@ class Pool {
     geo.setAttribute('size', new THREE.BufferAttribute(this.aSize, 1).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('alpha', new THREE.BufferAttribute(this.aAlpha, 1).setUsage(THREE.DynamicDrawUsage));
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { map: { value: map }, scale: { value: 600 } },
+      uniforms: { map: { value: map }, scale: { value: 600 }, uGain: { value: blending === THREE.AdditiveBlending ? 0.62 : 1.0 } },
       vertexShader: `attribute float size; attribute float alpha; attribute vec3 color; varying vec3 vC; varying float vA; uniform float scale;
         void main(){ vC = color; vA = alpha; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = min(size * scale / -mv.z, 256.0); gl_Position = projectionMatrix * mv; }`,
-      fragmentShader: `uniform sampler2D map; varying vec3 vC; varying float vA;
-        void main(){ vec4 t = texture2D(map, gl_PointCoord); gl_FragColor = vec4(vC * t.rgb, t.a * vA); }`,
+      fragmentShader: `uniform sampler2D map; uniform float uGain; varying vec3 vC; varying float vA;
+        void main(){ vec4 t = texture2D(map, gl_PointCoord); gl_FragColor = vec4(vC * t.rgb, t.a * vA * uGain); }`,
       transparent: true, depthWrite: false, blending,
     });
     this.points = new THREE.Points(geo, this.mat);
@@ -202,6 +202,7 @@ export class VFX {
     this.addEffect(m, dur, (u) => { const r = (r0 + (r1 - r0) * (1 - Math.pow(1 - u, 2))) / 2; m.scale.set(r * 2, r * 2, r * 2); m.material.opacity = opacity * (1 - u); });
   }
   sphereFlash(x, y, z, color, r0, r1, dur, opacity = 0.6) {
+    opacity *= 0.32; r1 = Math.min(r1, 4);
     const m = new THREE.Mesh(this.G.sphere, this.addMat(color, opacity));
     m.position.set(x, y, z);
     this.addEffect(m, dur, (u) => { m.scale.setScalar(r0 + (r1 - r0) * (1 - Math.pow(1 - u, 3))); m.material.opacity = opacity * (1 - u); });
@@ -594,7 +595,7 @@ export class VFX {
   slashArc(P, src, color, big) {
     if (!src) return;
     const a = Math.atan2(P.x - src.x, P.z - src.z);
-    const m = new THREE.Mesh(new THREE.RingGeometry(0.85, big ? 1.45 : 1.2, 24, 1, -1.2, 2.4), this.addMat(color, 0.95));
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.85, big ? 1.45 : 1.2, 24, 1, -1.2, 2.4), this.addMat(color, 0.7));
     m.position.set(P.x - Math.sin(a) * 0.4, P.y + 1.2, P.z - Math.cos(a) * 0.4);
     m.rotation.order = 'YXZ'; m.rotation.y = a; m.rotation.x = Math.PI / 2 + (Math.random() - 0.5) * 1.2;
     this.addEffect(m, big ? 0.26 : 0.18, (u) => { m.material.opacity = 0.95 * (1 - u); m.scale.setScalar(1 + u * 0.5); });
@@ -689,10 +690,10 @@ export class VFX {
         this.flash(ev.x, 1.5, ev.z, 0x8fd8ff, 60, 0.5);
         break;
       case 'blinding_light':
-        this.sphereFlash(ev.x, 1.2, ev.z, 0xfff6c0, 0.5, 9, 0.5, 0.5);
+        this.sphereFlash(ev.x, 1.2, ev.z, 0xfff6c0, 0.5, 6, 0.4, 0.35);
         this.ringBurst(ev.x, 1, ev.z, 0xfff6c0, 60, 18, 0.5, 0.6);
         this.lightRays(ev.x, 0, ev.z, 0xfff6c0, 6, 9, 0.6);
-        this.flash(ev.x, 2, ev.z, 0xfff6c0, 150, 0.6);
+        this.flash(ev.x, 2, ev.z, 0xfff6c0, 90, 0.5);
         break;
       case 'halo_judgment': {
         const m = new THREE.Mesh(this.G.torus, this.addMat(0xffd24a, 1));

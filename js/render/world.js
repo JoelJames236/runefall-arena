@@ -6,9 +6,33 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+
+// Final colour grade: gentle S-curve contrast, slightly desaturated mids, cool shadows /
+// warm highlights split-tone, and a soft vignette — the "dark fantasy" film look.
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, uVignette: { value: 0.55 }, uSat: { value: 0.88 }, uContrast: { value: 1.08 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uVignette, uSat, uContrast; varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(vec3(l), c, uSat);
+      c = (c - 0.5) * uContrast + 0.5;
+      vec3 shadowTint = vec3(0.94, 0.98, 1.06), highTint = vec3(1.05, 1.0, 0.92);
+      c *= mix(shadowTint, highTint, smoothstep(0.15, 0.75, l));
+      vec2 d = vUv - 0.5; float v = smoothstep(0.85, 0.25, length(d * vec2(1.15, 1.0)));
+      c *= mix(1.0 - uVignette, 1.0, v);
+      gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+    }`,
+};
 import { Arena } from './arena.js';
 import { VFX } from './vfx.js';
-import { Character } from './characters.js';
+import { Character as ProcCharacter } from './characters.js';
+import { Character as HeroCharacter, heroesReady } from './heroes.js';
+// realistic rigged champions when their assets loaded, procedural fallback otherwise
+const makeChar = cls => heroesReady() ? new HeroCharacter(cls) : new ProcCharacter(cls);
 import { PILLARS, hasBuff, angleDiff } from '../sim/sim.js';
 import { CLASSES } from '../data/classes.js';
 
@@ -26,37 +50,44 @@ export class World {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x5e4660, 90, 1000);
-    this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2000);
+    // dusky atmospheric haze (dark-fantasy look); the HDRI sky is excluded from fog
+    this.scene.fog = new THREE.FogExp2(0x2c2a32, 0.0052);
+    this.scene.background = new THREE.Color(0x1a1418);
+    this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 2500);
     this.camera.position.set(0, 20, 50);
 
-    // lighting: warm sunset key light, cool moon fill, sky/ground hemisphere
-    this.hemi = new THREE.HemisphereLight(0x8a8ad0, 0x5a4030, 1.5); this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffb27a, 2.8);
+    // lighting: low warm sun (shadow caster), faint cool fill; the HDRI provides ambient/specular
+    this.hemi = new THREE.HemisphereLight(0x8a90b0, 0x3a2a20, 0.45); this.scene.add(this.hemi);
+    this.sun = new THREE.DirectionalLight(0xffb27a, 2.6);
     this.sun.position.set(-40, 32, 34);
     this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera; sc.left = -38; sc.right = 38; sc.top = 38; sc.bottom = -38; sc.near = 1; sc.far = 140;
-    this.sun.shadow.bias = -0.0005; this.sun.shadow.normalBias = 0.03;
+    this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.035; this.sun.shadow.radius = 3;
     this.scene.add(this.sun); this.scene.add(this.sun.target);
-    const moon = new THREE.DirectionalLight(0x7a90ff, 0.6); moon.position.set(30, 30, -40); this.scene.add(moon);
+    const moon = new THREE.DirectionalLight(0x7a90ff, 0.35); moon.position.set(30, 30, -40); this.scene.add(moon);
 
-    // image-based lighting so metals and armor have something to reflect
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    // image-based lighting: neutral room env until the HDRI sky has loaded
+    this.pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = this.pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environmentIntensity = 0.35;
+    this.loadSky();
 
     this.arena = new Arena(this.scene, (JSON.parse(localStorage.getItem("runefall-settings") || "{}").quality) || "high");
     this.vfx = new VFX(this.scene);
 
-    this.composer = new EffectComposer(this.renderer);
+    // post: MSAA HDR target → bloom → tone map/sRGB → colour grade + vignette
+    const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+    this.composer = new EffectComposer(this.renderer, rt);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.55, 0.5, 0.82);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.3, 0.5, 0.85);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    this.grade = new ShaderPass(GradeShader);
+    this.composer.addPass(this.grade);
 
     this.chars = [null, null];
     this.charState = [{}, {}];
@@ -72,9 +103,25 @@ export class World {
     this.setupPreviewControls();
   }
 
+  // Dusk HDRI (Poly Haven, CC0): background sky + image-based lighting for every PBR material.
+  loadSky() {
+    new RGBELoader().load('assets/sky/qwantani_dusk_2_puresky_2k.hdr', tex => {
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      const env = this.pmrem.fromEquirectangular(tex).texture;
+      this.scene.environment = env;
+      this.scene.environmentIntensity = 0.42;
+      this.scene.background = tex;
+      this.scene.backgroundIntensity = 0.55;
+      this.scene.backgroundBlurriness = 0.02;
+      this.scene.backgroundRotation = new THREE.Euler(0, 2.3, 0);
+      this.scene.environmentRotation = new THREE.Euler(0, 2.3, 0);
+    }, undefined, e => console.warn('HDRI sky failed to load', e));
+  }
+
   setQuality(q) {
     this.quality = q;
-    this.useBloom = q === 'high';
+    this.useBloom = q !== 'low';            // composer (grade) on high+medium
+    if (this.bloom) this.bloom.enabled = q === 'high';
     this.vfx.setQuality(q);
     this.renderer.shadowMap.enabled = q !== 'low';
     this.sun.castShadow = q !== 'low';
@@ -105,7 +152,7 @@ export class World {
   setFighters(specs, myId) {
     this.clearChars();
     const myTeam = specs[myId]?.team ?? 0;
-    this.chars = specs.map(s => new Character(s.cls));
+    this.chars = specs.map(s => makeChar(s.cls));
     for (const c of this.chars) this.scene.add(c.root);
     // team rings under each champion: gold = you, blue = ally, red = enemy
     this.rings = specs.map((s, i) => {
@@ -132,21 +179,21 @@ export class World {
     this.clearChars();
     if (this.selRing) { this.scene.remove(this.selRing, this.friendRing); }
     const line = [['warrior', -2.2, -3.5, 0], ['priest', 2.2, -4.5, 0], ['mage', 2.2, 3.5, Math.PI], ['rogue', -2.2, 4.2, Math.PI]];
-    this.chars = line.map(([cls, x, z, yaw]) => { const c = new Character(cls); c.root.position.set(x, 0, z); c.root.rotation.y = yaw; this.scene.add(c.root); return c; });
+    this.chars = line.map(([cls, x, z, yaw]) => { const c = makeChar(cls); c.root.position.set(x, 0, z); c.root.rotation.y = yaw; this.scene.add(c.root); return c; });
     this.menuT = 0;
   }
 
   showPreview(cls) {
     this.mode = 'preview';
     this.clearChars();
-    const c = new Character(cls);
+    const c = makeChar(cls);
     c.root.position.set(0, 0, 0);
     this.scene.add(c.root);
     this.preview.char = c;
     this.preview.yaw = 0.5;
     c.play('raise', 0.9);
-    this.vfx.burst(0, 1, 0, [CLASSES[cls].color === undefined ? 0xffffff : new THREE.Color(CLASSES[cls].color).getHex(), 0xffffff], 50, 4, 0.8, 0.5, { up: 1 });
-    this.vfx.groundRing(0, 0, new THREE.Color(CLASSES[cls].color).getHex(), 0.5, 3, 0.8);
+    this.vfx.burst(0, 1, 0, [CLASSES[cls].color === undefined ? 0xffffff : new THREE.Color(CLASSES[cls].color).getHex(), 0xffffff], 18, 3, 0.7, 0.25, { up: 1 });
+    this.vfx.groundRing(0, 0, new THREE.Color(CLASSES[cls].color).getHex(), 0.5, 2.4, 0.8, 0.08, 0.6);
   }
 
   previewAttack() {

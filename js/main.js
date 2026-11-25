@@ -5,6 +5,7 @@
 //         host     — you host a room (1v1 or 2v2; empty slots can be bots); authoritative sim
 //         guest    — you joined a room; inputs go to the host, state comes back as snapshots
 import { World } from './render/world.js';
+import { loadHeroAssets } from './render/heroes.js';
 import { HUD, iconHTML, emblemStyle } from './ui/hud.js';
 import { Input } from './input.js';
 import { Audio, AB_SOUND, HIT_SOUND, CAST_SOUND } from './audio.js';
@@ -87,7 +88,22 @@ renderRecord();
 // splash
 const joinParam = new URLSearchParams(location.search).get('join');
 if (joinParam) $('loadmsg').textContent = `You have been invited to a match (room ${joinParam.toUpperCase()}).`;
+// champion + world assets load behind the splash screen
+let assetsReady = false;
+const inviteMsg = $('loadmsg').textContent;
+$('splash').querySelector('.enter').style.visibility = 'hidden';
+loadHeroAssets(p => { if (!assetsReady) $('loadmsg').textContent = `Summoning the champions… ${Math.round(p * 100)}%`; })
+  .catch(e => console.warn('Champion assets failed to load, using fallback models', e))
+  .then(() => world.arena.ready)
+  .catch(() => {})
+  .finally(() => {
+    assetsReady = true;
+    world.showMenuScene();
+    $('loadmsg').textContent = inviteMsg;
+    $('splash').querySelector('.enter').style.visibility = '';
+  });
 $('splash').addEventListener('click', () => {
+  if (!assetsReady) return;
   audio.init(); applySettings(); audio.setTrack('menu');
   if (joinParam) { show('join'); $('joinCode').value = joinParam.toUpperCase(); startJoin(joinParam); }
   else show('menu');
@@ -872,7 +888,6 @@ setInterval(() => {
 let fpsAcc = 0, fpsN = 0;
 function fpsCounter(dt) { if (!settings.fps) return; fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { $('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps · ' + world.renderer.info.render.calls + ' draws'; fpsAcc = 0; fpsN = 0; } }
 
-world.showMenuScene();
 // debug handle (used for automated testing; harmless in production)
 window.__rf = { world, S, CLASSES, input, audio, hud, tick: dt => { if (S.inGame) gameFrame(dt); }, startMatch };
 requestAnimationFrame(frame);
