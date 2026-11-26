@@ -2,7 +2,7 @@
 // by exactly the same rules (cooldowns, ranges, line of sight, GCD, resources, swing timers).
 // Works for 1v1 and 2v2: picks a focus target, kites the nearest threat, interrupts
 // casters, peels for and heals its teammate.
-import { CLASSES } from '../data/classes.js';
+import { CLASSES, kitOf } from '../data/classes.js';
 import { PILLARS, ARENA_R, BRIDGE, ARCH_OPEN, hasBuff, isStunned, angleTo, segBlocked, floorAt, solidAt, airborne } from './sim.js';
 
 const DIFF = {
@@ -23,12 +23,12 @@ export class AI {
     this.seenCasts = new Map(); // enemy id -> { cast, react, will }
   }
 
-  idx(f, id) { return CLASSES[f.cls].abilities.findIndex(a => a.id === id); }
+  idx(f, id) { return kitOf(f).abilities.findIndex(a => a.id === id); }
   ok(f, id, tid) { const i = this.idx(f, id); return i >= 0 && !this.sim.check(f, i, true, tid !== undefined ? { tid } : {}) ? i : -1; }
 
   // How hard an enemy is to kill right now: health through armor and damage reduction, plus shields.
   effectiveHp(e) {
-    let ehp = e.hp / (1 - (CLASSES[e.cls].defense || 0));
+    let ehp = e.hp / (1 - (kitOf(e).defense || 0));
     for (const b of e.buffs) {
       if ((b.type === 'dr' || b.type === 'stoneskin') && b.value) ehp /= 1 - b.value;
       if (b.type === 'absorb' && b.value) ehp += b.value;
@@ -122,7 +122,7 @@ export class AI {
     }
 
     // ---- movement
-    const casting = !!me.cast || inp.abilities.some(a => CLASSES[me.cls].abilities[a.i].cast > 0);
+    const casting = !!me.cast || inp.abilities.some(a => kitOf(me).abilities[a.i].cast > 0);
     let wantX = 0, wantZ = 0;
     const toX = (foe.x - me.x) / (dist || 1), toZ = (foe.z - me.z) / (dist || 1);
     const thX = (threat.x - me.x) / (td || 1), thZ = (threat.z - me.z) / (td || 1);
@@ -277,7 +277,7 @@ export class AI {
 
   interrupt(me, e) {
     for (const id of INTERRUPTS[me.cls]) {
-      const ab = CLASSES[me.cls].abilities[this.idx(me, id)];
+      const ab = kitOf(me).abilities[this.idx(me, id)]; if (!ab) continue; // not in this spec
       if (!ab.target && this.sim.dist(me, e) > (id === 'quake_totem' ? 5 : 8.5)) continue; // AoE interrupts need proximity
       const i = this.ok(me, id, e.id);
       if (i >= 0) return { i, tid: e.id };
@@ -300,7 +300,7 @@ export class AI {
     const { dist, foeCC, visible, threat, td, threatCC, allies, living } = ctx;
     const hp = me.hp / me.maxHp, foeHp = foe.hp / foe.maxHp;
     const tid = foe.id;
-    const use = (id, extra = {}) => { const i = this.ok(me, id, extra.tid ?? (CLASSES[me.cls].abilities[this.idx(me, id)].target ? tid : undefined)); return i >= 0 ? { i, tid: extra.tid ?? tid, ...extra } : null; };
+    const use = (id, extra = {}) => { const k = this.idx(me, id); if (k < 0) return null; const i = this.ok(me, id, extra.tid ?? (kitOf(me).abilities[k].target ? tid : undefined)); return i >= 0 ? { i, tid: extra.tid ?? tid, ...extra } : null; }; // null if this spec lacks the ability
     const away = () => { const L = td || 1; return { x: (me.x - threat.x) / L, z: (me.z - threat.z) / L }; };
     const near = r => living.filter(e => sim.dist(me, e) <= r).length;
     const def = Math.random() < this.d.defensive;
@@ -338,6 +338,18 @@ export class AI {
         if (me.res > 70 && (p = use('crippling_slash'))) return p;
         return null;
       case 'berserker':
+        if (me.spec === 'executioner') {
+          // great axe: knock down, then land the slow Skullsplitter on a target that can't walk away
+          if (def && hp < 0.4 && (p = use('iron_hide'))) return p;
+          if (!visible) return null;
+          if (dist > 7 && (p = use('skull_leap'))) return p;
+          if (foeHp < 0.35 && (p = use('headtaker'))) return p;
+          if (dist < 5.5 && !foeCC && (p = use('ground_breaker'))) return p;
+          if (dist < 4.5 && (foeCC || isStunned(foe)) && (p = use('skullsplitter'))) return p;
+          if (!foe.buffs.some(b => b.name === 'Bleeding' && b.src === me.id) && (p = use('rending_axes'))) return p;
+          if (dist < 4.5 && me.res > 60 && (p = use('skullsplitter'))) return p;
+          return null;
+        }
         // low health = more damage: only pop the defensive when truly close to death
         if (def && hp < 0.3 && (p = use('undying_rage'))) return p;
         if (!visible) return null;

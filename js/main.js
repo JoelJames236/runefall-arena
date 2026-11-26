@@ -13,7 +13,7 @@ import { Sim, moveFighter, RULES } from './sim/sim.js';
 import { AI } from './sim/ai.js';
 import { Net } from './net.js';
 import { ARENAS } from './render/arenas.js';
-import { CLASSES, CLASS_ORDER, BOT_NAMES } from './data/classes.js';
+import { CLASSES, CLASS_ORDER, BOT_NAMES, kit, kitOf, specsOf, validSpec } from './data/classes.js';
 
 const $ = id => document.getElementById(id);
 const STEP = 1 / 60;
@@ -52,7 +52,8 @@ const S = {
   screen: 'splash', mode: null, sim: null, ais: new Map(), net: null, myId: 0,
   myCls: localStorage.getItem('runefall-class') || 'mage', difficulty: localStorage.getItem('runefall-diff') || 'normal',
   playerName: localStorage.getItem('runefall-name') || ('Champion' + Math.floor(100 + Math.random() * 900)),
-  team: { ally: 'random', foe1: 'random', foe2: 'random' },
+  team: { ally: 'random', foe1: 'random', foe2: 'random' }, teamSpec: { ally: 'random', foe1: 'random', foe2: 'random' },
+  mySpecs: (() => { try { return JSON.parse(localStorage.getItem('runefall-specs')) || {}; } catch { return {}; } })(), // chosen spec per class
   csMode: 'duel', inGame: false, paused: false, acc: 0, roster: null,
   room: null, roomView: null, mySlot: 0, queueing: false,
   // guest-side
@@ -173,13 +174,29 @@ function openClassSelect(mode) {
   selectClass(S.myCls);
 }
 
+// ---- specs: every class has two; the choice is remembered per class and locked for the match
+const mySpec = () => validSpec(S.myCls, S.mySpecs[S.myCls]);
+const playableSpecs = cls => specsOf(cls).filter(s => !s.soon);
+// 'random' (or an unplayable id) -> a random playable spec of that class
+const pickSpec = (cls, v) => playableSpecs(cls).some(s => s.id === v) ? v : rand(playableSpecs(cls)).id;
+const specLabel = (cls, spec) => { const K = kit(cls, spec); return `${K.specIcon} ${K.specName} ${K.name}`; };
+const specOptions = (cls, v, withRandom = true) => (withRandom ? `<option value="random"${v === 'random' ? ' selected' : ''}>Random spec</option>` : '') +
+  playableSpecs(cls).map(s => `<option value="${s.id}"${v === s.id ? ' selected' : ''}>${s.icon} ${s.name}</option>`).join('');
+
 function renderTeamPanel() {
   const opts = v => `<option value="random"${v === 'random' ? ' selected' : ''}>Random</option>` + CLASS_ORDER.map(c => `<option value="${c}"${v === c ? ' selected' : ''}>${CLASSES[c].name}</option>`).join('');
-  $('csTeam').innerHTML = `<div class="ally"><h4>Your Team</h4><div class="tm"><span>${esc(S.playerName)}</span><b style="color:${CLASSES[S.myCls].color}">${CLASSES[S.myCls].name}</b></div>
-    <div class="tm"><span>${BOT_NAMES.ally[0]} (bot)</span><select data-k="ally">${opts(S.team.ally)}</select></div></div>
-    <div class="foe"><h4>Enemy Team</h4><div class="tm"><span>${BOT_NAMES.enemy[0]}</span><select data-k="foe1">${opts(S.team.foe1)}</select></div>
-    <div class="tm"><span>${BOT_NAMES.enemy[1]}</span><select data-k="foe2">${opts(S.team.foe2)}</select></div></div>`;
-  $('csTeam').querySelectorAll('select').forEach(s => s.addEventListener('change', () => { S.team[s.dataset.k] = s.value; }));
+  // a bot row: class picker + spec picker (spec picker only once a class is chosen)
+  const row = (label, k) => `<div class="tm"><span>${label}</span><select data-k="${k}">${opts(S.team[k])}</select>${S.team[k] !== 'random' ? `<select data-ks="${k}">${specOptions(S.team[k], S.teamSpec[k])}</select>` : ''}</div>`;
+  $('csTeam').innerHTML = `<div class="ally"><h4>Your Team</h4><div class="tm"><span>${esc(S.playerName)}</span><b style="color:${CLASSES[S.myCls].color}">${specLabel(S.myCls, mySpec())}</b></div>
+    ${row(`${BOT_NAMES.ally[0]} (bot)`, 'ally')}</div>
+    <div class="foe"><h4>Enemy Team</h4>${row(BOT_NAMES.enemy[0], 'foe1')}${row(BOT_NAMES.enemy[1], 'foe2')}</div>`;
+  $('csTeam').querySelectorAll('select[data-k]').forEach(s => s.addEventListener('change', () => { S.team[s.dataset.k] = s.value; S.teamSpec[s.dataset.k] = 'random'; renderTeamPanel(); }));
+  $('csTeam').querySelectorAll('select[data-ks]').forEach(s => s.addEventListener('change', () => { S.teamSpec[s.dataset.ks] = s.value; }));
+}
+
+function selectSpec(cls, spec) {
+  S.mySpecs[cls] = spec; localStorage.setItem('runefall-specs', JSON.stringify(S.mySpecs));
+  selectClass(cls);
 }
 
 function statRow(label, rating, value) {
@@ -189,13 +206,19 @@ function statRow(label, rating, value) {
 function selectClass(id) {
   S.myCls = id; localStorage.setItem('runefall-class', id);
   document.querySelectorAll('.cs-card').forEach(c => c.classList.toggle('on', c.dataset.cls === id));
-  const C = CLASSES[id];
-  world.showPreview(id);
+  const spec = mySpec(), C = kit(id, spec);
+  world.showPreview(id, spec);
   const resName = { mana: 'Mana', energy: 'Energy', rage: 'Rage' }[C.resType];
   const A = C.auto;
+  // spec cards: pick one of the class's two specs (unbuilt ones are shown as "coming soon")
+  const specCards = `<div class="spec-pick"><div class="sp-h">Choose a spec <span>locked for the match</span></div><div class="sp-cards">${specsOf(id).map(s => `
+    <button class="spec-card${s.id === spec ? ' on' : ''}${s.soon ? ' soon' : ''}" data-spec="${s.id}"${s.soon ? ' disabled' : ''} style="--sc:${s.color}">
+      <span class="si">${s.icon}</span><span class="sx"><span class="sn">${s.name}</span><span class="st">${s.tag}</span></span>${s.soon ? '<span class="sb">Coming soon</span>' : s.id === spec ? '<span class="sb on">Selected</span>' : ''}
+    </button>`).join('')}</div></div>`;
   $('csDetails').innerHTML = `
-    <h3 style="color:${C.color}">${C.name}</h3>
+    <h3 style="color:${C.color}">${C.name} <span class="spec-name" style="color:${C.specColor}">${C.specIcon} ${C.specName}</span></h3>
     <div class="role">${C.role}</div>
+    ${specCards}
     <p>${C.desc}</p>
     <div class="gear"><b>Weapon:</b> ${C.weapon}<br><b>Armor:</b> ${C.armor}<br><b>Resource:</b> ${resName} (${C.res})</div>
     ${statRow('Health', C.rating.health, C.hp)}
@@ -213,6 +236,7 @@ function selectClass(id) {
         <div class="meta">${[ab.cost ? `${ab.cost} ${resName}` : 'No cost', ab.cast ? `${ab.cast}s cast` : 'Instant', ab.cd ? `${ab.cd}s cooldown` : '', ab.range ? `${ab.range} yd` : ''].filter(Boolean).join(' · ')}</div>
         <div class="adesc">${ab.desc}</div></div></div>`).join('')}
     </div>`;
+  $('csDetails').querySelectorAll('.spec-card:not(.soon)').forEach(b => b.addEventListener('click', () => { if (b.dataset.spec !== spec) { selectSpec(id, b.dataset.spec); audio.play('ui_click'); } }));
   $('csDetails').querySelectorAll('.ab-row').forEach(r => r.addEventListener('click', () => {
     const i = +r.dataset.i;
     if (i < 0) { world.previewAttack(); audio.play(A.ranged ? 'auto_' + id : (id === 'rogue' ? 'dagger' : 'swing')); return; }
@@ -235,21 +259,21 @@ $('csBack').addEventListener('click', () => {
 $('csConfirm').addEventListener('click', () => {
   if (S.csMode === 'duel') {
     const foe = rand(CLASS_ORDER.filter(c => c !== S.myCls));
-    startMatch([{ cls: S.myCls, team: 0, name: S.playerName }, { cls: foe, team: 1, name: rand(BOT_NAMES.enemy), bot: true, diff: S.difficulty }], 'duel', 0);
+    startMatch([{ cls: S.myCls, spec: mySpec(), team: 0, name: S.playerName }, { cls: foe, spec: pickSpec(foe, 'random'), team: 1, name: rand(BOT_NAMES.enemy), bot: true, diff: S.difficulty }], 'duel', 0);
   } else if (S.csMode === 'bots2v2') {
     const pick = (v, avoid) => v !== 'random' ? v : rand(CLASS_ORDER.filter(c => !avoid.includes(c)));
     const ally = pick(S.team.ally, [S.myCls]);
     const f1 = pick(S.team.foe1, []);
     const f2 = pick(S.team.foe2, [f1]);
     startMatch([
-      { cls: S.myCls, team: 0, name: S.playerName },
-      { cls: ally, team: 0, name: BOT_NAMES.ally[0], bot: true, diff: S.difficulty },
-      { cls: f1, team: 1, name: BOT_NAMES.enemy[0], bot: true, diff: S.difficulty },
-      { cls: f2, team: 1, name: BOT_NAMES.enemy[1], bot: true, diff: S.difficulty },
+      { cls: S.myCls, spec: mySpec(), team: 0, name: S.playerName },
+      { cls: ally, spec: pickSpec(ally, S.teamSpec.ally), team: 0, name: BOT_NAMES.ally[0], bot: true, diff: S.difficulty },
+      { cls: f1, spec: pickSpec(f1, S.teamSpec.foe1), team: 1, name: BOT_NAMES.enemy[0], bot: true, diff: S.difficulty },
+      { cls: f2, spec: pickSpec(f2, S.teamSpec.foe2), team: 1, name: BOT_NAMES.enemy[1], bot: true, diff: S.difficulty },
     ], 'bots2v2', 0);
   } else if (S.csMode === 'room') {
-    if (S.net?.role === 'host') { const s = S.room.slots[S.mySlot]; s.cls = S.myCls; s.ready = false; roomBroadcast(); }
-    else if (S.net) { S.net.send({ t: 'pick', cls: S.myCls }); S.net.send({ t: 'ready', v: false }); }
+    if (S.net?.role === 'host') { const s = S.room.slots[S.mySlot]; s.cls = S.myCls; s.spec = mySpec(); s.ready = false; roomBroadcast(); }
+    else if (S.net) { S.net.send({ t: 'pick', cls: S.myCls, spec: mySpec() }); S.net.send({ t: 'ready', v: false }); }
     world.showMenuScene(); show('room'); renderRoom();
   }
 });
@@ -262,7 +286,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 
 function newRoom() {
   return { format: '2v2', botDiff: 'normal', slots: [
-    { kind: 'human', name: S.playerName, cls: S.myCls, ready: false, cid: 'host' },
+    { kind: 'human', name: S.playerName, cls: S.myCls, spec: mySpec(), ready: false, cid: 'host' },
     { kind: 'empty' }, { kind: 'empty' }, { kind: 'empty' },
   ] };
 }
@@ -271,7 +295,7 @@ function botFor(i) {
   const used = S.room.slots.filter(s => s.kind === 'bot').map(s => s.name);
   const names = enemy ? BOT_NAMES.enemy : [...BOT_NAMES.ally, ...BOT_NAMES.enemy];
   const name = names.find(n => !used.includes(n)) || (enemy ? 'Zigi' : 'Aldor');
-  return { kind: 'bot', name, cls: rand(CLASS_ORDER), ready: true };
+  const cls = rand(CLASS_ORDER); return { kind: 'bot', name, cls, spec: pickSpec(cls, 'random'), ready: true };
 }
 
 function startHost() {
@@ -288,7 +312,7 @@ function startHost() {
 function roomLink() { const url = new URL(location.href); url.search = ''; url.hash = ''; url.searchParams.set('join', S.net?.code || ''); return url.toString(); }
 $('copyLink').addEventListener('click', () => { navigator.clipboard?.writeText(roomLink()).then(() => toast('Invite link copied!'), () => toast(roomLink(), 6000)); });
 
-function publicRoom() { return { format: S.room.format, botDiff: S.room.botDiff, slots: S.room.slots.map(s => ({ kind: s.kind, name: s.name, cls: s.cls, ready: s.ready, host: s.cid === 'host' })) }; }
+function publicRoom() { return { format: S.room.format, botDiff: S.room.botDiff, slots: S.room.slots.map(s => ({ kind: s.kind, name: s.name, cls: s.cls, spec: s.spec, ready: s.ready, host: s.cid === 'host' })) }; }
 function roomBroadcast() {
   if (!S.net || S.net.role !== 'host' || S.inGame) return; // a 'room' message sends guests back to the lobby
   const pub = publicRoom();
@@ -309,10 +333,10 @@ function renderRoom() {
     if (s.kind === 'empty') return `<div class="slot-card empty" data-i="${i}">Open slot ${isHost ? `<span class="sbtns"><button class="btn small" data-act="bot" data-i="${i}">+ Bot</button></span>` : ''}</div>`;
     const C = CLASSES[s.cls];
     const ctrl = isHost ? (s.kind === 'bot'
-      ? `<select data-act="botcls" data-i="${i}">${CLASS_ORDER.map(c => `<option value="${c}"${c === s.cls ? ' selected' : ''}>${CLASSES[c].name}</option>`).join('')}</select><button class="btn small" data-act="kick" data-i="${i}" title="Remove bot">✕</button>`
+      ? `<select data-act="botcls" data-i="${i}">${CLASS_ORDER.map(c => `<option value="${c}"${c === s.cls ? ' selected' : ''}>${CLASSES[c].name}</option>`).join('')}</select><select data-act="botspec" data-i="${i}">${specOptions(s.cls, validSpec(s.cls, s.spec), false)}</select><button class="btn small" data-act="kick" data-i="${i}" title="Remove bot">✕</button>`
       : `<button class="btn small" data-act="swap" data-i="${i}" title="Move to the other team">⇄</button>${s.host ? '' : `<button class="btn small" data-act="kick" data-i="${i}" title="Kick">✕</button>`}`) : '';
     return `<div class="slot-card ${me ? 'me' : ''}"><div class="emblem" style="${emblemStyle(C)}">${C.emblem}</div>
-      <div class="sinfo"><div class="sname">${esc(s.name)}${s.host ? ' <span class="muted">♛</span>' : ''}${me ? ' <span class="muted">(you)</span>' : ''}</div><div class="ssub" style="color:${C.color}">${C.name}${s.kind === 'bot' ? ' · Bot' : ''}</div></div>
+      <div class="sinfo"><div class="sname">${esc(s.name)}${s.host ? ' <span class="muted">♛</span>' : ''}${me ? ' <span class="muted">(you)</span>' : ''}</div><div class="ssub" style="color:${C.color}">${specLabel(s.cls, s.spec)}${s.kind === 'bot' ? ' · Bot' : ''}</div></div>
       <span class="sready ${s.ready ? 'ok' : 'no'}">${s.kind === 'bot' ? 'BOT' : s.ready ? '✔ READY' : 'NOT READY'}</span><span class="sbtns">${ctrl}</span></div>`;
   };
   $('slotsA').innerHTML = act.filter(i => SLOT_TEAM[i] === 0).map(card).join('');
@@ -378,8 +402,10 @@ $('room').addEventListener('click', e => {
   roomBroadcast();
 });
 $('room').addEventListener('change', e => {
-  const sel = e.target.closest('[data-act="botcls"]'); if (!sel || S.net?.role !== 'host') return;
-  S.room.slots[+sel.dataset.i].cls = sel.value; roomBroadcast();
+  if (S.net?.role !== 'host') return;
+  const sel = e.target.closest('[data-act="botcls"]'), ssel = e.target.closest('[data-act="botspec"]');
+  if (sel) { const sl = S.room.slots[+sel.dataset.i]; sl.cls = sel.value; sl.spec = pickSpec(sl.cls, 'random'); roomBroadcast(); }
+  else if (ssel) { const sl = S.room.slots[+ssel.dataset.i]; sl.spec = validSpec(sl.cls, ssel.value); roomBroadcast(); }
 });
 $('roomBotDiff').addEventListener('change', e => { if (S.room) { S.room.botDiff = e.target.value; roomBroadcast(); } });
 $('roomFill').addEventListener('click', () => { for (const i of activeSlots(S.room)) if (S.room.slots[i].kind === 'empty') S.room.slots[i] = botFor(i); roomBroadcast(); });
@@ -423,7 +449,7 @@ function startJoin(code, wantTeam = 0) {
   bindNet(net);
   net.join(code, () => {
     $('joinStatus').textContent = 'Connected!';
-    net.send({ t: 'hello', name: S.playerName, cls: S.myCls, want: wantTeam });
+    net.send({ t: 'hello', name: S.playerName, cls: S.myCls, spec: mySpec(), want: wantTeam });
   });
 }
 $('joinGo').addEventListener('click', () => startJoin($('joinCode').value));
@@ -447,7 +473,7 @@ function bindNet(net) {
   });
   // ---- host side
   net.on('hello', (m, cid) => { if (net.role === 'host') onGuestHello(cid, m); });
-  net.on('pick', (m, cid) => { const s = slotOf(cid); if (s && CLASSES[m.cls]) { s.cls = m.cls; s.ready = false; roomBroadcast(); } });
+  net.on('pick', (m, cid) => { const s = slotOf(cid); if (s && CLASSES[m.cls]) { s.cls = m.cls; s.spec = validSpec(m.cls, m.spec); s.ready = false; roomBroadcast(); } });
   net.on('ready', (m, cid) => { const s = slotOf(cid); if (s) { s.ready = !!m.v; roomBroadcast(); } });
   net.on('in', (m, cid) => { const r = remoteOf(cid); if (r) r.remote = m; });
   net.on('ab', (m, cid) => { const r = remoteOf(cid); if (r) r.abs.push({ i: m.i, dir: m.dir }); });
@@ -479,7 +505,8 @@ function onGuestHello(cid, m) {
   const order = [...act.filter(i => SLOT_TEAM[i] === want), ...act.filter(i => SLOT_TEAM[i] !== want)];
   const i = order.find(j => room.slots[j].kind === 'empty') ?? order.find(j => room.slots[j].kind === 'bot');
   if (i === undefined) { S.net.sendTo(cid, { t: 'full' }); setTimeout(() => S.net?.kick(cid), 300); return; }
-  room.slots[i] = { kind: 'human', name: String(m.name || 'Champion').slice(0, 16), cls: CLASSES[m.cls] ? m.cls : 'warrior', ready: false, cid };
+  const cls = CLASSES[m.cls] ? m.cls : 'warrior';
+  room.slots[i] = { kind: 'human', name: String(m.name || 'Champion').slice(0, 16), cls, spec: validSpec(cls, m.spec), ready: false, cid };
   $('roomStatus').textContent = `${room.slots[i].name} joined the lobby.`;
   audio.play('round_win');
   roomBroadcast();
@@ -495,7 +522,7 @@ function onGuestLeft(cid) {
     const fid = S.cidToFid.get(cid);
     if (fid !== undefined && S.sim) { S.remotes.delete(fid); S.ais.set(fid, new AI(S.sim, fid, room.botDiff)); S.sim.fighters[fid].bot = true; }
     S.cidToFid.delete(cid);
-    room.slots[i] = { kind: 'bot', name: name, cls: room.slots[i].cls, ready: true };
+    room.slots[i] = { kind: 'bot', name: name, cls: room.slots[i].cls, spec: room.slots[i].spec, ready: true };
     toast(`${name} left — a bot takes over their champion.`, 3500);
   } else {
     room.slots[i] = { kind: 'empty' };
@@ -510,7 +537,7 @@ function startOnline() {
   const roster = [], owners = [];
   for (const i of act) {
     const s = room.slots[i];
-    roster.push({ cls: s.cls, team: SLOT_TEAM[i], name: s.name, bot: s.kind === 'bot', diff: room.botDiff });
+    roster.push({ cls: s.cls, spec: validSpec(s.cls, s.spec), team: SLOT_TEAM[i], name: s.name, bot: s.kind === 'bot', diff: room.botDiff });
     owners.push(s.kind === 'human' ? s.cid : null);
   }
   const myFid = owners.indexOf('host');
@@ -550,7 +577,7 @@ function startMatch(roster, mode, myId) {
   const me = roster[myId];
   if (mode === 'guest') {
     S.sim = null;
-    S.local = { id: myId, cls: me.cls, team: me.team, x: 0, y: 0, z: me.team === 0 ? -20 : 20, vy: 0, yaw: me.team === 0 ? 0 : Math.PI, stamina: 100, buffs: [], alive: true, locked: false, moving: false };
+    S.local = { id: myId, cls: me.cls, spec: validSpec(me.cls, me.spec), team: me.team, x: 0, y: 0, z: me.team === 0 ? -20 : 20, vy: 0, yaw: me.team === 0 ? 0 : Math.PI, stamina: 100, buffs: [], alive: true, locked: false, moving: false };
   } else {
     S.sim = new Sim(roster);
     roster.forEach((r, fid) => {
@@ -616,7 +643,7 @@ function showMatchEnd(winner) {
   $('endScore').textContent = `${v.score[me.team]} – ${v.score[1 - me.team]}`;
   const st = f => f.stats || { dmg: 0, heal: 0, absorbed: 0, ccs: 0, interrupts: 0, crits: 0, kills: 0 };
   const mvp = F.reduce((b, f) => (st(f).dmg + st(f).heal > st(b).dmg + st(b).heal ? f : b), F[0]);
-  const rows = [...F].sort((a, b) => a.team - b.team).map(f => { const s = st(f); return `<tr class="t${f.team === me.team ? 0 : 1} ${f.id === S.myId ? 'me' : ''}"><td>${esc(f.name)} <span class="muted">${CLASSES[f.cls].name}</span>${f.id === mvp.id ? '<span class="mvp">★ MVP</span>' : ''}</td><td>${s.dmg}</td><td>${s.heal}</td><td>${s.absorbed}</td><td>${s.kills}</td><td>${s.ccs}</td><td>${s.interrupts}</td><td>${s.crits}</td></tr>`; }).join('');
+  const rows = [...F].sort((a, b) => a.team - b.team).map(f => { const s = st(f); return `<tr class="t${f.team === me.team ? 0 : 1} ${f.id === S.myId ? 'me' : ''}"><td>${esc(f.name)} <span class="muted">${specLabel(f.cls, f.spec)}</span>${f.id === mvp.id ? '<span class="mvp">★ MVP</span>' : ''}</td><td>${s.dmg}</td><td>${s.heal}</td><td>${s.absorbed}</td><td>${s.kills}</td><td>${s.ccs}</td><td>${s.interrupts}</td><td>${s.crits}</td></tr>`; }).join('');
   $('endStats').innerHTML = `<table class="end-stats"><tr><th>Champion</th><th>Damage</th><th>Healing</th><th>Absorbed</th><th>Kills</th><th>CC</th><th>Interrupts</th><th>Crits</th></tr>${rows}</table>`;
   $('endStatus').textContent = S.mode === 'guest' ? 'Waiting for the host to start a rematch or return to the lobby…' : '';
   recordResult(won);
@@ -662,8 +689,8 @@ function currentView() {
 function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
 
 function dummyFighter(r, id) {
-  const C = CLASSES[r.cls];
-  return { id, cls: r.cls, team: r.team, name: r.name, x: 0, y: 0, z: r.team === 0 ? -20 : 20, yaw: r.team === 0 ? 0 : Math.PI, hp: C.hp, maxHp: C.hp, res: C.res, maxRes: C.res, resType: C.resType, cds: [0, 0, 0, 0, 0, 0], gcd: 0, cast: null, buffs: [], cp: 0, alive: true, stamina: 100, target: -1, friend: -1, autoT: 0, autoOn: false };
+  const C = kit(r.cls, r.spec);
+  return { id, cls: r.cls, spec: validSpec(r.cls, r.spec), team: r.team, name: r.name, x: 0, y: 0, z: r.team === 0 ? -20 : 20, yaw: r.team === 0 ? 0 : Math.PI, hp: C.hp, maxHp: C.hp, res: C.res, maxRes: C.res, resType: C.resType, cds: [0, 0, 0, 0, 0, 0], gcd: 0, cast: null, buffs: [], cp: 0, alive: true, stamina: 100, target: -1, friend: -1, autoT: 0, autoOn: false };
 }
 
 function buildGuestView() {
@@ -717,11 +744,11 @@ function handleEvents(evs, view) {
       case 'ab': {
         world.onAbilityAnim(ev.id, ev.ab);
         audio.play(AB_SOUND[ev.ab], pos(ev.id));
-        if (ev.id === my) { const i = CLASSES[F[my].cls].abilities.findIndex(a => a.id === ev.ab); hud.flashSlot(i); }
+        if (ev.id === my) { const i = kitOf(F[my]).abilities.findIndex(a => a.id === ev.ab); hud.flashSlot(i); }
         if (ev.ab === 'glacial_nova' || ev.ab === 'blinding_light' || ev.ab === 'halo_judgment') world.addShake(0.25);
         break; }
       case 'caststart': {
-        const ab = CLASSES[F[ev.id].cls].abilities.find(a => a.id === ev.ab);
+        const ab = kitOf(F[ev.id]).abilities.find(a => a.id === ev.ab);
         audio.play(CAST_SOUND[ab?.school] || 'cast_arcane', pos(ev.id));
         break; }
       case 'auto': {

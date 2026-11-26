@@ -201,6 +201,25 @@ export function makeClassWeapon(kind, M, look) {
       g.add(head);
       const pom = spike(0.02, 0.06, M.darksteel); pom.rotation.z = PI; pom.position.y = -0.24; g.add(pom);
       tip.position.set(0.25, 0.62, 0); break; }
+    case 'greatAxe': {
+      // Executioner: a colossal two-handed axe. Long iron-banded haft (both hands fit on it), a huge
+      // crescent blade with a bearded lower horn, a back spike, skull trophy and glowing blood runes.
+      const haft = mesh(cyl(0.028, 0.034, 1.62, 12), M.darkwood); haft.position.y = 0.42; g.add(haft);
+      for (const y of [-0.2, 0.08, 0.36, 0.64, 0.92]) { const b = mesh(cyl(0.038, 0.038, 0.05, 12), M.blacksteel); b.position.y = y; g.add(b); }
+      for (let i = 0; i < 6; i++) { const w = mesh(tor(0.032, 0.006, 4, 12), M.darkleather, false); w.rotation.x = PI / 2; w.position.y = -0.14 + i * 0.045; g.add(w); }
+      for (let i = 0; i < 4; i++) { const w = mesh(tor(0.032, 0.006, 4, 12), M.darkleather, false); w.rotation.x = PI / 2; w.position.y = 0.42 + i * 0.045; g.add(w); }
+      const head = new THREE.Group(); head.position.y = 1.08;
+      const blade = mesh(extrude([[0.03, 0.15], [0.16, 0.24], [0.33, 0.3], [0.44, 0.17], [0.47, -0.02], [0.43, -0.22], [0.3, -0.36], [0.2, -0.4], [0.14, -0.26], [0.08, -0.12], [0.03, -0.08]], 0.03, 0.008), M.steel); head.add(blade);
+      const edge = mesh(extrude([[0.42, 0.18], [0.48, -0.02], [0.44, -0.24], [0.3, -0.38], [0.34, -0.26], [0.42, -0.05], [0.39, 0.16]], 0.016, 0.002), M.silver, false); head.add(edge);
+      const back = mesh(extrude([[-0.03, 0.08], [-0.16, 0.06], [-0.26, 0.0], [-0.16, -0.06], [-0.03, -0.08]], 0.026, 0.006), M.darksteel); head.add(back);
+      const sock = mesh(cyl(0.05, 0.05, 0.26, 12), M.blacksteel); head.add(sock);
+      rivets(head, [V(0.08, 0.1, 0.022), V(0.08, -0.06, 0.022), V(0.08, 0.1, -0.022), V(0.08, -0.06, -0.022)], 0.012, M.brass);
+      for (let i = 0; i < 4; i++) { const r = mesh(box(0.07, 0.014, 0.034), M.rune(0xff2a1a, 2.8), false); r.position.set(0.24, 0.12 - i * 0.08, 0); r.rotation.z = 0.25; head.add(r); }
+      const sk = skullMesh(M, 0.05); sk.position.set(0.02, -0.2, 0.0); sk.rotation.y = PI / 2; head.add(sk);
+      const topSpike = spike(0.03, 0.2, M.darksteel); topSpike.position.y = 0.2; head.add(topSpike);
+      g.add(head);
+      const pom = spike(0.028, 0.09, M.darksteel); pom.rotation.z = PI; pom.position.y = -0.4; g.add(pom);
+      tip.position.set(0.46, 1.06, 0); break; }
     case 'fang': case 'fangL': {
       // rogue curved, serrated fang dagger with poison channel
       const pts = []; for (let i = 0; i <= 8; i++) { const u = i / 8; pts.push([0.026 * (1 - u) + Math.sin(u * 2.2) * 0.04, u * 0.34]); }
@@ -313,7 +332,7 @@ function mergeUnder(root, objs, keep) {
 }
 
 // ch: Character in its rest pose (matrices updated); returns { update(dt, st) } for animated parts.
-export function equipArmor(ch, cls, M) {
+export function equipArmor(ch, cls, M, spec) {
   const b = ch.bones;
   const W = n => (b[n] ? b[n].getWorldPosition(new THREE.Vector3()) : new THREE.Vector3());
   const L = { lsh: W('upperarm_l'), rsh: W('upperarm_r'), lcl: W('clavicle_l'), rcl: W('clavicle_r'), chest: W('spine_03'), belly: W('spine_01'), pelvis: W('pelvis'), neck: W('neck_01'), head: W('Head'),
@@ -439,6 +458,17 @@ export function equipArmor(ch, cls, M) {
       furMantle(M.fur, 1.15);
       const big = pauldron(M, { r: 0.17 * k, plates: 3, mat: M.darksteel, trim: M.bronze, spikes: 3, skull: true });
       put('clavicle_l', big, L.lcl.clone().lerp(L.lsh, 0.8).add(V(0.03 * k, 0.07 * k, 0)));
+      if (spec === 'executioner') { // heavier, darker kit for the great axe: a second blackened pauldron and a chain baldric
+        const pr = pauldron(M, { r: 0.13 * k, plates: 3, mat: M.blacksteel, trim: M.bronze, spikes: 2 });
+        put('clavicle_r', pr, L.rcl.clone().lerp(L.rsh, 0.8).add(V(-0.03 * k, 0.06 * k, 0)), { yaw: PI });
+        const chain = new THREE.Group();
+        for (let i = 0; i < 11; i++) {
+          const u = i / 10, l = mesh(tor(0.016 * k, 0.005, 4, 8), M.darksteel, false);
+          l.position.set((u - 0.5) * 0.36 * k, (u - 0.5) * 0.42 * k, 0.15 * k - Math.abs(u - 0.5) * 0.04 * k);
+          l.rotation.set(i % 2 ? PI / 2 : 0, 0, 0.85); chain.add(l);
+        }
+        put('spine_03', chain, L.chest.clone().add(V(0, -0.02 * k, 0.02 * k)));
+      }
       // bone necklace with teeth
       const neck = new THREE.Group();
       for (let i = 0; i < 9; i++) { const a = (i / 8 - 0.5) * 2.0; const t = mesh(cone(0.012 * k, 0.06 * k, 5), M.bone); t.position.set(Math.sin(a) * 0.12 * k, -Math.cos(a) * 0.03 - 0.02, Math.cos(a) * 0.12 * k); t.rotation.x = PI; neck.add(t); }

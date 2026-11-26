@@ -3,7 +3,7 @@
 // floating combat text (with crits) and announcements. DOM writes are cached so the HUD
 // costs almost nothing per frame.
 import * as THREE from 'three';
-import { CLASSES, BUFF_ICONS } from '../data/classes.js';
+import { CLASSES, BUFF_ICONS, kitOf } from '../data/classes.js';
 import { RULES, segBlocked, rangeDist } from '../sim/sim.js';
 
 const $ = id => document.getElementById(id);
@@ -44,9 +44,9 @@ export class HUD {
 
   setup(fighters, myId) {
     this.myId = myId;
-    const me = fighters[myId], CM = CLASSES[me.cls];
+    const me = fighters[myId], CM = kitOf(me);
     this.myTeam = me.team;
-    setText($('nameA'), me.name); setText($('classA'), CM.name);
+    setText($('nameA'), me.name); setText($('classA'), `${CM.specIcon || ''} ${CM.specName || ''} ${CM.name}`.trim());
     const pA = $('portA'); pA.firstChild && pA.firstChild.nodeType === 3 && pA.removeChild(pA.firstChild);
     pA.innerHTML = `${CM.emblem}<span class="lvl">60</span>`; pA.style.cssText = emblemStyle(CM) + ';font-size:34px';
     $('resA').className = 'fill res-' + me.resType;
@@ -67,8 +67,8 @@ export class HUD {
     this.plateFor = {};
     let k = 0; for (const f of fighters) if (f.id !== myId) this.plateFor[f.id] = this.plates[k++];
     // party (allies) and arena (enemies) mini frames
-    const mini = (f, kind, key) => `<div class="mini ${kind}" data-id="${f.id}"><span class="mkey">${key}</span><div class="mic" style="${emblemStyle(CLASSES[f.cls])}">${CLASSES[f.cls].emblem}</div>
-      <div><div class="mname"><span>${f.name}</span><i>${CLASSES[f.cls].name}</i></div><div class="bar hp"><div class="fill"></div><span></span></div><div class="bar res"><div class="fill res-${f.resType}"></div></div><div class="mcast"><div></div></div><div class="mbuffs"></div></div></div>`;
+    const mini = (f, kind, key) => `<div class="mini ${kind}" data-id="${f.id}"><span class="mkey">${key}</span><div class="mic" style="${emblemStyle(kitOf(f))}">${kitOf(f).emblem}</div>
+      <div><div class="mname"><span>${f.name}</span><i>${kitOf(f).specIcon || ''} ${kitOf(f).name}</i></div><div class="bar hp"><div class="fill"></div><span></span></div><div class="bar res"><div class="fill res-${f.resType}"></div></div><div class="mcast"><div></div></div><div class="mbuffs"></div></div></div>`;
     const allies = fighters.filter(f => f.team === me.team && f.id !== myId);
     $('partyFrames').innerHTML = allies.map(f => mini(f, 'ally', 'F2')).join('');
     $('arenaFrames').innerHTML = two ? foes.map((f, i) => mini(f, 'foe', 'Arena ' + (i + 1))).join('') : '';
@@ -110,12 +110,12 @@ export class HUD {
     const tf = $('frameB');
     setCls(tf, 'empty', !tgtVisible);
     if (tgtVisible) {
-      const C = CLASSES[tgt.cls];
+      const C = kitOf(tgt);
       if (this.lastTarget !== tgt.id) {
         this.lastTarget = tgt.id;
         $('portB').innerHTML = C.emblem; $('portB').style.cssText = emblemStyle(C) + ';font-size:34px';
         $('resB').className = 'fill res-' + tgt.resType;
-        setText($('nameB'), tgt.name); setText($('classB'), C.name);
+        setText($('nameB'), tgt.name); setText($('classB'), `${C.specIcon || ''} ${C.specName || ''} ${C.name}`.trim());
         $('nameB').parentElement.className = 'uf-name hostile';
         this.lastBuffKey.B = '';
       }
@@ -148,7 +148,7 @@ export class HUD {
     const t = tgtVisible ? tgt : null;
     const dist = t ? rangeDist(me, t) : 999;
     const los = t ? !segBlocked(me.x, me.z, t.x, t.z, me.y + 1.5, t.y + 1.5) : false;
-    const A = CLASSES[me.cls].auto;
+    const A = kitOf(me).auto;
     if (this.atkSlot) {
       const frac = Math.min(1, (me.autoT || 0) / A.speed);
       setStyle(this.atkSlot.cd, 'background', frac > 0.02 ? `conic-gradient(transparent ${(1 - frac) * 360}deg, rgba(0,0,0,0.6) 0)` : 'none');
@@ -203,7 +203,7 @@ export class HUD {
 
   castbar(el, f, mine) {
     if (f.cast) {
-      const ab = CLASSES[f.cls].abilities[f.cast.idx];
+      const ab = kitOf(f).abilities[f.cast.idx];
       el.classList.remove('hidden', 'interrupted', 'done');
       setStyle(el.querySelector('.fill'), 'width', Math.min(100, f.cast.t / f.cast.dur * 100) + '%');
       setText(el.querySelector('span'), ab.name);

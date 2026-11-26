@@ -575,7 +575,7 @@ export class VFX {
       case 'fizzle': this.burst(ev.x, ev.y, ev.z, 0x888888, 10, 2, 0.4, 0.3); this.smokeBurst(ev.x, ev.y, ev.z, 0x444444, 4, 1, 0.6, 0.5, 0.3); break;
       case 'dmg': {
         const P = at(ev.id);
-        const meleeAb = ev.ab === 'auto' ? !!(F[ev.src] && ['rogue', 'warrior', 'berserker'].includes(F[ev.src].cls)) : ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker'].includes(ev.ab);
+        const meleeAb = ev.ab === 'auto' ? !!(F[ev.src] && ['rogue', 'warrior', 'berserker'].includes(F[ev.src].cls)) : ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skullsplitter', 'ground_breaker'].includes(ev.ab);
         if (meleeAb) {
           this.burst(P.x, P.y + 1.2, P.z, [0xff3a2a, 0xffe0c0], ev.crit || ev.big ? 26 : 10, 5, 0.35, 0.28, { gravity: 9 });
           const src = F[ev.src];
@@ -738,6 +738,18 @@ export class VFX {
         this.flash(ev.x, 1, ev.z, 0xff9a4a, 70, 0.5);
         this.shards(ev.x, 0.3, ev.z, 0x6a5a4a, 12, 8, 1.3, 0.45);
         break;
+      case 'ground_breaker': { // a fan of shattered ground in front of the executioner
+        const fy = ev.yaw ?? 0;
+        for (let i = 0; i < 7; i++) {
+          const a = fy + (i / 6 - 0.5) * 2.0, r = 2 + Math.random() * 4.5, x = ev.x + Math.sin(a) * r, z = ev.z + Math.cos(a) * r;
+          this.burst(x, 0.3, z, [0x8a6a4a, 0xd8b070], 10, 6, 0.6, 0.45, { up: 4, gravity: 14 });
+          this.shards(x, 0.2, z, 0x5a4a3a, 2, 6, 1.0, 0.3);
+        }
+        const fx = ev.x + Math.sin(fy) * 3, fz = ev.z + Math.cos(fy) * 3;
+        this.groundRing(fx, fz, 0xd8b070, 0.5, 4.5, 0.45);
+        this.smokeBurst(fx, 0.3, fz, 0x6a5a48, 16, 5, 1.2, 1.8, 0.55);
+        this.flash(fx, 1, fz, 0xffb070, 50, 0.4);
+        break; }
       case 'skull_leap_land':
         this.groundRing(ev.x, ev.z, 0xff6a3a, 0.5, 6, 0.5);
         this.smokeBurst(ev.x, 0.3, ev.z, 0x5a4a3a, 18, 5, 1.1, 1.6, 0.55);

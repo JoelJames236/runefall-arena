@@ -34,17 +34,19 @@ const LOOKS = {
   shaman: { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: ['Hair_Long', 'Hair_Beard'], hide: ['Arms_1'],
     tint: [0.42, 0.3, 0.2], tintAmt: 0.6, skinTint: [0.86, 0.72, 0.62], scale: 1.03, weapons: ['stormaxe', 'fireOrb'], idle: 'Idle_Loop', glow: 0x4ad8ff },
 };
+// spec looks ("class:spec"): overrides on top of the class look
+LOOKS['berserker:executioner'] = { ...LOOKS.berserker, weapons: ['greatAxe'], weaponScale: 1.08, tint: [0.14, 0.12, 0.11], tintAmt: 0.75, castPose: 'Sword_Block' }; // castPose: Skullsplitter wind-up
 
 // one-shot actions: kind -> per-class clip list (alternated) + whether it should use the full body
 const ACTIONS = {
-  attack: { berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'] },
+  attack: { 'berserker:executioner': ['TreeChopping_Loop'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'] },
   slash: { any: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Cross'] },
   stab: { any: ['Punch_Cross', 'Punch_Jab'] },
-  finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'], berserker: ['Sword_Regular_C'] },
+  finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'], berserker: ['Sword_Regular_C'], 'berserker:executioner': ['Sword_Attack'] },
   bash: { any: ['Shield_OneShot'], rogue: ['Melee_Hook'] },
   release: { any: ['Spell_Simple_Shoot'] },
   raise: { any: ['Spell_Simple_Shoot'], berserker: ['Punch_Cross'] },
-  slam: { any: ['Sword_Attack'], shaman: ['OverhandThrow'], berserker: ['OverhandThrow'] },
+  slam: { any: ['Sword_Attack'], shaman: ['OverhandThrow'], berserker: ['OverhandThrow'], 'berserker:executioner': ['Sword_Regular_C'] },
   dash: { any: ['Roll'], full: true },
   charge: { any: ['Shield_Dash'], berserker: ['Sword_Dash'], full: true },
   flinch: { any: ['Hit_Chest'] },
@@ -209,7 +211,7 @@ function makeWeapon(kind, look) {
 // How each weapon is held, in WORLD terms at the idle pose of a champion facing +Z:
 //   dir  = where the weapon's +Y (blade / shaft) points,  side = where its +X points,
 //   palm = offset from the bone toward the fingers (m),   up/fwd = extra world offsets.
-const ARMORY_KINDS = new Set(['runesword', 'kiteshield', 'warAxe', 'warAxeL', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
+const ARMORY_KINDS = new Set(['runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
 const GRIP = {
   sword: { bone: 'hand_r', dir: [0, 0.55, 1], side: [-1, 0, 0], palm: 0.085 },
   axe: { bone: 'hand_r', dir: [0, 0.35, 1], side: [-1, 0, 0], palm: 0.085 },
@@ -224,7 +226,9 @@ const GRIP = {
 Object.assign(GRIP, { runesword: GRIP.sword, kiteshield: GRIP.shield, fang: GRIP.daggerR, fangL: GRIP.daggerL, archstaff: GRIP.staff, sunmace: GRIP.mace, 
   // axes held upright-forward with the cutting edge facing the enemy
   warAxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 }, warAxeL: { bone: 'hand_l', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 },
-  stormaxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 } });
+  stormaxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 },
+  // two-handed executioner axe: haft up through the fist, blade turned outward so its crescent reads
+  greatAxe: { bone: 'hand_r', dir: [0, 0.92, 0.3], side: [-1, 0, 0.35], palm: 0.085 } });
 export const GRIPS = GRIP; // exposed for tuning
 
 const _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
@@ -251,9 +255,10 @@ function solveGrip(wp, bone, gp, bones) {
 
 // ------------------------------------------------------------------ champion
 export class Character {
-  constructor(cls) {
-    const look = LOOKS[cls] || LOOKS.warrior;
-    this.cls = cls; this.look = look;
+  constructor(cls, spec) {
+    const lookKey = spec && LOOKS[cls + ':' + spec] ? cls + ':' + spec : cls;
+    const look = LOOKS[lookKey] || LOOKS.warrior;
+    this.cls = cls; this.spec = spec; this.lookKey = lookKey; this.look = look;
     this.act = null; this.opacity = 1; this.time = Math.random() * 10; this.side = 0;
     this.root = new THREE.Group();
     const body = SkeletonUtils.clone(GL[look.outfit].scene);
@@ -305,7 +310,7 @@ export class Character {
       this.weapons[w] = wp;
     }
     // class armor, fitted to this body in the same rest pose
-    this.armor = equipArmor(this, cls, makeMaterials(TEX));
+    this.armor = equipArmor(this, cls, makeMaterials(TEX), spec);
     rest.stop(); this.mixer0.uncacheRoot(body); this.mixer0 = null;
     if (look.halo) {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.008, 6, 40), glowMat(0xffe2a0, 2.5));
@@ -322,8 +327,8 @@ export class Character {
     this.cur = null;   // active one-shot { kind, name, t, dur, full, weight }
     this.deadT = 0; this.vic = false; this.hitT = 0; this.hitBig = 0;
     const W = this.weapons, tipOf = k => W[k] && (W[k].userData.tip || W[k]);
-    this.focus = ['archstaff', 'sunmace', 'fireOrb', 'stormaxe', 'runesword', 'warAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
-    this.tipR = ['runesword', 'warAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
+    this.focus = ['archstaff', 'sunmace', 'fireOrb', 'stormaxe', 'runesword', 'warAxe', 'greatAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
+    this.tipR = ['runesword', 'warAxe', 'greatAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
     this.tipL = (W.fangL || W.warAxeL)?.userData.tip;
     this.tmpQ = new THREE.Quaternion(); this.tmpE = new THREE.Euler();
     this.setLoco(look.idle, 0);
@@ -350,7 +355,7 @@ export class Character {
   play(kind, dur = 0.5) {
     if (kind === 'flinch') { this.hit(1); return; }
     const spec = ACTIONS[kind]; if (!spec) return;
-    const list = spec[this.cls] || spec.any; if (!list) return;
+    const list = spec[this.lookKey] || spec[this.cls] || spec.any; if (!list) return;
     this.side = 1 - this.side;
     const name = list[this.side % list.length];
     const clip = CLIPS[name]; if (!clip) return;
@@ -405,7 +410,7 @@ export class Character {
     else if (st.air) loco = 'Jump_Loop';
     else if (speed > 1.12) { loco = 'Sprint_Loop'; rate = speed / 1.3; }
     else if (speed > 0.08) { loco = 'Jog_Fwd_Loop'; rate = Math.max(0.55, speed) * (st.back ? -0.85 : 1); }
-    else if (st.casting) loco = 'Spell_Simple_Idle_Loop';
+    else if (st.casting) loco = this.look.castPose || 'Spell_Simple_Idle_Loop';
     this.setLoco(loco, st.dead ? 0.15 : 0.2);
     const dying = st.dead;
     const deathA = this.actions['Death01:lower'];
@@ -428,8 +433,9 @@ export class Character {
     }
     if (this.prevAct && this.prevAct !== this.cur) { const p = this.prevAct; p.w = Math.max(0, p.w - dt / 0.1); p.a.setEffectiveWeight(p.w); p.fullA && p.fullA.setEffectiveWeight(0); if (p.w <= 0) this.prevAct = null; }
     // casting holds the spell pose on the upper body even while moving
-    const castW = st.casting && !dying && this.loco.name !== 'Spell_Simple_Idle_Loop' ? 1 : 0;
-    const castA = this.action('Spell_Simple_Idle_Loop', 'upper');
+    const castPose = this.look.castPose || 'Spell_Simple_Idle_Loop';
+    const castW = st.casting && !dying && this.loco.name !== castPose ? 1 : 0;
+    const castA = this.action(castPose, 'upper');
     this.castW = (this.castW || 0) + (castW - (this.castW || 0)) * Math.min(1, dt * 10);
 
     // ---- weights

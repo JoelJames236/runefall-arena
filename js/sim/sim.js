@@ -1,7 +1,7 @@
 // Authoritative combat simulation. Runs on the host (or locally vs. AI).
 // Pure logic — no rendering — so it can be serialized and driven over the network.
 // Supports any number of fighters split into two teams (1v1 and 2v2).
-import { CLASSES } from '../data/classes.js';
+import { CLASSES, kitOf, validSpec } from '../data/classes.js';
 
 export const ARENA_R = 29;
 export const PILLARS = [0, 1, 2, 3].map(i => {
@@ -167,7 +167,7 @@ export function moveFighter(f, inp, dt, others, canAct = true) {
   let mx = inp.mx || 0, mz = inp.mz || 0;
   const len = Math.hypot(mx, mz);
   if (len > 1) { mx /= len; mz /= len; }
-  let speed = CLASSES[f.cls].speed * speedMult(f);
+  let speed = kitOf(f).speed * speedMult(f);
   if (hasBuff(f, 'tempest')) speed *= 0.8;
   const wantsSprint = inp.sprint && mz > 0.2 && len > 0 && canAct && !stunned && !rooted;
   if (wantsSprint && f.stamina > 0.5) { speed *= 1.3; f.stamina = Math.max(0, f.stamina - 30 * dt); f.sprinting = true; }
@@ -203,9 +203,9 @@ export function moveFighter(f, inp, dt, others, canAct = true) {
 const freshStats = () => ({ dmg: 0, heal: 0, absorbed: 0, ccs: 0, interrupts: 0, crits: 0, kills: 0 });
 
 function makeFighter(id, spec) {
-  const C = CLASSES[spec.cls];
+  const sid = validSpec(spec.cls, spec.spec), C = kitOf({ cls: spec.cls, spec: sid });
   return {
-    id, cls: spec.cls, team: spec.team, name: spec.name || C.name, bot: !!spec.bot,
+    id, cls: spec.cls, spec: sid, team: spec.team, name: spec.name || C.name, bot: !!spec.bot,
     x: 0, y: 0, z: 0, vy: 0, yaw: 0, hp: C.hp, maxHp: C.hp,
     res: C.resStart ?? C.res, maxRes: C.res, resType: C.resType,
     cds: [0, 0, 0, 0, 0, 0], gcd: 0, cast: null, buffs: [], cp: 0, stamina: 100, alive: true,
@@ -249,7 +249,7 @@ export class Sim {
     this.round++;
     this.projectiles = []; this.zones = [];
     for (const f of this.fighters) {
-      const C = CLASSES[f.cls];
+      const C = kitOf(f);
       Object.assign(f, {
         hp: C.hp, maxHp: C.hp, res: C.resStart ?? C.res, maxRes: C.res, cds: [0, 0, 0, 0, 0, 0], gcd: 0, cast: null, buffs: [],
         cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, autoOn: false,
@@ -404,7 +404,7 @@ export class Sim {
 
   // Dry-run check; returns an error string or null.
   check(f, idx, ignoreGcd = false, opts = {}) {
-    const ab = CLASSES[f.cls].abilities[idx];
+    const ab = kitOf(f).abilities[idx];
     if (!ab || this.state !== 'fight' || !f.alive) return 'Not now';
     if (f.dash) return 'Busy';
     if (f.cast && ab.gcd) return 'Already casting';
@@ -437,7 +437,7 @@ export class Sim {
   }
 
   tryAbility(f, idx, opts = {}) {
-    const ab = CLASSES[f.cls].abilities[idx];
+    const ab = kitOf(f).abilities[idx];
     if (!ab) return 'bad';
     if (this.state !== 'fight') return 'Not now';
     if (f.cast && !ab.gcd && MOVE_ABS.has(ab.id)) this.cancelCast(f, false);
@@ -464,7 +464,7 @@ export class Sim {
   }
 
   execute(f, idx, t, opts) {
-    const ab = CLASSES[f.cls].abilities[idx];
+    const ab = kitOf(f).abilities[idx];
     f.res -= ab.cost;
     f.cds[idx] = ab.cd;
     if (!ab.keepStealth) this.removeBuff(f, 'stealth');
@@ -474,7 +474,7 @@ export class Sim {
 
   cancelCast(f, interrupted) {
     if (!f.cast) return;
-    const ab = CLASSES[f.cls].abilities[f.cast.idx];
+    const ab = kitOf(f).abilities[f.cast.idx];
     f.cast = null;
     this.event({ e: interrupted ? 'interrupted' : 'castfail', id: f.id, ab: ab.id });
   }
@@ -498,7 +498,7 @@ export class Sim {
     f.target = t.id;
     f.autoOn = true;
     if (explicit) {
-      const A = CLASSES[f.cls].auto, d = this.dist(f, t);
+      const A = kitOf(f).auto, d = this.dist(f, t);
       if (d > A.range + 0.3) this.event({ e: 'err', id: f.id, msg: 'Out of range' });
       else if (A.ranged && !this.los(f, t)) this.event({ e: 'err', id: f.id, msg: 'Target not in line of sight' });
       else if (!A.ranged && Math.abs(angleDiff(f.yaw, angleTo(f, t))) > 1.45) this.event({ e: 'err', id: f.id, msg: 'You must face your target' });
@@ -506,7 +506,7 @@ export class Sim {
   }
 
   updateAuto(f, dt) {
-    const A = CLASSES[f.cls].auto;
+    const A = kitOf(f).auto;
     f.autoT = Math.max(0, f.autoT - dt);
     if (!A || !f.autoOn) return;
     const t = this.fighters[f.target];
@@ -525,7 +525,7 @@ export class Sim {
   // ------------------------------------------------------------ per-tick fighter logic
   updateFighter(f, dt) {
     if (!f.alive) return;
-    const C = CLASSES[f.cls];
+    const C = kitOf(f);
     f.gcd = Math.max(0, f.gcd - dt);
     for (let i = 0; i < 6; i++) f.cds[i] = Math.max(0, f.cds[i] - dt);
     f.res = Math.min(f.maxRes, f.res + C.regen * dt);
@@ -656,11 +656,12 @@ export class Sim {
     // positional bonus: hits from behind deal 10% more damage
     const back = src !== tgt && !o.dot && isBehind(src, tgt);
     if (back) amt *= RULES.backMult;
-    const crit = direct && !o.noCrit && Math.random() < RULES.critChance;
-    if (crit) { amt *= RULES.critMult; src.stats.crits++; }
+    const SP = kitOf(src).passive || {}; // e.g. Executioner "Heavy Hands": more and bigger crits
+    const crit = direct && !o.noCrit && (o.forceCrit || Math.random() < RULES.critChance + (SP.critBonus || 0));
+    if (crit) { amt *= SP.critMult || RULES.critMult; src.stats.crits++; }
     amt *= bloodrage(src);
     const bz = getBuff(src, 'berserk'); if (bz) amt *= 1 + bz.value;
-    amt *= 1 - CLASSES[tgt.cls].defense;
+    amt *= 1 - kitOf(tgt).defense;
     for (const b of tgt.buffs) if (b.type === 'dr' || b.type === 'stoneskin') amt *= 1 - b.value;
     amt *= this.shieldwall(tgt);
     if (src.cls === 'warrior' && this.teamSize[src.team] >= 2) amt *= 1 + CLASSES.warrior.passive.dmg; // Shieldwall: team-play damage
@@ -911,7 +912,7 @@ export class Sim {
     return {
       s: this.state, st: r(this.stateT), r: this.round, sc: this.score, ft: r(this.fightT), dp: r(this.damp), w: this.winner,
       f: this.fighters.map(f => ({
-        id: f.id, cls: f.cls, team: f.team, name: f.name, bot: f.bot,
+        id: f.id, cls: f.cls, spec: f.spec, team: f.team, name: f.name, bot: f.bot,
         x: r(f.x), y: r(f.y), z: r(f.z), yaw: r(f.yaw), hp: Math.round(f.hp), maxHp: f.maxHp, res: Math.round(f.res), maxRes: f.maxRes, resType: f.resType,
         cds: f.cds.map(r), gcd: r(f.gcd), cast: f.cast ? { idx: f.cast.idx, t: r(f.cast.t), dur: f.cast.dur, tid: f.cast.tid } : null,
         buffs: f.buffs.map(b => ({ type: b.type, t: r(b.t), dur: r(b.dur), value: r(b.value), name: b.name, icon: b.icon, src: b.src, fx: b.fx })),

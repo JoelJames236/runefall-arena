@@ -115,6 +115,22 @@ kbd { display: inline-block; min-width: 26px; padding: 2px 7px; margin-right: 3p
 .cs-details::-webkit-scrollbar { width: 6px; } .cs-details::-webkit-scrollbar-thumb { background: var(--gold-dark); }
 .cs-details h3 { font-family: var(--font-title); font-size: 30px; margin: 0; letter-spacing: 0.08em; }
 .cs-details .role { font-family: var(--font-title); font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-dim); margin-bottom: 8px; }
+/* spec (talent) cards: pick one of the two specs of the class */
+.cs-details .spec-name { font-size: 17px; letter-spacing: 0.06em; margin-left: 6px; white-space: nowrap; }
+.spec-pick { margin: 6px 0 10px; }
+.spec-pick .sp-h { font-family: var(--font-title); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px; }
+.spec-pick .sp-h span { color: var(--muted); letter-spacing: 0.08em; text-transform: none; font-family: inherit; font-size: 12px; margin-left: 6px; }
+.sp-cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.spec-card { position: relative; display: flex; align-items: center; gap: 9px; text-align: left; padding: 9px 10px; background: rgba(20, 14, 10, 0.75); border: 1px solid rgba(232,195,122,0.22); border-radius: 3px; color: var(--text); cursor: pointer; font: inherit; transition: all 0.15s; }
+.spec-card:hover:not(.soon) { border-color: var(--sc); transform: translateY(-1px); }
+.spec-card.on { border-color: var(--sc); background: linear-gradient(160deg, color-mix(in srgb, var(--sc) 28%, transparent), rgba(20,14,10,0.85)); box-shadow: 0 0 16px color-mix(in srgb, var(--sc) 35%, transparent); }
+.spec-card .si { font-size: 24px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid var(--sc); background: rgba(0,0,0,0.45); flex: 0 0 auto; }
+.spec-card .sx { display: flex; flex-direction: column; min-width: 0; }
+.spec-card .sn { font-family: var(--font-title); font-weight: 700; font-size: 15px; letter-spacing: 0.06em; color: var(--sc); }
+.spec-card .st { font-size: 12px; line-height: 1.25; color: var(--muted); }
+.spec-card .sb { position: absolute; top: -8px; right: 6px; font-family: var(--font-title); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; padding: 1px 6px; border-radius: 2px; background: #2a2420; color: var(--muted); border: 1px solid rgba(255,255,255,0.12); }
+.spec-card .sb.on { background: var(--sc); color: #140c08; border-color: transparent; }
+.spec-card.soon { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.6); }
 .cs-details p { margin: 6px 0 12px; line-height: 1.4; color: #ddd3bd; }
 .gear { font-size: 15px; color: var(--muted); margin-bottom: 12px; }
 .gear b { color: var(--gold); font-weight: 600; }
@@ -133,10 +149,11 @@ kbd { display: inline-block; min-width: 26px; padding: 2px 7px; margin-right: 3p
 .cs-bottom { position: absolute; bottom: 22px; left: 26px; right: 26px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .difficulty { display: flex; align-items: center; gap: 8px; background: var(--panel); padding: 8px 12px; border: 1px solid rgba(232,195,122,0.2); }
 .difficulty span { font-family: var(--font-title); font-size: 12px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-right: 6px; }
-.cs-team { position: absolute; left: 26px; bottom: 90px; width: 250px; padding: 14px 16px; font-size: 16px; }
+.cs-team { position: absolute; left: 26px; bottom: 90px; width: 270px; padding: 12px 14px; font-size: 15px; }
 .cs-team h4 { font-family: var(--font-title); font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; margin: 4px 0 6px; }
 .cs-team .tm { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0; }
-.cs-team .tm select { width: 128px; padding: 4px; font-size: 14px; }
+.cs-team .tm select { width: 92px; padding: 3px; font-size: 12px; }
+.cs-team .tm > span { flex: 1; }
 .cs-team .ally h4 { color: var(--ally); } .cs-team .foe h4 { color: var(--enemy); }
 
 /* ---------- Room lobby ---------- */

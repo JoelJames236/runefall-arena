@@ -82,12 +82,30 @@ their champion so the match can finish.
 
 Full numbers live in [`js/data/classes.js`](js/data/classes.js) and are shown in-game on the class screen.
 
+### Specs
+
+Every class has **two specs**, picked on the class screen (spec cards under the class name) and locked for the
+match. Bots get a spec too: pick it next to the bot's class (2v2 vs bots and party lobby) or leave it on random.
+The spec shows on unit frames, nameplates and in the lobby.
+
+| Class | Spec 1 (original kit) | Spec 2 |
+| --- | --- | --- |
+| Mage | ❄ Frost | 🔥 Fire *(coming soon)* |
+| Rogue | 🗡 Subtlety | 🐍 Assassination *(coming soon)* |
+| Warrior | 🛡 Protection | ⚔ Arms *(coming soon)* |
+| Berserker | 🪓 Fury: two axes, fast flurries | 💀 **Executioner**: one great axe, slow swings, big crits (*Heavy Hands*: +12% crit chance, crits +80%); Skullsplitter, Ground Breaker, Iron Hide, Headtaker |
+| Priest | ✦ Discipline | 🌑 Shadow *(coming soon)* |
+| Shaman | ⚡ Elemental | 🐺 Enhancement *(coming soon)* |
+
+Design of all specs and the planned new classes: [`docs/CLASSES_AND_SPECS.md`](docs/CLASSES_AND_SPECS.md).
+
 ## Balance lab
 
 Open <http://localhost:8080/balance.html> to run headless AI-vs-AI simulations: a 1v1 win-rate matrix, or
 every 2v2 team composition against every other. It measures the AI's play rather than expert human play,
-so use it as a guide. Latest runs (hard AI, with the bridge): **1v1** — classes between 39% and 62% overall;
-**2v2** — every class between 40% and 53%, strongest composition Rogue + Priest (~68%).
+so use it as a guide. Every playable spec is its own entry (e.g. `berserker:fury`, `berserker:executioner`).
+Latest runs (hard AI, with the bridge): **1v1**: classes and specs between 41% and 64% overall;
+**2v2**: between 39% (both Berserker specs) and 58%, strongest composition Rogue + Priest (~77%).
 
 ## Project layout
 

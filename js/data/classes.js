@@ -204,6 +204,93 @@ export const CLASSES = {
   },
 };
 
+// ---------------------------------------------------------------- specs (talents)
+// Every class has two specs, chosen before the match and locked for it. Spec 0 is the class's
+// original kit. A spec can override stats, basic attack, passive, texts and abilities by slot
+// (abilities: { slotIndex: ability }); everything else comes from the class. `soon` = shown on the
+// class screen but not playable yet. See docs/CLASSES_AND_SPECS.md.
+export const SPECS = {
+  mage: [
+    { id: 'frost', name: 'Frost', icon: '❄', color: '#8fd8ff', tag: 'Hard-hitting caster · roots, blink, comet' },
+    { id: 'fire', name: 'Fire', icon: '🔥', color: '#ff7a2a', tag: 'Mobile burst · casts on the move', soon: true },
+  ],
+  rogue: [
+    { id: 'subtlety', name: 'Subtlety', icon: '🗡', color: '#a36bff', tag: 'Stealth, shadow leap, big finishers' },
+    { id: 'assassination', name: 'Assassination', icon: '🐍', color: '#6aff4a', tag: 'Poisons and stacking DoTs', soon: true },
+  ],
+  warrior: [
+    { id: 'protection', name: 'Protection', icon: '🛡', color: '#9ec0ff', tag: 'Sword & shield · protects the partner' },
+    { id: 'arms', name: 'Arms', icon: '⚔', color: '#e0604a', tag: 'Greatsword · bleeds and executes', soon: true },
+  ],
+  berserker: [
+    { id: 'fury', name: 'Fury', icon: '🪓', color: '#ff7a3a', tag: 'Two axes · fast flurries, lifesteal' },
+    {
+      id: 'executioner', name: 'Executioner', icon: '💀', color: '#c8b8a0', tag: 'One great axe · slow swings, huge crits',
+      role: 'Bloodraged Great-Axe Executioner',
+      desc: 'Trades speed for sheer weight: one colossal two-handed axe, slow swings and devastating critical hits. Passive — Bloodrage: up to 50% more damage as his health drops (in team play also up to 25% less damage taken). Heavy Hands: +12% critical strike chance, and critical hits deal +80% damage instead of +50%.',
+      weapon: 'One colossal two-handed executioner\'s axe', armor: 'Fur mantle, skull pauldron and war-kilt',
+      speed: 7.0, defense: 0.06,
+      rating: { health: 4, damage: 5, mobility: 2, defense: 3 },
+      passive: { name: 'Heavy Hands', critBonus: 0.12, critMult: 1.8 },
+      auto: { name: 'Great Axe Cleave', dmg: 60, speed: 3.0, range: 4.5, ranged: false, school: 'phys', glyph: '🪓', color: '#c8b8a0',
+        desc: 'Basic attack: a slow, crushing two-handed chop (60 damage every 3.0 sec). Melee range, generates rage. Heavy Hands crits hit +80%.' },
+      abilities: {
+        1: { id: 'skullsplitter', name: 'Skullsplitter', glyph: '🪓', color: '#ffb070', school: 'phys', cost: 30, cd: 15, gcd: true, cast: 1.2, range: MELEE, target: true, melee: true,
+          desc: 'Wind up for 1.2 sec (stand still), then bring the great axe down for 140 damage.',
+          exec(sim, c, t) { sim.damage(c, t, 140, { school: 'phys', ab: 'skullsplitter', big: true }); } },
+        2: { id: 'ground_breaker', name: 'Ground Breaker', glyph: '⛰', color: '#d8b070', school: 'phys', cost: 20, cd: 18, gcd: true, cast: 0, range: 0, target: false,
+          desc: 'Slam the axe into the ground: enemies within 7 yards in front of you take 50 damage, are knocked down (stunned) for 0.8 sec and slowed by 50% for 3 sec after.',
+          exec(sim, c) {
+            sim.event({ e: 'fx', fx: 'ground_breaker', id: c.id, x: c.x, z: c.z, yaw: c.yaw });
+            for (const e of sim.enemiesOf(c)) if (sim.dist(c, e) <= 7 && Math.abs(angleDiffD(c.yaw, Math.atan2(e.x - c.x, e.z - c.z))) <= 1.05) {
+              sim.damage(c, e, 50, { school: 'phys', ab: 'ground_breaker' }); sim.interrupt(e, c);
+              sim.addBuff(e, 'stun', 0.8, { src: c.id, cc: 'cc', name: 'Knocked Down', icon: '⛰' }); sim.addBuff(e, 'slow', 3.8, { value: 0.5, src: c.id, name: 'Shaken Ground', icon: '⛰' });
+            }
+          } },
+        4: { id: 'iron_hide', name: 'Iron Hide', glyph: '⛨', color: '#c0b8b0', school: 'phys', cost: 0, cd: 35, gcd: false, cast: 0, range: 0, target: false, allowCC: true,
+          desc: 'Harden your skin: take 20% less damage for 6 sec. Usable while stunned.',
+          exec(sim, c) { sim.addBuff(c, 'dr', 6, { value: 0.2, src: c.id, name: 'Iron Hide', icon: '⛨', fx: 'iron_bulwark' }); } },
+        5: { id: 'headtaker', name: 'Headtaker', glyph: '💀', color: '#ff6a4a', school: 'phys', cost: 30, cd: 24, gcd: true, cast: 0, range: MELEE, target: true, melee: true, signature: true,
+          desc: 'SIGNATURE — An executioner\'s blow for 90 damage. Against targets below 35% health it deals 130 damage and always crits.',
+          exec(sim, c, t) { const low = t.hp / t.maxHp < 0.35; sim.damage(c, t, low ? 130 : 90, { school: 'phys', ab: 'headtaker', big: true, forceCrit: low }); } },
+      },
+      look: 'executioner',
+    },
+  ],
+  priest: [
+    { id: 'discipline', name: 'Discipline', icon: '✦', color: '#ffe9a8', tag: 'Shields, heals and utility' },
+    { id: 'shadow', name: 'Shadow', icon: '🌑', color: '#a060ff', tag: 'Damage over time, fear, drain', soon: true },
+  ],
+  shaman: [
+    { id: 'elemental', name: 'Elemental', icon: '⚡', color: '#7ae0ff', tag: 'Lightning, magma and totems' },
+    { id: 'enhancement', name: 'Enhancement', icon: '🐺', color: '#c8fff0', tag: 'Two weapons in melee · spirit wolf', soon: true },
+  ],
+};
+function angleDiffD(a, b) { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; }
+
+export const specsOf = cls => SPECS[cls] || [];
+export const defaultSpec = cls => specsOf(cls)[0]?.id;
+// a playable spec id for this class (falls back to the class's first spec)
+export const validSpec = (cls, spec) => specsOf(cls).some(s => s.id === spec && !s.soon) ? spec : defaultSpec(cls);
+export const specInfo = (cls, spec) => specsOf(cls).find(s => s.id === validSpec(cls, spec));
+
+// The effective kit of a class + spec: class data with the spec's overrides merged in (cached).
+const KITS = new Map();
+export function kit(cls, spec) {
+  const sid = validSpec(cls, spec), key = cls + ':' + sid;
+  let k = KITS.get(key);
+  if (k) return k;
+  const C = CLASSES[cls], S = specsOf(cls).find(s => s.id === sid) || {};
+  k = { ...C, spec: sid, specName: S.name, specIcon: S.icon, specColor: S.color, look: S.look || null };
+  for (const f of ['role', 'desc', 'weapon', 'armor', 'hp', 'defense', 'speed', 'res', 'resStart', 'regen', 'rating', 'auto']) if (S[f] !== undefined) k[f] = S[f];
+  if (S.passive) k.passive = { ...C.passive, ...S.passive };
+  if (S.abilities) k.abilities = C.abilities.map((a, i) => S.abilities[i] || a);
+  KITS.set(key, k);
+  return k;
+}
+// effective kit of a fighter (anything with cls + spec)
+export const kitOf = f => kit(f.cls, f.spec);
+
 export const BUFF_ICONS = {
   stun: { icon: '✸', color: '#ffd27a', debuff: true }, root: { icon: '✳', color: '#bfefff', debuff: true },
   silence: { icon: '⊘', color: '#9ec0ff', debuff: true }, disorient: { icon: '☀', color: '#fff6c0', debuff: true },

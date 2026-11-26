@@ -32,11 +32,11 @@ import { VFX } from './vfx.js';
 import { Character as ProcCharacter } from './characters.js';
 import { Character as HeroCharacter, heroesReady } from './heroes.js';
 // realistic rigged champions when their assets loaded, procedural fallback otherwise
-const makeChar = cls => heroesReady() ? new HeroCharacter(cls) : new ProcCharacter(cls);
+const makeChar = (cls, spec) => heroesReady() ? new HeroCharacter(cls, spec) : new ProcCharacter(cls);
 import { PILLARS, BRIDGE, archY, floorAt, hasBuff, angleDiff } from '../sim/sim.js';
 // height for ground rings: on a sloped ramp lift them so the flat ring isn't half buried
 const ringY = (x, z, y, off) => { const fl = floorAt(x, z, y); return fl + (fl > 0.01 && fl < BRIDGE.H - 0.01 ? 0.42 : off); };
-import { CLASSES } from '../data/classes.js';
+import { CLASSES, kit, kitOf } from '../data/classes.js';
 
 const AB_ANIM = {
   frost_lance: 'release', flame_burst: 'release', glacial_nova: 'slam', mana_ward: 'raise', arcane_comet: 'release',
@@ -45,6 +45,7 @@ const AB_ANIM = {
   sacred_bolt: 'release', mend: 'raise', divine_aegis: 'raise', blinding_light: 'raise', halo_judgment: 'raise',
   lightning_lash: 'release', magma_burst: 'release', quake_totem: 'slam', gale_dash: 'dash', stoneskin_totem: 'slam', fire_spirit: 'raise',
   rending_axes: 'slash', headtaker: 'finisher', axe_throw: 'slam', undying_rage: 'raise', berserk: 'raise',
+  skullsplitter: 'finisher', ground_breaker: 'slam', iron_hide: 'raise',
 };
 export { AB_ANIM };
 
@@ -168,7 +169,7 @@ export class World {
   setFighters(specs, myId) {
     this.clearChars();
     const myTeam = specs[myId]?.team ?? 0;
-    this.chars = specs.map(s => makeChar(s.cls));
+    this.chars = specs.map(s => makeChar(s.cls, s.spec));
     for (const c of this.chars) this.scene.add(c.root);
     // team rings under each champion: gold = you, blue = ally, red = enemy
     this.rings = specs.map((s, i) => {
@@ -199,10 +200,10 @@ export class World {
     this.menuT = 0;
   }
 
-  showPreview(cls) {
+  showPreview(cls, spec) {
     this.mode = 'preview';
     this.clearChars();
-    const c = makeChar(cls);
+    const c = makeChar(cls, spec);
     c.root.position.set(0, 0, 0);
     this.scene.add(c.root);
     this.preview.char = c;
@@ -215,7 +216,7 @@ export class World {
   previewAttack() {
     const c = this.preview.char; if (!c) return;
     c.play('attack', 0.5);
-    const col = new THREE.Color(CLASSES[c.cls].auto.color).getHex();
+    const col = new THREE.Color(kit(c.cls, c.spec).auto.color).getHex();
     const p = c.focusWorld();
     this.vfx.burst(p.x, p.y, p.z, [col, 0xffffff], 24, 3, 0.5, 0.35);
   }
@@ -273,7 +274,7 @@ export class World {
       const v = dt > 0 ? Math.hypot(dx, dz) / dt : 0;
       cs.speed += (v - cs.speed) * (1 - Math.exp(-dt * 12));
       cs.px = rp.x; cs.pz = rp.z;
-      const baseSpeed = CLASSES[f.cls].speed;
+      const baseSpeed = kitOf(f).speed;
       // facing: face the target briefly when casting or after using an ability
       let yaw = f.yaw;
       const o = F[f.cast && f.cast.tid >= 0 ? f.cast.tid : f.target];
@@ -321,7 +322,7 @@ export class World {
     this.vfx.syncProjectiles(view.projectiles, dt);
     this.vfx.syncZones(view.zones, dt, myTeam, F);
     // stealth: never reveal an invisible enemy through their buff effects
-    this.vfx.syncCasts(F, this.chars, f => CLASSES[f.cls].abilities[f.cast.idx]?.school, dt, this.time);
+    this.vfx.syncCasts(F, this.chars, f => kitOf(f).abilities[f.cast.idx]?.school, dt, this.time);
     this.vfx.syncBuffs(F.map(f => (f.team !== myTeam && hasBuff(f, 'stealth')) ? { ...f, buffs: [] } : f), this.chars, dt, this.time);
     this.updateGameCamera(dt, F[followId] || me, input);
   }
@@ -352,7 +353,7 @@ export class World {
   }
   onAuto(id) {
     const ch = this.chars[id]; if (!ch) return;
-    ch.play('attack', { rogue: 0.36, warrior: 0.55, berserker: 0.5, mage: 0.42, priest: 0.42, shaman: 0.45 }[ch.cls] || 0.45);
+    ch.play('attack', ch.lookKey === 'berserker:executioner' ? 0.9 : { rogue: 0.36, warrior: 0.55, berserker: 0.5, mage: 0.42, priest: 0.42, shaman: 0.45 }[ch.cls] || 0.45);
     if (this.charState[id]) this.charState[id].faceT = 0.35;
   }
   onHitFlinch(id, crit) { const ch = this.chars[id]; if (ch && (!ch.act || crit)) ch.hit(crit ? 2 : 1); }
