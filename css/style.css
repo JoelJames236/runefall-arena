@@ -47,18 +47,68 @@ canvas#scene { position: fixed; inset: 0; width: 100vw; height: 100vh; display: 
 @keyframes pulse { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }
 .loadmsg { margin-top: 16px; color: var(--muted); font-size: 16px; text-shadow: 0 1px 4px #000; }
 
-/* ---------- Menu ---------- */
-#menu { flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: linear-gradient(90deg, rgba(0,0,0,0.0), rgba(0,0,0,0.35) 50%, rgba(0,0,0,0)); overflow-y: auto; padding: 20px 0; }
-.menu-buttons { display: flex; flex-direction: column; gap: 9px; width: 430px; max-width: 92vw; }
-.menu-row { display: flex; gap: 8px; } .menu-row .btn { flex: 1; padding: 10px 6px; font-size: 12px; }
-.name-row { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--panel-edge); padding: 8px 14px; border-radius: 3px; }
-.arena-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.arena-row > span { font-family: var(--font-title); font-size: 12px; letter-spacing: 0.14em; color: var(--gold-dim); text-transform: uppercase; }
-.name-row label { font-family: var(--font-title); font-size: 12px; letter-spacing: 0.14em; color: var(--gold-dim); text-transform: uppercase; }
-.name-row input { background: rgba(0,0,0,0.55); border: 1px solid var(--gold-dark); color: var(--gold-hi); font-family: var(--font-title); font-size: 16px; padding: 6px 10px; width: 190px; border-radius: 2px; }
-.record { font-family: var(--font-title); font-size: 13px; letter-spacing: 0.12em; color: var(--gold-dim); text-transform: uppercase; text-shadow: 0 1px 4px #000; margin-top: -8px; }
-.record b { color: var(--gold-hi); }
-.footer-note { position: absolute; bottom: 18px; font-family: var(--font-title); letter-spacing: 0.2em; color: var(--gold-dim); font-size: 12px; text-transform: uppercase; text-shadow: 0 1px 4px #000; }
+/* ---------- Menu ----------
+   Title and profile at the top, the champions on the bridge stay visible in the middle, the modes are cards at the
+   bottom in two groups (against bots / online), the rarely used pages sit in a slim nav top right. */
+#menu { flex-direction: column; align-items: center; justify-content: space-between; padding: 26px 24px 30px; overflow-y: auto;
+  background: linear-gradient(180deg, rgba(6,4,10,0.78) 0%, rgba(6,4,10,0.25) 26%, rgba(6,4,10,0) 42%, rgba(6,4,10,0) 52%, rgba(6,4,10,0.55) 72%, rgba(6,4,10,0.88) 100%); }
+.menu-head { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+@media (max-width: 1400px) { #menu { padding-top: 58px; } }
+.menu-nav { position: absolute; top: 18px; right: 22px; display: flex; gap: 6px; z-index: 2; }
+.nav-btn { display: flex; align-items: center; gap: 7px; font-family: var(--font-title); font-weight: 700; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text); background: rgba(14,10,20,0.72); border: 1px solid rgba(232,195,122,0.22); padding: 7px 12px; border-radius: 3px; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+.nav-btn span { color: var(--gold); font-size: 14px; width: 14px; text-align: center; }
+.nav-btn:hover { border-color: var(--gold); color: #fff6dc; background: rgba(40,28,18,0.85); }
+
+/* profile strip: name · record tiles · arena */
+.profile { display: flex; align-items: center; gap: 18px; padding: 9px 18px; }
+.profile > * + * { padding-left: 18px; border-left: 1px solid rgba(232,195,122,0.18); }
+.pf-name { display: flex; align-items: center; gap: 10px; }
+.pf-name label, .arena-row > span { font-family: var(--font-title); font-size: 11px; letter-spacing: 0.16em; color: var(--gold-dim); text-transform: uppercase; }
+.pf-name input { background: rgba(0,0,0,0.55); border: 1px solid var(--gold-dark); color: var(--gold-hi); font-family: var(--font-title); font-size: 16px; padding: 6px 10px; width: 170px; border-radius: 2px; }
+.pf-name input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 10px rgba(232,195,122,0.25); }
+.pf-record { display: flex; gap: 6px; }
+.pf-record .rt { min-width: 52px; text-align: center; padding: 3px 6px; border-radius: 2px; background: rgba(0,0,0,0.35); border: 1px solid rgba(232,195,122,0.12); }
+.pf-record .rt b { display: block; font-family: var(--font-title); font-size: 18px; line-height: 1.1; color: var(--gold-hi); }
+.pf-record .rt span { font-family: var(--font-title); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.pf-record .rt.w b { color: #9ae08a; } .pf-record .rt.l b { color: #e08a7a; } .pf-record .rt.hot b { color: #ffb04a; text-shadow: 0 0 8px rgba(255,150,40,0.6); }
+.arena-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; padding: 5px 10px; border-radius: 3px; background: radial-gradient(ellipse at center, rgba(6,4,10,0.7), rgba(6,4,10,0) 75%); }
+.arena-row > span { color: var(--gold) !important; text-shadow: 0 1px 4px #000; margin-right: 4px; }
+
+/* mode cards */
+.modes { display: flex; gap: 34px; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+.mode-group { display: flex; flex-direction: column; gap: 8px; }
+.mg-h { margin: 0; display: flex; align-items: center; gap: 10px; font-family: var(--font-title); font-size: 12px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold); text-shadow: 0 1px 4px #000; }
+.mg-h::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(232,195,122,0.5), transparent); }
+.cards { display: flex; gap: 12px; flex: 1; }
+.mode-card { --acc: var(--gold); position: relative; width: clamp(156px, 14.5vw, 205px); min-height: 196px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 16px 16px 14px; text-align: left; cursor: pointer; color: var(--text); font-family: var(--font-body); border-radius: 4px;
+  background: linear-gradient(180deg, rgba(34,24,30,0.92), rgba(12,8,14,0.94)); border: 1px solid rgba(232,195,122,0.25);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05); overflow: hidden;
+  transition: transform 0.18s ease, border-color 0.18s, box-shadow 0.18s; }
+.mode-card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--acc), transparent); opacity: 0.8; }
+.mode-card::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 30% 0%, color-mix(in srgb, var(--acc) 22%, transparent), transparent 60%); opacity: 0.6; pointer-events: none; transition: opacity 0.18s; }
+.mode-card:hover { transform: translateY(-5px); border-color: var(--acc); box-shadow: 0 16px 40px rgba(0,0,0,0.7), 0 0 24px color-mix(in srgb, var(--acc) 35%, transparent); }
+.mode-card:hover::after { opacity: 1; }
+.mode-card:active { transform: translateY(-2px); }
+.mode-card > span { position: relative; z-index: 1; }
+.mc-ic { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 6px;
+  color: var(--acc); border: 1px solid color-mix(in srgb, var(--acc) 70%, transparent); background: radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--acc) 35%, #1a1014), #0c080c 75%);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--acc) 30%, transparent), inset 0 0 10px rgba(0,0,0,0.7); }
+.mc-fmt { position: absolute !important; top: 18px; right: 14px; font-family: var(--font-title); font-weight: 700; font-size: 13px; letter-spacing: 0.08em; color: var(--acc); opacity: 0.9; }
+.mc-t { font-family: var(--font-title); font-weight: 700; font-size: clamp(13px, 1.25vw, 17px); letter-spacing: 0.06em; text-transform: uppercase; color: #fff2d6; line-height: 1.15; }
+.mc-d { font-size: 15px; line-height: 1.25; color: #cfc4ae; flex: 1; }
+.mc-b { margin-top: 6px; font-family: var(--font-title); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--acc);
+  padding: 3px 8px; border: 1px solid color-mix(in srgb, var(--acc) 45%, transparent); border-radius: 2px; background: rgba(0,0,0,0.35); }
+.mc-new { position: absolute !important; top: 12px; right: -30px; transform: rotate(35deg); width: 110px; text-align: center; padding: 2px 0; font-family: var(--font-title); font-weight: 900;
+  font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #fff; background: linear-gradient(90deg, #c8402a, #ff7a4a); box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+.mode-card.feature .mc-fmt { top: 42px; }
+.mode-card.feature { border-color: color-mix(in srgb, var(--acc) 50%, transparent); }
+@media (max-height: 760px) { .mode-card { min-height: 0; } .mc-d { font-size: 14px; } #menu .title-block.small h1 { font-size: clamp(32px, 4.6vw, 60px); } }
+@media (max-height: 640px) { .mc-d { display: none; } .mc-ic { width: 36px; height: 36px; font-size: 17px; } }
+@media (max-width: 1100px) { .modes { gap: 20px; } .cards { gap: 8px; } }
+@media (max-width: 900px) { #menu { justify-content: flex-start; gap: 22px; padding: 20px 12px 24px; } .menu-nav { position: static; order: 3; flex-wrap: wrap; justify-content: center; } .cards { flex-wrap: wrap; justify-content: center; } .mode-group { width: 100%; } .mode-card { width: calc(50% - 6px); max-width: 220px; }
+  .profile { flex-wrap: wrap; justify-content: center; gap: 10px; } .profile > * + * { border-left: 0; padding-left: 0; } #menu .title-block.small h1 { font-size: clamp(30px, 9vw, 60px); } #menu .title-block .sub { letter-spacing: 0.22em; font-size: 11px; } #menu .title-block .rule { width: 80vw; } }
 
 .btn { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 14px; color: var(--text);
   padding: 11px 22px; border: 1px solid rgba(232,195,122,0.45); background: linear-gradient(180deg, rgba(64, 44, 52, 0.94), rgba(22, 14, 22, 0.96));

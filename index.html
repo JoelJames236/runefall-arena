@@ -36,27 +36,68 @@
 
 <!-- Main menu -->
 <section id="menu" class="screen">
-  <div class="title-block small">
-    <div class="sub">Arena of Blade and Spell</div>
-    <h1>Runefall Arena</h1>
-    <div class="rule"></div>
-  </div>
-  <div class="name-row"><label for="playerName">Champion Name</label><input id="playerName" maxlength="16" spellcheck="false" autocomplete="off"></div>
-  <div class="record" id="record"></div>
-  <div class="arena-row" id="arenaPick"><span>Arena</span></div>
-  <nav class="menu-buttons">
-    <button class="btn big" data-act="duel"><span class="btn-ic">⚔</span>Duel vs. AI <small>1v1</small></button>
-    <button class="btn big" data-act="bots2v2"><span class="btn-ic">⛨</span>2v2 vs. Bots <small>you + ally vs Zigi &amp; Jöggu</small></button>
-    <button class="btn big" data-act="bg"><span class="btn-ic">⚑</span>5v5 Battleground <small>Thornwater Gorge · capture the flag vs. bots</small></button>
-    <button class="btn big" data-act="create"><span class="btn-ic">✦</span>Play with Friends <small>party · 1v1 · 2v2 · 5v5 battleground · matchmaking</small></button>
-    <button class="btn big" data-act="join"><span class="btn-ic">➤</span>Join Match <small>room code</small></button>
-    <div class="menu-row">
-      <button class="btn" data-act="browse">Champions</button>
-      <button class="btn" data-act="settings">Settings</button>
-      <button class="btn" data-act="howto">How to Play</button>
-    </div>
+  <nav class="menu-nav">
+    <button class="nav-btn" data-act="browse"><span>⚜</span>Champions</button>
+    <button class="nav-btn" data-act="howto"><span>?</span>How to Play</button>
+    <button class="nav-btn" data-act="settings"><span>⚙</span>Settings</button>
   </nav>
-  <div class="footer-note">Best of 7 · First to 4 round wins</div>
+
+  <header class="menu-head">
+    <div class="title-block small">
+      <div class="sub">Arena of Blade and Spell</div>
+      <h1>Runefall Arena</h1>
+      <div class="rule"></div>
+    </div>
+    <div class="profile panel">
+      <div class="pf-name"><label for="playerName">Champion</label><input id="playerName" maxlength="16" spellcheck="false" autocomplete="off"></div>
+      <div class="pf-record" id="record"></div>
+    </div>
+    <div class="arena-row" id="arenaPick"><span>Arena</span></div>
+  </header>
+
+  <div class="modes">
+    <section class="mode-group">
+      <h3 class="mg-h">Against Bots</h3>
+      <div class="cards">
+        <button class="mode-card" data-act="duel" style="--acc:#e8c37a">
+          <span class="mc-ic">⚔</span><span class="mc-fmt">1 v 1</span>
+          <span class="mc-t">Duel</span>
+          <span class="mc-d">One champion against one bot. Pick its class or leave it to chance.</span>
+          <span class="mc-b">Best of 7</span>
+        </button>
+        <button class="mode-card" data-act="bots2v2" style="--acc:#7ab8ff">
+          <span class="mc-ic">⛨</span><span class="mc-fmt">2 v 2</span>
+          <span class="mc-t">Team Fight</span>
+          <span class="mc-d">You and Aldor against Zigi &amp; Jöggu.</span>
+          <span class="mc-b">Best of 7</span>
+        </button>
+        <button class="mode-card feature" data-act="bg" style="--acc:#ff7a4a">
+          <span class="mc-new">New</span>
+          <span class="mc-ic">⚑</span><span class="mc-fmt">5 v 5</span>
+          <span class="mc-t">Battleground</span>
+          <span class="mc-d">Thornwater Gorge: steal the enemy flag and bring it home.</span>
+          <span class="mc-b">Capture the flag</span>
+        </button>
+      </div>
+    </section>
+    <section class="mode-group">
+      <h3 class="mg-h">Online</h3>
+      <div class="cards">
+        <button class="mode-card" data-act="create" style="--acc:#8ae08a">
+          <span class="mc-ic">✦</span><span class="mc-fmt">Party</span>
+          <span class="mc-t">Play with Friends</span>
+          <span class="mc-d">Open a lobby and share the link. 1v1, 2v2 or 5v5; bots fill empty slots.</span>
+          <span class="mc-b">Up to 10 players</span>
+        </button>
+        <button class="mode-card" data-act="join" style="--acc:#c8a0ff">
+          <span class="mc-ic">➤</span><span class="mc-fmt">Code</span>
+          <span class="mc-t">Join Match</span>
+          <span class="mc-d">Got a room code or an invite link from a friend? Jump in here.</span>
+          <span class="mc-b">Room code</span>
+        </button>
+      </div>
+    </section>
+  </div>
 </section>
 
 <!-- Class select -->

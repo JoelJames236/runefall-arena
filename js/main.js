@@ -109,7 +109,8 @@ $('playerName').addEventListener('input', e => { S.playerName = e.target.value.t
 // win/loss record (kept locally)
 const REC = JSON.parse(localStorage.getItem('runefall-record') || '{"w":0,"l":0,"streak":0,"best":0}');
 function renderRecord() {
-  $('record').innerHTML = `Record <b>${REC.w}</b> W · <b>${REC.l}</b> L${REC.streak > 1 ? ` · <b>${REC.streak}</b> win streak` : ''}${REC.best > 1 ? ` · best streak ${REC.best}` : ''}`;
+  const tile = (v, l, cls = '') => `<div class="rt ${cls}"><b>${v}</b><span>${l}</span></div>`;
+  $('record').innerHTML = tile(REC.w, 'Wins', 'w') + tile(REC.l, 'Losses', 'l') + tile(REC.streak, 'Streak', REC.streak > 1 ? 'hot' : '') + tile(REC.best, 'Best');
 }
 function recordResult(won) {
   if (won) { REC.w++; REC.streak++; REC.best = Math.max(REC.best, REC.streak); } else { REC.l++; REC.streak = 0; }
