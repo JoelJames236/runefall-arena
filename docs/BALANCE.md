@@ -52,6 +52,49 @@ damage); burst specs (Subtlety, Sharpshooter, Elemental, Summoner) have the high
 **Watch list for the next pass** (inside the band, but at its edges): Shadow Priest and Beastmaster in 1v1 (41 %),
 Elemental and Enhancement in 2v2 (41–42 %), Protection Warrior in 2v2 (62 %, Shieldwall), the Priests in 2v2 (59 %).
 
+## Change log — gameplay-feel update (cast reliability)
+
+The gameplay-feel update fixed how casts start (see `docs/GAMEFEEL.md`). That exposed a hidden handicap in every
+earlier lab run: **about half of the bots' cast-time spells failed** — a cast that left the spell queue while the bot
+was still running started and broke on the next tick, costing the global cooldown. (Players hit the same thing when
+they pressed a cast a moment before they stopped.) All cast-time specs had been tuned around that handicap, so with
+reliable casts they jumped far out of the band (same lab, 3,800 rounds): Elemental 50 → 77 %, Discipline 54 → 71 %,
+Frost 53 → 66 %; melee fell accordingly (Arms 62 → 44 %, Feral 41 → 36 %).
+
+Numbers changed to bring every spec back (four lab passes):
+
+| Spec | Change |
+| --- | --- |
+| Mage — Frost | Frost Lance 104 → 88 |
+| Priest — Discipline | Sacred Bolt 85 → 72, Mend 175 → 152 |
+| Priest — Shadow | Mind Blast 122 → 114 (64 % in 2v2 once its cast was reliable) |
+| Shaman — Elemental | Lightning Lash 85 → 68, Magma Burst 78 → 72 |
+| Shaman — Enhancement | Healing Surge 180 → 166 |
+| Necromancer — Summoner | Soul Rot 90 → 80 (its 70 damage over time is unchanged) |
+| Necromancer — Curser | health 1060 → 1150 (34 % in 2v2: no cast-time spells, so it gained nothing from the fix) |
+| Druid — Restoration | Regrowth 95 → 88 (its heal over time is unchanged) |
+
+Result with the new rules (hard AI): **1v1 41–58 %** (3,800 rounds), **2v2 42–64 %** (2,400 random team-ups) — the same
+band as before the update.
+
+| Spec | 1v1 % | 2v2 % | | Spec | 1v1 % | 2v2 % |
+| --- | --- | --- | --- | --- | --- | --- |
+| Mage — Frost | 54 | 49 | | Priest — Discipline | 55 | 57 |
+| Mage — Fire | 52 | 46 | | Priest — Shadow | 41 | 60 |
+| Rogue — Subtlety | 49 | 58 | | Shaman — Elemental | 55 | 43 |
+| Rogue — Assassination | 50 | 49 | | Shaman — Enhancement | 54 | 42 |
+| Warrior — Protection | 49 | 64 | | Hunter — Beastmaster | 41 | 42 |
+| Warrior — Arms | 46 | 47 | | Hunter — Sharpshooter | 46 | 48 |
+| Berserker — Fury | 45 | 51 | | Necromancer — Summoner | 55 | 47 |
+| Berserker — Executioner | 47 | 42 | | Necromancer — Curser | 56 | 45 |
+| Paladin — Crusader | 51 | 58 | | Druid — Feral | 47 | 44 |
+| Paladin — Protection | 49 | 53 | | Druid — Restoration | 58 | 54 |
+
+Watch list: Protection Warrior (64 %) and Shadow Priest (60 %) in 2v2; Beastmaster in both formats (41–42 %); Shadow
+Priest in 1v1 (41 %). The sustained-DPS / burst columns of the table above predate this pass (Frost, Discipline,
+Elemental and Summoner fillers are 10–20 % lower now). Other rule changes in the update are neutral for the lab: melee
+blows land 0.13–0.24 s after the swing starts (same swing timer), the melee facing arc is 200° instead of 166°.
+
 ## Change log — this update
 
 ### New class: Paladin (tuned over four lab passes)

@@ -18,6 +18,12 @@ const STUNLIKE = ['stun', 'disorient'];
 const RES_NAME = { mana: 'mana', energy: 'energy', rage: 'rage', focus: 'focus' };
 const MELEE_AUTO_RANGE = 4.5;
 export const ATTACK_BUFFER = 0.4; // s a left click stays queued while the swing timer finishes
+export const FACE_ARC = 1.75;     // rad to either side: melee swings and strikes need the target inside this frontal arc (200°)
+export const QUEUE_WINDOW = 0.5;  // s before the GCD / current cast ends in which the next ability press is buffered
+const MOVE_QUEUE = 0.45;          // s a cast pressed while still moving waits for you to stop before it gives up
+// A melee swing lands a moment after it starts (the weapon has to travel): heavier weapons take longer.
+// The renderer lines the swing animation up with this, so the blow, the number and the sound coincide.
+export const meleeHitT = A => Math.max(0.13, Math.min(0.24, 0.06 + A.speed * 0.065));
 
 // ---------------------------------------------------------------- helpers
 export const getBuff = (f, type) => f.buffs.find(b => b.type === type);
@@ -198,8 +204,10 @@ export function moveFighter(f, inp, dt, others, canAct = true) {
   { const c = ceilAt(f.x, f.z, f.y); if (f.y > c) { f.y = c; f.vy = Math.min(0, f.vy); } } // bump the vault
   collide(f, others);
   const moved = Math.hypot(f.x - ox, f.z - oz);
-  f.moving = moved > 0.2 * dt;
-  f.moveDir = f.moving ? { x: (f.x - ox) / moved, z: (f.z - oz) / moved } : null;
+  // "moving" means moving on your own input: being shoved by someone who walks into you must not
+  // break your cast (or Steady Aim)
+  f.moving = moved > 0.2 * dt && (mx !== 0 || mz !== 0);
+  f.moveDir = moved > 0.2 * dt ? { x: (f.x - ox) / moved, z: (f.z - oz) / moved } : null;
 }
 
 // ---------------------------------------------------------------- fighter
@@ -212,7 +220,7 @@ function makeFighter(id, spec) {
     x: 0, y: 0, z: 0, vy: 0, yaw: 0, hp: C.hp, maxHp: C.hp,
     res: C.resStart ?? C.res, maxRes: C.res, resType: C.resType,
     cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [], cp: 0, stamina: 100, alive: true,
-    moving: false, sprinting: false, autoT: 0, atkReq: 0, atkHold: false, forceSeq: 0, forceYaw: 0, locked: false, dash: null,
+    moving: false, sprinting: false, autoT: 0, atkReq: 0, atkHold: false, atkWarn: false, swing: null, forceSeq: 0, forceYaw: 0, locked: false, dash: null,
     target: -1, friend: -1, dr: {}, queued: null, moveDir: null,
     stats: freshStats(),
   };
@@ -256,7 +264,7 @@ export class Sim {
       const C = kitOf(f);
       Object.assign(f, {
         hp: C.hp, maxHp: C.hp, res: C.resStart ?? C.res, maxRes: C.res, cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [],
-        cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, atkReq: 0, atkHold: false, form: kit(f.cls, f.spec).defaultForm || null, petT: 0,
+        cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, atkReq: 0, atkHold: false, atkWarn: false, swing: null, form: kit(f.cls, f.spec).defaultForm || null, petT: 0,
         target: this.defaultTarget(f), friend: -1,
       });
       const s = this.spawnOf(f);
@@ -436,7 +444,7 @@ export class Sim {
       if (d > ab.range + 0.3) return 'Out of range';
       if (ab.minRange && d < ab.minRange) return 'Too close';
       if (!ab.melee && !this.los(f, t)) return 'Target not in line of sight';
-      if (ab.melee && Math.abs(angleDiff(f.yaw, angleTo(f, t))) > 1.45) return 'You must face your target';
+      if (ab.melee && Math.abs(angleDiff(f.yaw, angleTo(f, t))) > FACE_ARC) return 'You must face your target';
     }
     if (ab.ally) {
       const a = this.friendlyFor(f, opts.tid);
@@ -453,13 +461,22 @@ export class Sim {
     if (!ab) return 'bad';
     if (this.state !== 'fight') return 'Not now';
     if (f.cast && !ab.gcd && MOVE_ABS.has(ab.id)) this.cancelCast(f, false);
-    const err = this.check(f, idx, false, opts);
+    let err = this.check(f, idx, false, opts);
+    // Spell queue: a press shortly before the GCD or the current cast ends is buffered and fires the
+    // moment it can, so chaining abilities never drops an input.
+    if (err === 'GCD' || err === 'Already casting') {
+      const wait = Math.max(f.gcd, f.cast ? f.cast.dur - f.cast.t : 0);
+      if (wait <= QUEUE_WINDOW) { f.queued = { i: idx, dir: opts.dir, tid: opts.tid, t: wait + 0.3 }; return null; }
+      if (err === 'GCD') return null;
+    }
+    // A cast pressed while still running is held for a moment and starts as soon as you stop, instead of
+    // starting and breaking at once (which cost the GCD and felt like a dropped input).
+    const still = ab.cast > 0 && !ab.moveCast && f.moving;
+    if (!err && still) {
+      if (!opts.fromQueue) { f.queued = { i: idx, dir: opts.dir, tid: opts.tid, t: MOVE_QUEUE }; return null; }
+      err = "Can't cast while moving";
+    }
     if (err) {
-      if (err === 'GCD') {
-        // Spell queue window: buffer the press so it fires the moment the GCD ends.
-        if (f.gcd <= 0.4) f.queued = { i: idx, dir: opts.dir, tid: opts.tid, t: 0.5 };
-        return null;
-      }
       if (err !== 'Not now') this.event({ e: 'err', id: f.id, msg: err });
       return err;
     }
@@ -511,39 +528,64 @@ export class Sim {
     const t = this.hostileFor(f);
     if (!t) { if (explicit) this.event({ e: 'err', id: f.id, msg: 'No target' }); return; }
     if (f.target !== t.id) f.target = t.id;
-    f.atkReq = ATTACK_BUFFER;
+    // The click is buffered: if the swing can't start right now (a step out of range, target not quite in
+    // front, swing timer almost ready) it still goes off the moment it can within the buffer window.
+    // Only a click that never became a swing reports why (see updateAuto).
+    f.atkReq = ATTACK_BUFFER; f.atkWarn = !!explicit;
     if (explicit) {
       const A = kitOf(f).auto, d = this.dist(f, t);
-      if (d > (A.ranged ? A.range + 0.3 : MELEE_AUTO_RANGE)) { this.event({ e: 'err', id: f.id, msg: 'Out of range' }); f.atkReq = 0; }
-      else if (A.ranged && !this.los(f, t)) { this.event({ e: 'err', id: f.id, msg: 'Target not in line of sight' }); f.atkReq = 0; }
-      else if (!A.ranged && Math.abs(angleDiff(f.yaw, angleTo(f, t))) > 1.45) this.event({ e: 'err', id: f.id, msg: 'You must face your target' });
+      if (d > (A.ranged ? A.range + 0.3 : MELEE_AUTO_RANGE) + 4) { this.event({ e: 'err', id: f.id, msg: 'Out of range' }); f.atkWarn = false; } // far away: say so at once
     }
+  }
+
+  // why a basic attack on t can't start right now (null = it can)
+  autoBlock(f, t, A) {
+    const d = this.dist(f, t);
+    if (A.ranged) return d > A.range + 0.3 ? 'Out of range' : !this.los(f, t) ? 'Target not in line of sight' : null;
+    return d > MELEE_AUTO_RANGE ? 'Out of range' : Math.abs(angleDiff(f.yaw, angleTo(f, t))) > FACE_ARC ? 'You must face your target' : null;
   }
 
   updateAuto(f, dt) {
     const A = kitOf(f).auto;
     f.autoT = Math.max(0, f.autoT - dt);
+    // a melee swing that is already under way lands now (see meleeHitT)
+    if (f.swing && (f.swing.t -= dt) <= 0) { const s = f.swing; f.swing = null; this.landSwing(f, s, A); }
+    const had = f.atkReq > 0;
     f.atkReq = Math.max(0, f.atkReq - dt);
-    if (!A || !(f.atkHold || f.atkReq > 0)) return;
-    const t = this.fighters[f.target];
-    if (!t || t.team === f.team || !t.alive || !this.visibleTo(t, f)) { f.atkReq = 0; return; }
-    if (f.autoT > 0 || isStunned(f) || f.cast || f.dash || hasBuff(f, 'tempest')) return;
-    const d = this.dist(f, t);
-    if (A.ranged) { if (d > A.range + 0.3 || !this.los(f, t)) return; }
-    else if (d > MELEE_AUTO_RANGE || Math.abs(angleDiff(f.yaw, angleTo(f, t))) > 1.45) return;
-    f.autoT = A.speed / (hasBuff(f, 'berserk') ? 1.3 : 1); f.atkReq = 0;
+    if (!A || !(f.atkHold || had)) return;
+    const expired = had && f.atkReq <= 0;
+    let t = this.fighters[f.target];
+    if (!t || t.team === f.team || !t.alive || !this.visibleTo(t, f)) {
+      // holding the attack button with no (living, visible) target: pick up the best enemy in front
+      t = f.atkHold ? this.hostileFor(f) : null;
+      if (!t) { f.atkReq = 0; return; }
+      f.target = t.id;
+    }
+    const why = this.autoBlock(f, t, A);
+    if (why || f.autoT > 0 || f.swing || isStunned(f) || f.cast || f.dash || hasBuff(f, 'tempest')) {
+      if (why && expired && f.atkWarn) { f.atkWarn = false; this.event({ e: 'err', id: f.id, msg: why }); }
+      return;
+    }
+    f.autoT = A.speed / (hasBuff(f, 'berserk') ? 1.3 : 1); f.atkReq = 0; f.atkWarn = false;
     this.removeBuff(f, 'stealth');
-    this.event({ e: 'auto', id: f.id, tid: t.id, ranged: !!A.ranged });
+    const hit = A.ranged ? 0 : meleeHitT(A);
+    this.event({ e: 'auto', id: f.id, tid: t.id, ranged: !!A.ranged, hit });
     if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => {
       this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
       if (A.burn) this.kindle(f, t); // Fire Mage: Kindling
       if (A.hex) { const b = this.addBuff(t, 'hexed', 4, { src: f.id, name: 'Hex', icon: '☠' }); if (b) b.data.curse = true; } // Curser: Hex
     });
-    else {
-      this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
-      if (A.poison) this.poison(f, t); // Assassination: Venom Mastery
-      if (A.zap && Math.random() < A.zap) this.damage(f, t, 24, { school: 'nature', ab: 'maelstrom' }); // Enhancement: Maelstrom
-    }
+    else f.swing = { t: hit, tid: t.id };
+  }
+
+  // The blow of a melee swing: once a swing has started it always connects (the target can't sidestep a
+  // committed swing), unless the target died or became untouchable in the meantime.
+  landSwing(f, s, A) {
+    const t = this.fighters[s.tid];
+    if (!f.alive || !t || !t.alive || !A || A.ranged) return;
+    this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true, melee: true });
+    if (A.poison) this.poison(f, t); // Assassination: Venom Mastery
+    if (A.zap && Math.random() < A.zap) this.damage(f, t, 24, { school: 'nature', ab: 'maelstrom' }); // Enhancement: Maelstrom
   }
 
   // ------------------------------------------------------------ per-tick fighter logic
@@ -563,9 +605,11 @@ export class Sim {
     if (PET && this.state === 'fight' && !this.minionOf(f)) { f.petT = (f.petT ?? 0) - dt; if (f.petT <= 0) { this.summon(f, PET.kind, PET); f.petT = PET.respawn; } }
     // queued ability
     if (f.queued) {
-      f.queued.t -= dt;
-      if (f.gcd <= 0) { const q = f.queued; f.queued = null; this.tryAbility(f, q.i, q); }
-      else if (f.queued.t <= 0) f.queued = null;
+      const q = f.queued, qa = C.abilities[q.i]; q.t -= dt;
+      const busy = !qa || (qa.gcd && (f.gcd > 0 || !!f.cast));            // still on the GCD / finishing a cast
+      const running = !!qa && qa.cast > 0 && !qa.moveCast && f.moving;     // a cast waiting for you to stop
+      if (!busy && !running) { f.queued = null; this.tryAbility(f, q.i, { dir: q.dir, tid: q.tid, fromQueue: true }); }
+      else if (q.t <= 0) { f.queued = null; if (!busy && running) this.event({ e: 'err', id: f.id, msg: "Can't cast while moving" }); }
     }
     // casting
     if (f.cast) {
@@ -752,7 +796,7 @@ export class Sim {
       if (dis) { this.removeBuff(tgt, 'disorient'); }
       if (hasBuff(tgt, 'stealth')) this.removeBuff(tgt, 'stealth');
     }
-    this.event({ e: 'dmg', id: tgt.id, src: src.id, amt, abs: absorbed, school: o.school || 'phys', ab: o.ab, big: !!o.big, dot: !!o.dot, crit, back });
+    this.event({ e: 'dmg', id: tgt.id, src: src.id, amt, abs: absorbed, school: o.school || 'phys', ab: o.ab, big: !!o.big, dot: !!o.dot, crit, back, melee: !!o.melee, pet: !!o.pet });
     if (tgt.hp <= 0) { tgt.hp = 0; tgt.killer = src.id; }
     return amt;
   }
@@ -875,7 +919,7 @@ export class Sim {
       const step = p.speed * dt;
       if (d <= step + 0.4) {
         this.projectiles.splice(i, 1);
-        this.event({ e: 'hit', kind: p.kind, id: t.id, x: tx, y: ty, z: tz });
+        this.event({ e: 'hit', kind: p.kind, id: t.id, src: p.owner, x: tx, y: ty, z: tz });
         p.onHit();
       } else { p.x += dx / d * step; p.y += dy / d * step; p.z += dz / d * step; }
     }
@@ -1087,7 +1131,7 @@ export class Sim {
     const dead = this.fighters.filter(f => f.alive && f.hp <= 0);
     if (!dead.length) return;
     for (const f of dead) {
-      f.alive = false; f.cast = null; f.dash = null; f.locked = false; f.atkReq = 0; f.atkHold = false; f.buffs = [];
+      f.alive = false; f.cast = null; f.dash = null; f.locked = false; f.atkReq = 0; f.atkHold = false; f.swing = null; f.queued = null; f.buffs = [];
       const k = this.fighters[f.killer]; if (k && k.team !== f.team) k.stats.kills++;
       this.event({ e: 'death', id: f.id, killer: f.killer ?? -1 });
       for (const o of this.fighters) if (o.target === f.id) { o.atkReq = 0; if (o.cast && o.cast.tid === f.id) this.cancelCast(o, false); }

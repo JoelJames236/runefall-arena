@@ -83,13 +83,19 @@ their champion so the match can finish.
   is ready is buffered); holding the button keeps swinging. The swing timer caps the rate — clicking faster or
   holding never attacks faster. Selecting a target (Tab, or clicking a different enemy) never attacks, and switching
   targets drops a buffered click. Bots play by the same rule (they "hold the button" on their focus).
+- **Melee swings land on the blow**: a swing starts on your click and its damage lands 0.13–0.24 s later (heavier
+  weapons take longer), exactly when the animation connects. A swing that has started always lands. Melee needs the
+  target within 4.5 yd and inside your frontal 200° arc. A click a step out of range (or not quite facing) is kept
+  for 0.4 s and swings the moment it can; holding the button with no target picks up the nearest enemy in front.
 - **Hits from behind deal 10% more damage.** Direct hits and heals can **crit** (8%, +50%).
-- Cast-time spells require standing still; moving or jumping cancels them. The four rune pillars block
-  line of sight.
+- Cast-time spells require standing still; moving (on your own input — being shoved doesn't count) or jumping
+  cancels them. A cast pressed while still running waits up to 0.45 s for you to stop instead of failing.
+  The four rune pillars block line of sight.
 - **The bridge** spans the middle of the arena: run up a ramp and fight on the deck (4.4 m up), or run through the
   wide vaulted arch underneath. Deck, ramps and arch block line of sight; melee can't reach between deck and floor, and charges
   stop short of a target on the other level. Drop off the side to escape.
-- 1.0 s global cooldown with a short spell-queue window.
+- 1.0 s global cooldown. **Spell queue**: an ability pressed in the last 0.5 s of the global cooldown *or of your
+  current cast* is buffered and fires the moment it can.
 - Crowd control has diminishing returns (100% → 50% → 25% → immune, resets after 15 s).
 - **Dampening** starts after 60 s and steadily reduces healing and shields, so every round ends.
 - **Taunt (Challenge)**: a Protection Paladin's Shield Slam, Sentinel's Shield, Consecration and Guardian's Resolve

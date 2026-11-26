@@ -294,11 +294,13 @@ export class VFX {
   }
 
   // ---------------------------------------------------------------- projectiles (driven by view state)
-  syncProjectiles(list, dt) {
+  syncProjectiles(list, dt, chars) {
     const seen = new Set();
-    for (const p of list) {
+    for (const sp of list) {
+      let p = sp;
       seen.add(p.id);
       let m = this.projMeshes.get(p.id);
+      const fresh = !m;
       const st = PROJ_STYLE[p.kind] || PROJ_STYLE.flame_burst;
       if (!m) {
         const g = new THREE.Group();
@@ -321,6 +323,18 @@ export class VFX {
         g.userData.prev = new THREE.Vector3(p.x, p.y, p.z);
         g.userData.core = core;
         this.scene.add(g); this.projMeshes.set(p.id, g); m = g;
+      }
+      // The sim launches a projectile from the caster's chest; show it leaving the weapon tip / casting hand
+      // instead and let it merge into the true flight path over the first moments.
+      if (fresh && chars && chars[sp.owner] && chars[sp.owner].focusWorld) {
+        const h = chars[sp.owner].focusWorld(new THREE.Vector3());
+        const off = new THREE.Vector3(h.x - sp.x, h.y - sp.y, h.z - sp.z);
+        if (off.lengthSq() < 9) { m.userData.off = off; m.userData.offT = 0; m.userData.prev.set(h.x, h.y, h.z); m.position.copy(m.userData.prev); }
+      }
+      if (m.userData.off) {
+        const k = 1 - (m.userData.offT += dt) / 0.18;
+        if (k <= 0) m.userData.off = null;
+        else { const o = m.userData.off, e = k * k; p = { ...sp, x: sp.x + o.x * e, y: sp.y + o.y * e, z: sp.z + o.z * e }; }
       }
       const prev = m.userData.prev;
       m.position.set(p.x, p.y, p.z);
@@ -687,12 +701,13 @@ export class VFX {
       case 'fizzle': this.burst(ev.x, ev.y, ev.z, 0x888888, 10, 2, 0.4, 0.3); this.smokeBurst(ev.x, ev.y, ev.z, 0x444444, 4, 1, 0.6, 0.5, 0.3); break;
       case 'dmg': {
         const P = at(ev.id);
-        const meleeAb = ev.ab === 'auto' ? !!(F[ev.src] && (['rogue', 'warrior', 'berserker'].includes(F[ev.src].cls) || F[ev.src].spec === 'enhancement' || F[ev.src].spec === 'feral')) : ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skullsplitter', 'ground_breaker', 'envenom', 'crippling_poison', 'execute', 'bladestorm'].includes(ev.ab);
+        const meleeAb = ev.ab === 'auto' ? !!ev.melee : ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skullsplitter', 'ground_breaker', 'envenom', 'crippling_poison', 'execute', 'bladestorm', 'stormstrike', 'lava_lash', 'holy_strike', 'pal_shield_slam', 'rake', 'shred', 'ferocious_bite', 'maul', 'thrash'].includes(ev.ab);
         if (meleeAb) {
           this.burst(P.x, P.y + 1.2, P.z, [0xff3a2a, 0xffe0c0], ev.crit || ev.big ? 26 : 10, 5, 0.35, 0.28, { gravity: 9 });
           const src = F[ev.src];
           const col = src?.cls === 'rogue' ? (ev.ab === 'gutting_edge' ? 0xffcf4a : 0x9be36a) : ev.ab === 'shield_slam' ? 0x9ec0ff : 0xfff0d8;
           this.slashArc(P, src, col, ev.crit || ev.big);
+          if (ev.melee && src?.cls === 'paladin' && src.spec !== 'protection') { this.burst(P.x, P.y + 1.2, P.z, [0xffe680, 0xffffff], 18, 4, 0.35, 0.32, { drag: 3 }); this.sphereFlash(P.x, P.y + 1.2, P.z, 0xffe680, 0.2, 1.0, 0.2, 0.45); } // holy hammer blows land with the hit
         }
         if (ev.crit) { this.sphereFlash(P.x, P.y + 1.2, P.z, 0xfff0c0, 0.3, 1.5, 0.22, 0.55); this.ringBurst(P.x, P.y + 1.2, P.z, 0xffe0a0, 16, 6, 0.3, 0.3); this.flash(P.x, P.y + 1.4, P.z, 0xffe0a0, 25, 0.2); }
         if (ev.abs > 0 && !ev.amt) this.burst(P.x, P.y + 1.1, P.z, 0x9ac8ff, 8, 3, 0.4, 0.3);
@@ -752,7 +767,6 @@ export class VFX {
       // weapon trail sparks for melee swings
       const ch = ctx.chars[ev.id];
       if (ch && ch.weaponTipWorld) { const tp = ch.weaponTipWorld(V3); this.burst(tp.x, tp.y, tp.z, src.cls === 'rogue' ? 0x9be36a : 0xffc88a, 6, 1.5, 0.25, 0.2); }
-      if (src.cls === 'paladin' && src.spec !== 'protection') { const T = at(ev.tid); if (T) { this.burst(T.x, T.y + 1.2, T.z, [0xffe680, 0xffffff], 18, 4, 0.35, 0.32, { drag: 3 }); this.sphereFlash(T.x, T.y + 1.2, T.z, 0xffe680, 0.2, 1.0, 0.2, 0.45); } } // holy hammer blows
     }
   }
 

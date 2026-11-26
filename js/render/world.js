@@ -227,6 +227,9 @@ export class World {
     }
     this.scene.add(this.selRing, this.friendRing);
     this.selRing.visible = this.friendRing.visible = false;
+    // compile the champions' shaders during the countdown instead of on the first frame they are drawn
+    // (that first-frame compile was a visible hitch when the gates open)
+    try { const p = this.renderer.compileAsync && this.renderer.compileAsync(this.scene, this.camera); if (p && p.catch) p.catch(() => {}); } catch (e) { /* older renderer: compiles lazily as before */ }
   }
 
   showMenuScene() {
@@ -319,7 +322,7 @@ export class World {
       if ((f.cast || cs.faceT > 0) && o && o !== f && f.alive) yaw = Math.atan2(o.x - f.x, o.z - f.z);
       cs.faceT -= dt;
       if (cs.yaw === undefined) cs.yaw = yaw;
-      cs.yaw += angleDiff(cs.yaw, yaw) * (1 - Math.exp(-dt * 16));
+      cs.yaw += angleDiff(cs.yaw, yaw) * (1 - Math.exp(-dt * (i === myId ? 28 : 16))); // your own champion turns with the mouse almost at once
       ch.root.rotation.y = cs.yaw;
       // movement direction relative to facing (for backpedal/strafe animation)
       let back = false, strafe = 0;
@@ -357,7 +360,7 @@ export class World {
     this.friendRing.visible = !!(fr && fr.alive && this.chars[fr.id]);
     if (this.friendRing.visible) { const p = this.chars[fr.id].root.position; this.friendRing.position.set(p.x, ringY(p.x, p.z, p.y, 0.07), p.z); this.friendRing.rotation.z -= dt * 1.0; }
 
-    this.vfx.syncProjectiles(view.projectiles, dt);
+    this.vfx.syncProjectiles(view.projectiles, dt, this.chars);
     this.vfx.syncZones(view.zones, dt, myTeam, F);
     this.syncMinions(view.minions || [], dt, myTeam);
     // stealth: never reveal an invisible enemy through their buff effects
@@ -369,18 +372,24 @@ export class World {
   // Screen-space pick: the visible enemy closest to the crosshair (for click-targeting).
   pickEnemy(view, myId, sx = 0.5, sy = 0.45) {
     const F = view.fighters, me = F[myId]; if (!me) return -1;
-    let best = -1, bestD = 0.09;
+    let best = -1, bestD = 0.09, curD = Infinity;
     const v = new THREE.Vector3();
     for (const f of F) {
       if (f.team === me.team || !f.alive || hasBuff(f, 'stealth') || !this.chars[f.id]) continue;
       const p = this.chars[f.id].root.position;
+      let fd = Infinity;
       for (const h of [0.6, 1.2, 1.8]) {
         v.set(p.x, p.y + h, p.z).project(this.camera);
         if (v.z > 1) continue;
-        const d = Math.hypot((v.x * 0.5 + 0.5) - sx, ((-v.y * 0.5 + 0.5) - sy) * (innerHeight / innerWidth));
-        if (d < bestD) { bestD = d; best = f.id; }
+        fd = Math.min(fd, Math.hypot((v.x * 0.5 + 0.5) - sx, ((-v.y * 0.5 + 0.5) - sy) * (innerHeight / innerWidth)));
       }
+      if (f.id === me.target) curD = fd;
+      if (fd < bestD) { bestD = fd; best = f.id; }
     }
+    // In a brawl two enemies are often both near the crosshair. A click then keeps attacking the current
+    // target unless the other enemy is clearly the one being aimed at — otherwise half the attack clicks
+    // would only switch targets.
+    if (best >= 0 && best !== me.target && curD < 0.09 && bestD > curD * 0.55) return me.target;
     return best;
   }
 
@@ -390,12 +399,22 @@ export class World {
     if (kind) ch.play(kind, kind === 'raise' ? 0.7 : kind === 'slam' ? 0.6 : 0.42);
     if (this.charState[id]) this.charState[id].faceT = 0.5;
   }
-  onAuto(id) {
+  // hit: s until the blow of a melee swing lands in the sim — the swing animation is timed to connect then
+  onAuto(id, hit) {
     const ch = this.chars[id]; if (!ch) return;
-    ch.play('attack', ch.lookKey === 'berserker:executioner' || ch.lookKey === 'paladin' || ch.lookKey === 'warrior:arms' ? 0.85 : { rogue: 0.36, warrior: 0.55, berserker: 0.5, paladin: 0.5, mage: 0.42, priest: 0.42, shaman: 0.45 }[ch.cls] || 0.45);
+    ch.play('attack', ch.lookKey === 'berserker:executioner' || ch.lookKey === 'paladin' || ch.lookKey === 'warrior:arms' ? 0.85 : { rogue: 0.36, warrior: 0.55, berserker: 0.5, paladin: 0.5, mage: 0.42, priest: 0.42, shaman: 0.45 }[ch.cls] || 0.45, hit > 0 ? hit : undefined);
     if (this.charState[id]) this.charState[id].faceT = 0.35;
   }
   onHitFlinch(id, crit) { const ch = this.chars[id]; if (ch && (!ch.act || crit)) ch.hit(crit ? 2 : 1); }
+  // A blow connected: the victim flinches and flashes; a weapon blow briefly freezes the attacker's swing on
+  // the moment of contact (hit-stop), which is what makes a melee hit read as heavy.
+  onHit(id, src, o = {}) {
+    const ch = this.chars[id]; if (!ch) return;
+    if (!ch.act || o.crit) ch.hit(o.crit ? 2 : 1);
+    if (ch.flash) ch.flash(o.crit || o.big ? 1 : 0.55);
+    const at = this.chars[src];
+    if (o.melee && !o.pet && at && at !== ch && at.hitStop) at.hitStop(o.crit || o.big ? 0.085 : 0.05);
+  }
   onDash(id, fx) { const ch = this.chars[id]; if (ch) ch.play(fx === 'bull_rush' || fx === 'skull_leap' ? 'charge' : 'dash', fx === 'bull_rush' || fx === 'skull_leap' ? 0.7 : 0.35); }
 
   updateGameCamera(dt, me, input) {

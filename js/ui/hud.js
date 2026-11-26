@@ -298,6 +298,8 @@ export class HUD {
     }
   }
 
+  // crosshair tick confirming that one of my own blows connected (restarts on every hit)
+  hitMarker(big) { const el = $('crosshair'); if (!el) return; el.classList.remove('hit', 'hitbig'); void el.offsetWidth; el.classList.add(big ? 'hitbig' : 'hit'); }
   error(msg) { const el = $('errorText'); el.textContent = msg; el.classList.add('show'); this.errT = 1.4; }
 
   announce(text, cls = '', hold = false, sub = '') {

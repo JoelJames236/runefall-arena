@@ -570,7 +570,7 @@ function leaveOnline(msg, quiet) {
 // ------------------------------------------------------------------ match lifecycle
 function startMatch(roster, mode, myId) {
   clearTimeout(S.endTimer);
-  S.mode = mode; S.inGame = true; S.paused = false; S.acc = 0;
+  S.mode = mode; S.inGame = true; S.paused = false; S.acc = 0; S.prev = null;
   S.roster = roster; S.myId = myId;
   S.lastCount = null; S.lastWinner = -1;
   S.snaps = []; S.lastSnap = null; S.ack = 0; S.lastForceYaw = -1;
@@ -681,10 +681,31 @@ $('endMenu').addEventListener('click', () => {
 });
 
 // ------------------------------------------------------------------ views
-function currentView() {
+// The simulation advances in fixed 60 Hz steps, the screen refreshes whenever it likes (60 / 120 / 144 Hz,
+// uneven frame times). Drawing the raw sim state makes everything move in visible 16 ms hops, so the view
+// is drawn BETWEEN the last two sim states instead: positions are blended by how far the current frame is
+// into the next step (S.acc / STEP). Teleports (blinks, round resets) are not blended.
+const lerpPos = (o, p, a) => {
+  if (!p) return o;
+  const dx = o.x - p[0], dy = o.y - p[1], dz = o.z - p[2];
+  if (!dx && !dy && !dz) return o;
+  if (dx * dx + dy * dy + dz * dz > 2.25) return o; // moved > 1.5 in one step: a teleport, show it as one
+  return { ...o, x: p[0] + dx * a, y: p[1] + dy * a, z: p[2] + dz * a };
+};
+function capturePrev(sim) {
+  const P = S.prev || (S.prev = { f: [], p: new Map(), m: new Map() });
+  sim.fighters.forEach((f, i) => { const a = P.f[i] || (P.f[i] = [0, 0, 0]); a[0] = f.x; a[1] = f.y; a[2] = f.z; });
+  P.p.clear(); for (const p of sim.projectiles) P.p.set(p.id, [p.x, p.y, p.z]);
+  P.m.clear(); for (const m of sim.minions) P.m.set(m.id, [m.x, m.y, m.z]);
+}
+function currentView(raw = false) {
   if (S.mode === 'guest') return buildGuestView();
-  const sim = S.sim;
-  return { fighters: sim.fighters, projectiles: sim.projectiles, zones: sim.zones, minions: sim.minions, state: sim.state, stateT: sim.stateT, round: sim.round, score: sim.score, fightT: sim.fightT, damp: sim.damp, lastWinner: S.lastWinner };
+  const sim = S.sim, P = raw ? null : S.prev, a = Math.max(0, Math.min(1, S.acc / STEP));
+  return {
+    fighters: P ? sim.fighters.map((f, i) => lerpPos(f, P.f[i], a)) : sim.fighters,
+    projectiles: P ? sim.projectiles.map(p => lerpPos(p, P.p.get(p.id), a)) : sim.projectiles,
+    minions: P ? sim.minions.map(m => lerpPos(m, P.m.get(m.id), a)) : sim.minions,
+    zones: sim.zones, state: sim.state, stateT: sim.stateT, round: sim.round, score: sim.score, fightT: sim.fightT, damp: sim.damp, lastWinner: S.lastWinner };
 }
 
 function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
@@ -734,6 +755,9 @@ function onSnapshot(s) {
 }
 
 // ------------------------------------------------------------------ events → feedback
+// abilities whose damage is a weapon blow (melee impact sound, hit-stop); basic melee swings carry ev.melee
+const MELEE_HIT_ABS = new Set(['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skull_leap',
+  'skullsplitter', 'ground_breaker', 'envenom', 'crippling_poison', 'execute', 'bladestorm', 'stormstrike', 'lava_lash', 'holy_strike', 'pal_shield_slam', 'rake', 'shred', 'ferocious_bite', 'maul', 'thrash', 'wild_pounce', 'bull_rush']);
 function handleEvents(evs, view) {
   const F = view.fighters, my = S.myId, me = F[my];
   const myTeam = me ? me.team : 0;
@@ -753,21 +777,26 @@ function handleEvents(evs, view) {
         audio.play(CAST_SOUND[ab?.school] || 'cast_arcane', pos(ev.id));
         break; }
       case 'auto': {
-        world.onAuto(ev.id);
+        world.onAuto(ev.id, ev.hit); // ev.hit: s until the melee blow lands (the swing animation is lined up with it)
         const c = F[ev.id].cls;
         audio.play(ev.ranged ? 'auto_' + c : c === 'rogue' ? 'dagger' : 'swing', pos(ev.id));
         break; }
       case 'hit': audio.play(HIT_SOUND[ev.kind] || 'fire_hit', { x: ev.x, z: ev.z }); if (ev.kind === 'arcane_comet') world.addShake(ev.id === my ? 0.7 : 0.3); break;
-      case 'dmg':
+      case 'dmg': {
         hud.combatText(ev, F, my);
-        if (ev.ab === 'auto' && F[ev.src] && !['rogue', 'warrior', 'berserker'].includes(F[ev.src].cls)) { /* ranged auto impact sound comes from 'hit' */ }
-        else if (ev.ab === 'auto' || ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skull_leap'].includes(ev.ab)) audio.play(ev.crit || ev.big || ev.ab === 'rending_blow' ? 'melee_heavy' : 'melee_hit', pos(ev.id));
+        const meleeHit = ev.melee || MELEE_HIT_ABS.has(ev.ab); // ranged impacts get their sound from 'hit'
+        if (meleeHit) audio.play(ev.crit || ev.big || ev.ab === 'rending_blow' ? 'melee_heavy' : 'melee_hit', pos(ev.id));
         if (ev.crit && (ev.src === my || ev.id === my)) audio.play('crit', pos(ev.id));
-        if (!ev.dot && ev.amt > 0) world.onHitFlinch(ev.id, ev.crit);
+        const direct = !ev.dot && ev.amt > 0;
+        if (direct) world.onHit(ev.id, ev.src, { crit: ev.crit, big: ev.big, melee: meleeHit, pet: ev.pet });
         if (ev.id === my && ev.amt >= 90) world.addShake(Math.min(0.6, ev.amt / 400));
-        if (ev.src === my && ev.crit) world.addShake(0.12);
+        // my own blows: a confirming tick on the crosshair and a little weight on the camera
+        if (ev.src === my && ev.id !== my && direct && !ev.pet) {
+          hud.hitMarker(ev.crit || ev.big);
+          world.addShake(ev.crit ? 0.16 : ev.big ? 0.12 : meleeHit ? 0.05 : 0);
+        }
         if (ev.big || ev.crit) world.arena.crowdHype = Math.min(1, world.arena.crowdHype + 0.3);
-        break;
+        break; }
       case 'heal': case 'immune': hud.combatText(ev, F, my); if (ev.e === 'immune') audio.play('immune', pos(ev.id)); break;
       case 'buff':
         hud.combatText(ev, F, my);
@@ -844,6 +873,7 @@ function tickSim(dt, inp, maxSteps = 5) {
         } else inputs[id] = { mx: 0, mz: 0, yaw: f.yaw, abilities: [] };
       }
     }
+    capturePrev(sim); // the state before this step, for drawing between steps (currentView)
     sim.step(STEP, inputs);
     first = false; S.acc -= STEP; steps++;
   }
@@ -872,7 +902,7 @@ function gameFrame(dt) {
   const canControl = input.active && !overlay;
   if (!canControl) { raw.mx = 0; raw.mz = 0; raw.jump = false; raw.sprint = false; raw.abilities = []; raw.attack = false; raw.atkHeld = false; raw.friendKey = 0; }
   const dir = worldDir(raw);
-  const pre = currentView();
+  const pre = currentView(true);
   const meV = pre.fighters[S.myId];
   // Left click = basic attack on the current target. A click on a DIFFERENT enemy only selects it
   // (selecting never attacks), and that press does not start a held attack until the button is released.

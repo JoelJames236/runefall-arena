@@ -101,6 +101,11 @@ const ACTIONS = {
   flinch: { any: ['Hit_Chest'] },
 };
 
+// s into each attack clip at which the blow lands (measured: peak speed / furthest reach of the striking hand)
+const IMPACT = { Sword_Regular_A: 0.25, Sword_Regular_B: 0.27, Sword_Regular_C: 0.65, Sword_Attack: 0.4, TreeChopping_Loop: 0.13, Punch_Jab: 0.17, Punch_Cross: 0.22,
+  Melee_Hook: 0.25, Shield_OneShot: 0.1, OverhandThrow: 0.38, Zombie_Scratch: 0.58 };
+const STRIKE_LEAD = 0.07; // s between pressing an instant strike and its animation connecting
+
 const LOWER_ROOTS = ['pelvis', 'thigh_l', 'thigh_r', 'calf_l', 'calf_r', 'foot_l', 'foot_r', 'ball_l', 'ball_r', 'root'];
 
 // ------------------------------------------------------------------ loading
@@ -481,7 +486,9 @@ export class Character {
     this.bones = {};
     body.traverse(o => {
       if (o.isBone) this.bones[o.name] = o;
-      if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true; }
+      // each champion gets its own copy of the model's material (textures stay shared): otherwise two
+      // champions of the same spec would share one material, and a stealth fade or hit flash on one would show on both
+      if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true; o.material = o.material.clone(); (this.flashMats || (this.flashMats = [])).push(o.material); }
     });
     if (!champ.A) champ.A = analyse(body); // rest-pose frames are scale-free (relative to the body)
     // gameplay code addresses bones by the base skeleton's names (hand_r, spine_03, Head …): alias them
@@ -521,7 +528,10 @@ export class Character {
     lo.time = up.time = (this.loco.prev && this.actions[this.loco.prev + ':lower']) ? (this.actions[this.loco.prev + ':lower'].time / this.clip(this.loco.prev).full.duration) * this.clip(name).full.duration : 0;
   }
 
-  play(kind, dur = 0.5) {
+  // hitAt (basic melee swings): s from now at which the sim lands the blow. The clip is started / paced so
+  // its impact frame falls exactly there. Ability strikes deal their damage at once, so without hitAt the
+  // clip starts just before its impact frame (STRIKE_LEAD) instead of 0.2–0.3 s of wind-up after the number.
+  play(kind, dur = 0.5, hitAt) {
     if (kind === 'flinch') { this.hit(1); return; }
     const spec = ACTIONS[kind]; if (!spec) return;
     const list = spec[this.lookKey] || spec[this.cls] || spec.any; if (!list) return;
@@ -535,11 +545,19 @@ export class Character {
     // fit the clip into roughly the requested time (attacks follow the swing timer)
     const len = clip.full.duration;
     const want = Math.max(dur, 0.25);
-    a.timeScale = Math.max(0.8, Math.min(2.4, len / Math.max(want, len * 0.45)));
+    const ts = Math.max(0.8, Math.min(2.4, len / Math.max(want, len * 0.45)));
+    const I = IMPACT[name];
+    let t0 = 0, pre = 0, lead = 0;
+    if (I !== undefined) {
+      lead = hitAt !== undefined ? hitAt : STRIKE_LEAD;
+      if (I / ts > lead) t0 = I - lead * ts;               // long wind-up: start part-way into it
+      else if (I / ts < lead - 0.02) pre = I / lead;       // short wind-up: play it slower up to the blow
+    }
+    a.time = t0; a.timeScale = pre || ts;
     const fullA = full ? null : this.action(name, 'full');
-    if (fullA) { fullA.reset(); fullA.setLoop(THREE.LoopOnce, 1); fullA.clampWhenFinished = true; fullA.timeScale = a.timeScale; fullA.play(); }
+    if (fullA) { fullA.reset(); fullA.setLoop(THREE.LoopOnce, 1); fullA.clampWhenFinished = true; fullA.time = t0; fullA.timeScale = a.timeScale; fullA.play(); }
     this.prevAct = this.cur;
-    this.cur = { kind, name, t: 0, len: len / a.timeScale, a, fullA, full, w: 0 };
+    this.cur = { kind, name, t: 0, len: pre ? lead + (len - I) / ts : (len - t0) / ts, a, fullA, full, w: 0, ts, pre: pre ? lead : 0 };
     this.act = this.cur;
     this.lastSide = this.side;
   }
@@ -555,6 +573,9 @@ export class Character {
       this.cur = { kind: 'hit', name, t: 0, len: this.clip(name).full.duration / 1.4, a, fullA: null, full: false, w: 0 };
     }
   }
+
+  hitStop(t) { this.stopT = Math.max(this.stopT || 0, t); }
+  flash(k = 1) { if (this.flashMats && this.opacity > 0.9) this.flashK = Math.max(this.flashK || 0, k); }
 
   setOpacity(a) {
     if (Math.abs(a - this.opacity) < 0.01) return;
@@ -590,6 +611,10 @@ export class Character {
     }
     if (this.formModel) this.formModel.update(dt, (st.speed || 0) > 0.1, !!(this.cur && this.cur.t < 0.35 && this.cur.kind !== 'hit'), st);
     this.time += dt;
+    // hit flash: a short warm glow on the body when a blow lands on this champion
+    if (this.flashK > 0) { this.flashK = Math.max(0, this.flashK - dt * 5.5); const k = this.flashK * this.flashK * 0.42; for (const m of this.flashMats || []) m.emissive.setRGB(k, k * 0.82, k * 0.62); }
+    // hit-stop: the body holds for a few frames on the moment its weapon connects
+    if (this.stopT > 0) { this.stopT -= dt; dt *= 0.06; }
     const speed = st.speed || 0;
     // ---- choose the locomotion / pose clip
     let loco = this.look.idle, rate = 1;
@@ -615,6 +640,7 @@ export class Character {
     let actW = 0;
     if (c) {
       c.t += dt;
+      if (c.pre && c.t >= c.pre) { c.a.timeScale = c.ts; if (c.fullA) c.fullA.timeScale = c.ts; c.pre = 0; } // slowed wind-up is over: follow through at full speed
       const fadeIn = 0.08, fadeOut = Math.min(0.2, c.len * 0.35);
       c.w = c.out ? Math.max(0, c.w - dt / 0.12) : c.t < fadeIn ? c.t / fadeIn : c.t > c.len - fadeOut ? Math.max(0, (c.len - c.t) / fadeOut) : 1;
       if (c.t >= c.len || (c.out && c.w <= 0)) { c.a.setEffectiveWeight(0); c.fullA && c.fullA.setEffectiveWeight(0); this.cur = c.out ? this.cur : null; if (this.cur === c) this.cur = null; this.act = this.cur; }
