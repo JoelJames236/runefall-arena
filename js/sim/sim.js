@@ -2,6 +2,7 @@
 // Pure logic — no rendering — so it can be serialized and driven over the network.
 // Supports any number of fighters split into two teams (1v1 and 2v2).
 import { CLASSES, kit, kitOf, validSpec } from '../data/classes.js';
+import { tuningOf } from '../data/tuning.js';
 
 export const ARENA_R = 29;
 export const PILLARS = [0, 1, 2, 3].map(i => {
@@ -288,6 +289,7 @@ export class Sim {
     if (typeof roster === 'string') roster = [{ cls: roster, team: 0 }, { cls: clsB, team: 1 }];
     this.fighters = roster.map((s, i) => makeFighter(i, s));
     this.teamSize = [0, 1].map(t => this.fighters.filter(f => f.team === t).length);
+    this.fmt = this.teamSize[0] >= 2 && this.teamSize[1] >= 2 ? 'team' : 'duel'; // which arena tuning applies (data/tuning.js)
     this.projectiles = [];
     this.zones = [];
     this.minions = []; // pets & summons (max 1 per player)
@@ -811,7 +813,7 @@ export class Sim {
   damage(src, tgt, amount, o = {}) {
     if (!tgt.alive || this.state !== 'fight') return 0;
     if (src !== tgt && hasBuff(tgt, 'divine')) { this.event({ e: 'immune', id: tgt.id }); return 0; } // Paladin Divine Shield
-    let amt = amount * (0.94 + Math.random() * 0.12);
+    let amt = amount * (0.94 + Math.random() * 0.12) * tuningOf(this.fmt, src.cls, src.spec); // arena tuning: per spec and format
     if (hasBuff(src, 'divine')) amt *= 0.5; // ...but the shielded paladin hits half as hard
     // Paladin: Judged targets take more holy damage from that paladin; a Challenged (taunted) enemy
     // deals less damage to anyone but the paladin who challenged it
@@ -889,7 +891,7 @@ export class Sim {
 
   heal(src, tgt, amount, ab) {
     if (!tgt.alive) return 0;
-    let amt = amount * (0.95 + Math.random() * 0.1);
+    let amt = amount * (0.95 + Math.random() * 0.1) * (src ? tuningOf(this.fmt, src.cls, src.spec) : 1);
     const crit = Math.random() < RULES.critChance;
     if (crit) amt *= RULES.critMult;
     if (src && hasBuff(src, 'treeform')) amt *= 1.4; // Druid Tree of Life: +40% healing done

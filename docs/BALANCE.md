@@ -52,6 +52,57 @@ damage); burst specs (Subtlety, Sharpshooter, Elemental, Summoner) have the high
 **Watch list for the next pass** (inside the band, but at its edges): Shadow Priest and Beastmaster in 1v1 (41 %),
 Elemental and Enhancement in 2v2 (41–42 %), Protection Warrior in 2v2 (62 %, Shieldwall), the Priests in 2v2 (59 %).
 
+## Current state — arena tuning (auto-tuned)
+
+Ability numbers alone could not balance both formats: the kit that wins duels (self-healing, kiting, single-target
+burst) is not the kit that wins team fights (team defense, cleave, peels). After six manual passes specs still sat at
+61 % in one format and 37 % in the other (Elemental), or 44 % and 65 % (Feral).
+
+So every spec now has **one power factor per format** on all damage and healing it deals (`js/data/tuning.js`;
+`duel` in 1v1, `team` when both teams have two or more champions; shown on the champion screen). The factors were
+found by the lab's **Auto-tune** mode: measure the format with hard bots, multiply each factor by
+`1 − gain × (win % − 50)`, repeat with a shrinking gain (8 passes), then validate with a larger sample.
+
+| | Before | After auto-tune (validation run) |
+| --- | --- | --- |
+| 1v1 | 40.5–59.6 % (spread 4.8) | **46.4–53.0 %** (spread 1.8) — 7,600 rounds, 40 per pairing |
+| 2v2 | 37.3–62.5 % (spread 7.0) | **47.5–54.6 %** (spread 1.8) — 6,000 random team-ups |
+
+"Spread" is the standard deviation of the 20 win rates around 50 %. The sampling noise of these runs is about ±1.8
+points per spec, so what is left is mostly noise: the lab cannot tell these specs apart any more.
+
+| Spec | 1v1 factor | 1v1 % | 2v2 factor | 2v2 % |
+| --- | --- | --- | --- | --- |
+| Mage — Frost | 0.959 | 47.8 | 1.145 | 47.5 |
+| Mage — Fire | 0.986 | 52.2 | 1.125 | 51.8 |
+| Rogue — Subtlety | 1.004 | 48.5 | 0.918 | 51.0 |
+| Rogue — Assassination | 1.016 | 52.4 | 0.927 | 49.9 |
+| Warrior — Protection | 1.000 | 48.1 | 0.894 | 51.1 |
+| Warrior — Arms | 0.997 | 51.1 | 1.026 | 54.6 |
+| Berserker — Fury | 0.999 | 53.0 | 0.989 | 48.8 |
+| Berserker — Executioner | 1.006 | 51.4 | 0.946 | 49.6 |
+| Paladin — Crusader | 1.029 | 49.9 | 0.971 | 50.3 |
+| Paladin — Protection | 1.005 | 49.8 | 0.979 | 50.5 |
+| Priest — Discipline | 1.021 | 50.1 | 1.017 | 53.0 |
+| Priest — Shadow | 1.031 | 46.4 | 0.950 | 49.1 |
+| Shaman — Elemental | 0.974 | 49.6 | 1.090 | 50.7 |
+| Shaman — Enhancement | 0.987 | 51.8 | 0.937 | 47.6 |
+| Hunter — Beastmaster | 0.990 | 50.8 | 1.076 | 49.4 |
+| Hunter — Sharpshooter | 1.018 | 49.9 | 1.110 | 49.8 |
+| Necromancer — Summoner | 0.977 | 51.0 | 1.018 | 50.3 |
+| Necromancer — Curser | 0.954 | 48.5 | 0.997 | 47.8 |
+| Druid — Feral | 1.023 | 50.4 | 0.903 | 49.4 |
+| Druid — Restoration | 1.015 | 47.1 | 1.010 | 47.7 |
+
+The 1v1 factors are small (−5 % … +3 %): the manual passes had the duel nearly right. The 2v2 factors are the real
+correction (−11 % … +15 %): ranged burst specs gain (longer team fights blunt burst), team-defense and cleave specs
+give some back (Protection Warrior, Feral, the Rogues).
+
+**What this does and doesn't mean.** The win rates are bot against bot on the hardest difficulty. Bots aim and react
+the same for every spec, so a spec that is hard for humans to play well (or easy) will sit elsewhere in real matches.
+**After changing an ability or a rule, re-run Auto-tune** (it starts from the factors in the file) and paste the
+printed table into `js/data/tuning.js` — an old table on a changed kit is no longer balanced.
+
 ## Change log — one attack rhythm, hittable summons
 
 - **Swing timers 1.5–2.2 s for every basic attack** (were 1.2–3.0 s), damage per hit rescaled so damage per second

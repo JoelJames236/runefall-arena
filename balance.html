@@ -13,8 +13,8 @@
 </head>
 <body>
 <h2>Balance Lab — AI vs. AI simulations</h2>
-<p>1v1: win rate of the row class against the column class. 2v2: every pair of team compositions plays each other; each class's overall win rate and the strongest/weakest compositions are listed. Both sides use the same AI difficulty, so this measures the AI's play — use it as a guide.</p>
-<label>Mode <select id="mode"><option value="1v1">1v1 matrix</option><option value="2v2">2v2 compositions</option><option value="bench">Spec benchmark (dummy)</option></select></label>
+<p>1v1: win rate of the row class against the column class. 2v2: every pair of team compositions plays each other; each class's overall win rate and the strongest/weakest compositions are listed. Both sides use the same AI difficulty, so this measures the AI's play — use it as a guide. <b>Auto-tune</b> finds the per-spec power factors of <code>js/data/tuning.js</code>: it measures the format (1v1: "rounds per pairing"; 2v2: 150 × that many random games), moves every factor against its distance from 50 %, repeats eight times and prints the table to paste into the file. It starts from the factors already in the file.</p>
+<label>Mode <select id="mode"><option value="1v1">1v1 matrix</option><option value="2v2">2v2 compositions</option><option value="bench">Spec benchmark (dummy)</option><option value="tune-duel">Auto-tune 1v1 (8 passes)</option><option value="tune-team">Auto-tune 2v2 (8 passes)</option></select></label>
 <label>Rounds per pairing <input id="n" type="number" value="16" min="2" max="200"></label>
 <label>AI <select id="d"><option>hard</option><option>normal</option><option>easy</option></select></label>
 <button id="go">Run</button>
@@ -23,6 +23,7 @@
 import { Sim } from './js/sim/sim.js';
 import { AI } from './js/sim/ai.js';
 import { CLASS_ORDER, specsOf } from './js/data/classes.js';
+import { TUNING } from './js/data/tuning.js';
 // every playable class + spec is its own entry (classes with one playable spec keep the plain class name)
 const ENTRIES = CLASS_ORDER.flatMap(c => { const ps = specsOf(c).filter(s => !s.soon); return ps.map(s => ({ key: ps.length > 1 ? c + ':' + s.id : c, cls: c, spec: s.id })); });
 const E = Object.fromEntries(ENTRIES.map(e => [e.key, e])), KEYS = ENTRIES.map(e => e.key);
@@ -145,11 +146,36 @@ async function runBench(N, diff, out) {
   window.__result = { bench: rows.map(r => ({ key: r.key, dps: +r.dps.toFixed(1), burst: +r.burst.toFixed(1), surv: +r.surv.toFixed(1), hps: +r.hps.toFixed(1) })) };
 }
 
+// Auto-tune (data/tuning.js): measure a format, move every spec's power factor against its distance from 50 %,
+// repeat with a shrinking step, then print the table to paste into js/data/tuning.js.
+async function runTune(fmt, N, diff, out) {
+  const SPECS = ENTRIES.map(e => ({ ...e, id: e.cls + ':' + e.spec }));
+  const measure = async label => {
+    const w = {}, n = {}; for (const e of SPECS) { w[e.id] = 0; n[e.id] = 0; }
+    const add = (L, res) => L.forEach((e, k) => { n[e.id]++; w[e.id] += res < 0 ? 0.5 : ((k < L.length / 2 ? 0 : 1) === res ? 1 : 0); });
+    const play = L => add(L, round(L.map((e, k) => ({ cls: e.cls, spec: e.spec, team: k < L.length / 2 ? 0 : 1 })), diff).w);
+    if (fmt === 'duel') for (let i = 0; i < SPECS.length; i++) { for (let j = i + 1; j < SPECS.length; j++) for (let r = 0; r < N; r++) play(r % 2 ? [SPECS[j], SPECS[i]] : [SPECS[i], SPECS[j]]); out.textContent = `${label}: ${SPECS[i].id}`; await tick(); }
+    else { const pick = () => SPECS[Math.floor(Math.random() * SPECS.length)]; for (let g = 0; g < N * 150; g++) { play([pick(), pick(), pick(), pick()]); if (g % 20 === 0) { out.textContent = `${label}: game ${g} / ${N * 150}`; await tick(); } } }
+    return Object.fromEntries(SPECS.map(e => [e.id, 100 * w[e.id] / n[e.id]]));
+  };
+  const log = [];
+  for (const gain of [0.005, 0.005, 0.004, 0.003, 0.003, 0.002, 0.002, 0]) {
+    const pct = await measure(`pass ${log.length + 1} / 8`), v = Object.values(pct);
+    log.push({ min: Math.min(...v), max: Math.max(...v), sd: Math.sqrt(v.reduce((s, x) => s + (x - 50) ** 2, 0) / v.length), pct });
+    if (gain) for (const e of SPECS) TUNING[fmt][e.id] = Math.round(1000 * Math.max(0.7, Math.min(1.35, (TUNING[fmt][e.id] ?? 1) * (1 - gain * (pct[e.id] - 50))))) / 1000;
+  }
+  const last = log[log.length - 1];
+  out.innerHTML = '<table><tr><th>pass</th><th>lowest</th><th>highest</th><th>spread (sd)</th></tr>' + log.map((l, i) => `<tr><td>${i + 1}</td><td>${l.min.toFixed(1)}%</td><td>${l.max.toFixed(1)}%</td><td>${l.sd.toFixed(1)}</td></tr>`).join('') + '</table>' +
+    '<table><tr><th>spec</th><th>factor</th><th>win % (last pass)</th></tr>' + SPECS.map(e => `<tr><th>${e.id}</th><td>${(TUNING[fmt][e.id] ?? 1).toFixed(3)}</td><td>${last.pct[e.id].toFixed(1)}%</td></tr>`).join('') + '</table>' +
+    `<p>Paste into <code>js/data/tuning.js</code> as <code>${fmt}</code>:</p><pre>${JSON.stringify(TUNING[fmt], null, 1).replace(/\n /g, ' ').replace(/\n/g, ' ')}</pre>`;
+  window.__result = { tune: fmt, factors: { ...TUNING[fmt] }, log };
+}
+
 document.getElementById('go').onclick = async () => {
   const N = +document.getElementById('n').value, diff = document.getElementById('d').value, mode = document.getElementById('mode').value;
   const out = document.getElementById('out'); out.textContent = 'Running…'; window.__result = null;
   await tick();
-  if (mode === '2v2') await run2v2(N, diff, out); else if (mode === 'bench') await runBench(Math.max(1, Math.round(N / 4)), diff, out); else await run1v1(N, diff, out);
+  if (mode.startsWith('tune-')) await runTune(mode.slice(5), N, diff, out); else if (mode === '2v2') await run2v2(N, diff, out); else if (mode === 'bench') await runBench(Math.max(1, Math.round(N / 4)), diff, out); else await run1v1(N, diff, out);
 };
 </script>
 </body>

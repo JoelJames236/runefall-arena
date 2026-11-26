@@ -14,6 +14,7 @@ import { AI } from './sim/ai.js';
 import { Net } from './net.js';
 import { ARENAS } from './render/arenas.js';
 import { CLASSES, CLASS_ORDER, BOT_NAMES, kit, kitOf, specsOf, validSpec } from './data/classes.js';
+import { tuningOf } from './data/tuning.js';
 
 const $ = id => document.getElementById(id);
 const STEP = 1 / 60;
@@ -241,6 +242,12 @@ function selectSpec(cls, spec) {
   selectClass(cls);
 }
 
+// the spec's arena tuning (data/tuning.js) as text: "1v1 −4 % · 2v2 +6 % damage and healing"
+function tuneText(cls, spec) {
+  const f = v => (Math.abs(v - 1) < 0.005 ? '±0 %' : (v > 1 ? '+' : '−') + Math.round(Math.abs(v - 1) * 100) + ' %');
+  return `1v1 ${f(tuningOf('duel', cls, spec))} · 2v2 ${f(tuningOf('team', cls, spec))} damage and healing`;
+}
+
 function statRow(label, rating, value) {
   return `<div class="stat"><span>${label}</span><div class="track"><div style="width:${rating * 20}%"></div></div><span class="v">${value}</span></div>`;
 }
@@ -262,7 +269,7 @@ function selectClass(id) {
     <div class="role">${C.role}${C.race ? ` · <span class="race">Race: ${C.race}</span>` : ''}</div>
     ${specCards}
     <p>${C.desc}</p>
-    <div class="gear"><b>Weapon:</b> ${C.weapon}<br><b>Armor:</b> ${C.armor}<br><b>Resource:</b> ${resName} (${C.res})</div>
+    <div class="gear"><b>Weapon:</b> ${C.weapon}<br><b>Armor:</b> ${C.armor}<br><b>Resource:</b> ${resName} (${C.res})<br><b title="A power factor on all damage and healing of this spec, found by the balance lab so every spec wins about half its fights in each format">Arena tuning:</b> ${tuneText(id, spec)}</div>
     ${statRow('Health', C.rating.health, C.hp)}
     ${statRow('Damage', C.rating.damage, ['', 'Low', 'Low-Med', 'Medium', 'Med-High', 'High'][C.rating.damage])}
     ${statRow('Mobility', C.rating.mobility, C.speed.toFixed(1))}

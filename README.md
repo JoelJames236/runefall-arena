@@ -190,6 +190,12 @@ and burst DPS against a target dummy, survival time under a fixed damage stream,
 the AI's play rather than expert human play, so use it as a guide. Every playable spec is its own entry
 (e.g. `paladin:crusader`). Latest numbers and the full change log: [`docs/BALANCE.md`](docs/BALANCE.md).
 
+**Arena tuning.** Every spec has a power factor for 1v1 and one for 2v2 (`js/data/tuning.js`, shown on the champion
+screen as e.g. "1v1 −4 % · 2v2 +6 % damage and healing"). A kit that wins duels is not the kit that wins team
+fights, so ability numbers alone left specs at 61 % in one format and 37 % in the other. The lab's **Auto-tune** mode
+finds the factors: it measures a format with hard bots, moves each factor against its distance from 50 %, and repeats.
+Re-run it after changing abilities and paste the printed table into the file.
+
 ## Project layout
 
 ```
@@ -197,6 +203,7 @@ index.html               UI markup + import map (Three.js, PeerJS from CDN)
 css/style.css            Menus, lobby & HUD styling (responsive)
 js/main.js               App flow: screens, modes, rooms/parties, matchmaking hand-off, game loop, net glue
 js/data/classes.js       Classes, specs, forms, stats and all abilities (gameplay in each ability's exec)
+js/data/tuning.js        Arena tuning: power factor per spec for 1v1 and 2v2 (found by the lab's auto-tune)
 js/sim/sim.js            Authoritative combat simulation for N fighters in two teams (no rendering)
 js/sim/ai.js             Bots (same inputs and rules as players): focus targeting, kiting, interrupts, healing
 js/net.js                PeerJS star network (host + up to 3 guests) and serverless 2v2 matchmaking
