@@ -9,10 +9,10 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
-// Final colour grade: gentle S-curve contrast, slightly desaturated mids, cool shadows /
+// Final colour grade: gentle S-curve contrast, rich saturation (vivid fantasy-MMO palette), cool shadows /
 // warm highlights split-tone, and a soft vignette — the "dark fantasy" film look.
 const GradeShader = {
-  uniforms: { tDiffuse: { value: null }, uVignette: { value: 0.55 }, uSat: { value: 0.88 }, uContrast: { value: 1.08 } },
+  uniforms: { tDiffuse: { value: null }, uVignette: { value: 0.4 }, uSat: { value: 1.1 }, uContrast: { value: 1.07 } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `uniform sampler2D tDiffuse; uniform float uVignette, uSat, uContrast; varying vec2 vUv;
     void main(){
@@ -60,6 +60,8 @@ const AB_ANIM = {
   rake: 'attack', shred: 'attack', ferocious_bite: 'attack', wild_pounce: 'charge', bear_form: 'raise', cat_form: 'raise', berserk_instinct: 'raise', maul: 'attack', thrash: 'attack', frenzied_regen: 'raise',
   envenom: 'finisher', crippling_poison: 'stab', plague_cloud: 'release', die_by_the_sword: 'raise', execute: 'finisher', bladestorm: 'charge',
   shadow_word_pain: 'release', mind_blast: 'release', psychic_scream: 'raise', void_eruption: 'release',
+  holy_strike: 'finisher', judgment: 'release', radiant_storm: 'slam', hammer_of_light: 'release', divine_shield: 'raise', divine_wrath: 'raise',
+  pal_shield_slam: 'bash', sentinels_shield: 'release', consecration: 'slam', holy_shield: 'raise', guardians_resolve: 'raise',
 };
 export { AB_ANIM };
 
@@ -68,25 +70,25 @@ export class World {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.16;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene = new THREE.Scene();
     // dusky atmospheric haze (dark-fantasy look); the HDRI sky is excluded from fog
-    this.scene.fog = new THREE.FogExp2(0x2c2a32, 0.0052);
+    this.scene.fog = new THREE.FogExp2(0x3e3a48, 0.0038);
     this.scene.background = new THREE.Color(0x1a1418);
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 2500);
     this.camera.position.set(0, 20, 50);
 
     // lighting: low warm sun (shadow caster), faint cool fill; the HDRI provides ambient/specular
-    this.hemi = new THREE.HemisphereLight(0x8a90b0, 0x3a2a20, 0.45); this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffb27a, 2.6);
+    this.hemi = new THREE.HemisphereLight(0xa8b8e0, 0x4a3828, 0.8); this.scene.add(this.hemi);
+    this.sun = new THREE.DirectionalLight(0xffc48a, 2.9);
     this.sun.position.set(-40, 32, 34);
     this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera; sc.left = -38; sc.right = 38; sc.top = 38; sc.bottom = -38; sc.near = 1; sc.far = 140;
     this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.035; this.sun.shadow.radius = 3;
     this.scene.add(this.sun); this.scene.add(this.sun.target);
-    const moon = new THREE.DirectionalLight(0x7a90ff, 0.35); moon.position.set(30, 30, -40); this.scene.add(moon);
+    const moon = new THREE.DirectionalLight(0x8aa0ff, 0.6); moon.position.set(30, 30, -40); this.scene.add(moon); // cool back / fill light
 
     // image-based lighting: neutral room env until the HDRI sky has loaded
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
@@ -140,9 +142,9 @@ export class World {
       tex.mapping = THREE.EquirectangularReflectionMapping;
       const env = this.pmrem.fromEquirectangular(tex).texture;
       this.scene.environment = env;
-      this.scene.environmentIntensity = 0.42;
+      this.scene.environmentIntensity = 0.55;
       this.scene.background = tex;
-      this.scene.backgroundIntensity = 0.55;
+      this.scene.backgroundIntensity = 0.7;
       this.scene.backgroundBlurriness = 0.02;
       this.scene.backgroundRotation = new THREE.Euler(0, 2.3, 0);
       this.scene.environmentRotation = new THREE.Euler(0, 2.3, 0);
@@ -390,7 +392,7 @@ export class World {
   }
   onAuto(id) {
     const ch = this.chars[id]; if (!ch) return;
-    ch.play('attack', ch.lookKey === 'berserker:executioner' ? 0.9 : { rogue: 0.36, warrior: 0.55, berserker: 0.5, mage: 0.42, priest: 0.42, shaman: 0.45 }[ch.cls] || 0.45);
+    ch.play('attack', ch.lookKey === 'berserker:executioner' || ch.lookKey === 'paladin' || ch.lookKey === 'warrior:arms' ? 0.85 : { rogue: 0.36, warrior: 0.55, berserker: 0.5, paladin: 0.5, mage: 0.42, priest: 0.42, shaman: 0.45 }[ch.cls] || 0.45);
     if (this.charState[id]) this.charState[id].faceT = 0.35;
   }
   onHitFlinch(id, crit) { const ch = this.chars[id]; if (ch && (!ch.act || crit)) ch.hit(crit ? 2 : 1); }

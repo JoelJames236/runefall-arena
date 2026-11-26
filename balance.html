@@ -14,7 +14,7 @@
 <body>
 <h2>Balance Lab — AI vs. AI simulations</h2>
 <p>1v1: win rate of the row class against the column class. 2v2: every pair of team compositions plays each other; each class's overall win rate and the strongest/weakest compositions are listed. Both sides use the same AI difficulty, so this measures the AI's play — use it as a guide.</p>
-<label>Mode <select id="mode"><option value="1v1">1v1 matrix</option><option value="2v2">2v2 compositions</option></select></label>
+<label>Mode <select id="mode"><option value="1v1">1v1 matrix</option><option value="2v2">2v2 compositions</option><option value="bench">Spec benchmark (dummy)</option></select></label>
 <label>Rounds per pairing <input id="n" type="number" value="16" min="2" max="200"></label>
 <label>AI <select id="d"><option>hard</option><option>normal</option><option>easy</option></select></label>
 <button id="go">Run</button>
@@ -90,11 +90,66 @@ async function run2v2(N, diff, out) {
   window.__result = { cls: Object.fromEntries(KEYS.map(c => [c, +(clsW[c].w / Math.max(1, clsW[c].n)).toFixed(2)])), comps: cr.map(([k, v]) => k + ':' + Math.round(v * 100)), median: lens[lens.length >> 1] };
 }
 
+// ---- Spec benchmark: every spec under IDENTICAL conditions (same AI, same dummy, same damage stream,
+// same duration). dps: 60 s against a passive target dummy (sustained DPS and the best 6-sec burst window).
+// surv: a dummy deals a fixed 85 physical + 35 arcane damage per second to the spec; how long does it
+// last (defensives, self-heals, absorbs and armor all count). heal: a passive partner takes 75 damage per
+// second; how much does the spec heal it per second. Results are averages over N runs.
+function benchRun(key, kind, diff) {
+  const heal = kind === 'heal';
+  const roster = heal ? [fighter(key, 0), { cls: 'warrior', spec: 'arms', team: 0 }, { cls: 'mage', spec: 'frost', team: 1 }] : [fighter(key, 0), { cls: 'mage', spec: 'frost', team: 1 }];
+  const sim = new Sim(roster), ai = new AI(sim, 0, diff), me = sim.fighters[0], dummy = sim.fighters[roster.length - 1], ally = heal ? sim.fighters[1] : null;
+  dummy.hp = dummy.maxHp = 1e7;
+  const dmg = [], dur = kind === 'dps' ? 60 : kind === 'heal' ? 45 : 180;
+  let t = 0, healed = 0, end = dur, tick = 0;
+  const mute = { e: () => {} };
+  for (let s = 0; s < 400 / DT && sim.state !== 'matchEnd'; s++) {
+    const inputs = []; inputs[0] = ai.getInput(DT);
+    sim.step(DT, inputs);
+    if (sim.state !== 'fight') { sim.events.length = 0; if (t > 0) break; continue; }
+    t += DT; tick += DT;
+    for (const ev of sim.events) {
+      if (ev.e === 'dmg' && ev.src === 0 && ev.id === dummy.id) dmg.push([t, ev.amt + (ev.abs || 0)]);
+      if (ev.e === 'heal' && heal && ev.src === 0 && ev.id === 1) healed += ev.amt;
+    }
+    sim.events.length = 0;
+    if (tick >= 1) { tick -= 1;
+      if (kind === 'surv' && me.alive) { sim.damage(dummy, me, 85, { school: 'phys' }); sim.damage(dummy, me, 35, { school: 'arcane' }); }
+      if (heal && ally.alive) sim.damage(dummy, ally, 75, { school: 'phys' });
+    }
+    dummy.hp = dummy.maxHp;
+    if (kind === 'surv' && (me.hp <= 0 || !me.alive)) { end = t; break; }
+    if (heal && (ally.hp <= 0 || !ally.alive)) { end = t; break; }
+    if (t >= dur) break;
+  }
+  const total = dmg.reduce((s, d) => s + d[1], 0);
+  let burst = 0; for (let i = 0, j = 0, w = 0; i < dmg.length; i++) { w += dmg[i][1]; while (dmg[i][0] - dmg[j][0] > 6) w -= dmg[j++][1]; burst = Math.max(burst, w); }
+  return { dps: total / Math.max(1, Math.min(t, dur)), burst: burst / 6, surv: Math.min(end, t), hps: healed / Math.max(1, Math.min(t, end)) };
+}
+async function runBench(N, diff, out) {
+  const rows = [];
+  for (const key of KEYS) {
+    const acc = { dps: 0, burst: 0, surv: 0, hps: 0 };
+    for (let i = 0; i < N; i++) {
+      const a = benchRun(key, 'dps', diff), b = benchRun(key, 'surv', diff), c = benchRun(key, 'heal', diff);
+      acc.dps += a.dps / N; acc.burst += a.burst / N; acc.surv += b.surv / N; acc.hps += c.hps / N;
+    }
+    rows.push({ key, ...acc });
+    out.textContent = `Benchmarking… ${key}`; await tick();
+  }
+  const avg = f => rows.reduce((s, r) => s + r[f], 0) / rows.length;
+  const A = { dps: avg('dps'), burst: avg('burst'), surv: avg('surv') };
+  const cell = (v, ref) => `<td style="background:hsl(${Math.max(0, Math.min(120, 60 + (v / ref - 1) * 150))},45%,22%)">${v.toFixed(0)}</td>`;
+  out.innerHTML = '<table><tr><th>spec</th><th>sustained DPS</th><th>burst DPS (best 6 s)</th><th>survival (s)</th><th>partner HPS</th></tr>' +
+    rows.map(r => `<tr><th>${r.key}</th>${cell(r.dps, A.dps)}${cell(r.burst, A.burst)}${cell(r.surv, A.surv)}<td>${r.hps.toFixed(0)}</td></tr>`).join('') + '</table>';
+  window.__result = { bench: rows.map(r => ({ key: r.key, dps: +r.dps.toFixed(1), burst: +r.burst.toFixed(1), surv: +r.surv.toFixed(1), hps: +r.hps.toFixed(1) })) };
+}
+
 document.getElementById('go').onclick = async () => {
   const N = +document.getElementById('n').value, diff = document.getElementById('d').value, mode = document.getElementById('mode').value;
   const out = document.getElementById('out'); out.textContent = 'Running…'; window.__result = null;
   await tick();
-  if (mode === '2v2') await run2v2(N, diff, out); else await run1v1(N, diff, out);
+  if (mode === '2v2') await run2v2(N, diff, out); else if (mode === 'bench') await runBench(Math.max(1, Math.round(N / 4)), diff, out); else await run1v1(N, diff, out);
 };
 </script>
 </body>

@@ -17,6 +17,7 @@ export const bloodrage = f => f.cls === 'berserker' ? 1 + (CLASSES.berserker.pas
 const STUNLIKE = ['stun', 'disorient'];
 const RES_NAME = { mana: 'mana', energy: 'energy', rage: 'rage', focus: 'focus' };
 const MELEE_AUTO_RANGE = 4.5;
+export const ATTACK_BUFFER = 0.4; // s a left click stays queued while the swing timer finishes
 
 // ---------------------------------------------------------------- helpers
 export const getBuff = (f, type) => f.buffs.find(b => b.type === type);
@@ -211,7 +212,7 @@ function makeFighter(id, spec) {
     x: 0, y: 0, z: 0, vy: 0, yaw: 0, hp: C.hp, maxHp: C.hp,
     res: C.resStart ?? C.res, maxRes: C.res, resType: C.resType,
     cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [], cp: 0, stamina: 100, alive: true,
-    moving: false, sprinting: false, autoT: 0, autoOn: false, forceSeq: 0, forceYaw: 0, locked: false, dash: null,
+    moving: false, sprinting: false, autoT: 0, atkReq: 0, atkHold: false, forceSeq: 0, forceYaw: 0, locked: false, dash: null,
     target: -1, friend: -1, dr: {}, queued: null, moveDir: null,
     stats: freshStats(),
   };
@@ -255,7 +256,7 @@ export class Sim {
       const C = kitOf(f);
       Object.assign(f, {
         hp: C.hp, maxHp: C.hp, res: C.resStart ?? C.res, maxRes: C.res, cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [],
-        cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, autoOn: false, form: kit(f.cls, f.spec).defaultForm || null, petT: 0,
+        cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, atkReq: 0, atkHold: false, form: kit(f.cls, f.spec).defaultForm || null, petT: 0,
         target: this.defaultTarget(f), friend: -1,
       });
       const s = this.spawnOf(f);
@@ -319,6 +320,7 @@ export class Sim {
       this.moveStep(f, inp, dt, true);
       this.applyTargeting(f, inp);
       if (f.alive && inp.abilities) for (const a of inp.abilities) this.tryAbility(f, a.i, a);
+      f.atkHold = f.alive && !!(inp.atkHold || (inp.remote && inp.remote.h));
       if (f.alive && inp.attack) this.startAttack(f, true);
     }
     for (const f of this.fighters) this.updateFighter(f, dt);
@@ -331,7 +333,7 @@ export class Sim {
   applyTargeting(f, inp) {
     if (inp.setTarget !== undefined && inp.setTarget !== null) {
       const t = this.fighters[inp.setTarget];
-      if (t && t.team !== f.team && this.visibleTo(t, f)) f.target = t.id;
+      if (t && t.team !== f.team && this.visibleTo(t, f) && f.target !== t.id) { f.target = t.id; f.atkReq = 0; } // switching targets drops a buffered click
     }
     if (inp.setFriend !== undefined && inp.setFriend !== null) {
       const a = this.fighters[inp.setFriend];
@@ -364,12 +366,17 @@ export class Sim {
     const list = this.enemiesOf(f).filter(o => this.visibleTo(o, f)).sort((a, b) => this.dist(f, a) - this.dist(f, b));
     if (!list.length) return;
     const i = list.findIndex(o => o.id === f.target);
-    f.target = list[(i + 1) % list.length].id;
+    f.target = list[(i + 1) % list.length].id; f.atkReq = 0;
   }
 
   // ------------------------------------------------------------ queries
   enemiesOf(f) { return this.fighters.filter(o => o.team !== f.team && o.alive); }
   alliesOf(f) { return this.fighters.filter(o => o.team === f.team && o.id !== f.id && o.alive); }
+  // Paladin Holy Power (combo points capped at 3): builders add, spenders consume all of it
+  holyPower(f, n) { f.cp = Math.min(kitOf(f).passive?.maxHp || 3, f.cp + n); }
+  spendHoly(f) { const n = f.cp; f.cp = 0; return n; }
+  // Paladin Challenge (taunt): the enemy deals less damage to anyone but the paladin; bots turn on him
+  taunt(src, t, dur) { if (!t.alive) return; const v = kitOf(src).passive?.taunt || 0.25; this.addBuff(t, 'taunt', dur, { value: v, src: src.id, name: 'Challenged', icon: '⚑' }); }
   dist(a, b) { return rangeDist(a, b); }
   los(a, b) { return !segBlocked(a.x, a.z, b.x, b.z, a.y + 1.5, b.y + 1.5); }
   forward(f) { return { x: Math.sin(f.yaw), z: Math.cos(f.yaw) }; }
@@ -420,7 +427,7 @@ export class Sim {
     if (ab.charges ? f.ch[idx] <= 0 : f.cds[idx] > 0) return 'Ability not ready yet';
     if (ab.gcd && f.gcd > 0 && !ignoreGcd) return 'GCD';
     if (ab.cost > f.res) return `Not enough ${RES_NAME[f.resType]}`;
-    if (ab.needsCp && f.cp < 1) return 'No combo points';
+    if (ab.needsCp && f.cp < 1) return f.cls === 'paladin' ? 'No Holy Power' : 'No combo points';
     if (ab.needsPet && !this.minionOf(f)) return 'Your pet is not here';
     if (ab.target) {
       const t = this.hostileFor(f, opts.tid);
@@ -457,7 +464,7 @@ export class Sim {
       return err;
     }
     const t = this.resolveTarget(f, ab, opts);
-    if (ab.target && t) { f.target = t.id; if (ab.melee) f.autoOn = true; }
+    if (ab.target && t && f.target !== t.id) { f.target = t.id; f.atkReq = 0; }
     if (ab.gcd) f.gcd = RULES.gcd;
     if (ab.cast > 0) {
       f.cast = { idx, t: 0, dur: ab.cast, tid: t ? t.id : -1 };
@@ -488,25 +495,27 @@ export class Sim {
   interrupt(t, src) { if (t.cast) { this.cancelCast(t, true); if (src && src.stats) src.stats.interrupts++; } }
 
   dropTarget(c) {
-    for (const o of this.fighters) if (o.team !== c.team && o.target === c.id) { o.target = -1; o.autoOn = false; }
+    for (const o of this.fighters) if (o.team !== c.team && o.target === c.id) { o.target = -1; o.atkReq = 0; }
     for (const o of this.fighters) if (o.team !== c.team && o.cast && o.cast.tid === c.id) {
       this.cancelCast(o, false); this.event({ e: 'err', id: o.id, msg: 'Your target vanished' });
     }
   }
 
   // ------------------------------------------------------------ basic attacks
-  // Left click: turn on auto-attack against the current (or best) target. The swing timer
-  // limits the rate, so clicking faster never attacks faster.
+  // Basic attacks only happen on player input: a left click requests ONE swing (buffered for
+  // ATTACK_BUFFER s, so a click just before the swing timer is ready still lands), and holding the
+  // button keeps requesting swings. The swing timer (autoT) is the only rate limit, so clicking
+  // faster or holding never attacks faster than the weapon speed. Selecting a target never attacks.
   startAttack(f, explicit) {
     if (!f.alive || this.state !== 'fight') return;
     const t = this.hostileFor(f);
     if (!t) { if (explicit) this.event({ e: 'err', id: f.id, msg: 'No target' }); return; }
-    f.target = t.id;
-    f.autoOn = true;
+    if (f.target !== t.id) f.target = t.id;
+    f.atkReq = ATTACK_BUFFER;
     if (explicit) {
       const A = kitOf(f).auto, d = this.dist(f, t);
-      if (d > A.range + 0.3) this.event({ e: 'err', id: f.id, msg: 'Out of range' });
-      else if (A.ranged && !this.los(f, t)) this.event({ e: 'err', id: f.id, msg: 'Target not in line of sight' });
+      if (d > (A.ranged ? A.range + 0.3 : MELEE_AUTO_RANGE)) { this.event({ e: 'err', id: f.id, msg: 'Out of range' }); f.atkReq = 0; }
+      else if (A.ranged && !this.los(f, t)) { this.event({ e: 'err', id: f.id, msg: 'Target not in line of sight' }); f.atkReq = 0; }
       else if (!A.ranged && Math.abs(angleDiff(f.yaw, angleTo(f, t))) > 1.45) this.event({ e: 'err', id: f.id, msg: 'You must face your target' });
     }
   }
@@ -514,14 +523,15 @@ export class Sim {
   updateAuto(f, dt) {
     const A = kitOf(f).auto;
     f.autoT = Math.max(0, f.autoT - dt);
-    if (!A || !f.autoOn) return;
+    f.atkReq = Math.max(0, f.atkReq - dt);
+    if (!A || !(f.atkHold || f.atkReq > 0)) return;
     const t = this.fighters[f.target];
-    if (!t || t.team === f.team || !this.visibleTo(t, f)) { f.autoOn = false; return; }
+    if (!t || t.team === f.team || !t.alive || !this.visibleTo(t, f)) { f.atkReq = 0; return; }
     if (f.autoT > 0 || isStunned(f) || f.cast || f.dash || hasBuff(f, 'tempest')) return;
     const d = this.dist(f, t);
     if (A.ranged) { if (d > A.range + 0.3 || !this.los(f, t)) return; }
     else if (d > MELEE_AUTO_RANGE || Math.abs(angleDiff(f.yaw, angleTo(f, t))) > 1.45) return;
-    f.autoT = A.speed / (hasBuff(f, 'berserk') ? 1.3 : 1);
+    f.autoT = A.speed / (hasBuff(f, 'berserk') ? 1.3 : 1); f.atkReq = 0;
     this.removeBuff(f, 'stealth');
     this.event({ e: 'auto', id: f.id, tid: t.id, ranged: !!A.ranged });
     if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => {
@@ -680,7 +690,13 @@ export class Sim {
   // ------------------------------------------------------------ effects API (used by abilities)
   damage(src, tgt, amount, o = {}) {
     if (!tgt.alive || this.state !== 'fight') return 0;
+    if (src !== tgt && hasBuff(tgt, 'divine')) { this.event({ e: 'immune', id: tgt.id }); return 0; } // Paladin Divine Shield
     let amt = amount * (0.94 + Math.random() * 0.12);
+    if (hasBuff(src, 'divine')) amt *= 0.5; // ...but the shielded paladin hits half as hard
+    // Paladin: Judged targets take more holy damage from that paladin; a Challenged (taunted) enemy
+    // deals less damage to anyone but the paladin who challenged it
+    if (o.school === 'holy') { const j = tgt.buffs.find(b => b.type === 'judged' && b.src === src.id); if (j) amt *= 1 + j.value; }
+    const tn = src.buffs.find(b => b.type === 'taunt'); if (tn && tn.src !== tgt.id && this.fighters[tn.src]?.alive) amt *= 1 - tn.value;
     const direct = !o.dot && !o.tick;
     const amb = getBuff(src, 'ambush');
     if (amb && direct && !o.auto) { amt *= 1.4; this.removeBuff(src, 'ambush'); o.big = true; }
@@ -722,7 +738,7 @@ export class Sim {
     const ls = getBuff(src, 'lifesteal');
     if (ls && src !== tgt && src.alive) { const h = Math.round((amt + absorbed) * ls.value * (1 - this.damp / 100)); if (h > 0) { src.hp = Math.min(src.maxHp, src.hp + h); src.stats.heal += h; this.event({ e: 'heal', id: src.id, src: src.id, amt: h, ab: 'lifesteal' }); } }
     tgt.stats.absorbed += absorbed;
-    if (src.resType === 'rage') src.res = Math.min(src.maxRes, src.res + (amt + absorbed) * 0.075);
+    if (src.resType === 'rage') src.res = Math.min(src.maxRes, src.res + (amt + absorbed) * 0.09); // rage from dealing damage
     if (tgt.resType === 'rage') tgt.res = Math.min(tgt.maxRes, tgt.res + (amt + absorbed) * 0.07);
     // Shieldwall, team play: a warrior near a hurt ally gains rage from the blows the ally takes
     if (this.teamSize[tgt.team] >= 2) for (const w of this.fighters) if (w.cls === 'warrior' && w.alive && w !== tgt && w.team === tgt.team && kitOf(w).passive.rageShare && this.dist(w, tgt) <= kitOf(w).passive.radius) w.res = Math.min(w.maxRes, w.res + (amt + absorbed) * kitOf(w).passive.rageShare);
@@ -768,6 +784,7 @@ export class Sim {
 
   addBuff(f, type, dur, o = {}) {
     if (!f.alive) return null;
+    if (hasBuff(f, 'divine') && o.src !== undefined && this.fighters[o.src] && this.fighters[o.src].team !== f.team) { this.event({ e: 'immune', id: f.id }); return null; } // Divine Shield: immune to harmful effects
     if (type === 'slow' && o.src !== f.id && (hasBuff(f, 'berserk') || hasBuff(f, 'treeform'))) return null; // berserk / Tree of Life: immune to slows
     if (o.cc) {
       if (hasBuff(f, 'tempest') || hasBuff(f, 'ccimmune')) { this.event({ e: 'immune', id: f.id }); return null; }
@@ -912,13 +929,23 @@ export class Sim {
         // Assassination signature: every second, enemies inside take damage and gain a Deadly Poison stack
         z.data.acc = (z.data.acc || 0) + dt;
         if (z.data.acc >= 1) { z.data.acc -= 1; this.aoeMinions(owner, z.x, z.z, z.r, 16); for (const e of this.enemiesOf(owner)) if (this.inZone(e, z)) { this.damage(owner, e, 16, { school: 'nature', ab: 'plague_cloud', tick: true }); this.poison(owner, e); } }
+      } else if (z.type === 'consecration') {
+        // Protection Paladin: holy ground — enemies inside burn and are Challenged, the paladin inside takes 10% less damage
+        z.data.acc = (z.data.acc || 0) + dt;
+        const tick = z.data.acc >= 1; if (tick) { z.data.acc -= 1; this.aoeMinions(owner, z.x, z.z, z.r, 12); }
+        for (const e of this.enemiesOf(owner)) if (this.inZone(e, z)) {
+          if (tick) this.damage(owner, e, 12, { school: 'holy', ab: 'consecration', tick: true });
+          const tb = e.buffs.find(b => b.type === 'taunt' && b.src === owner.id);
+          if (tb) tb.t = Math.max(tb.t, 1); else if (tick) this.taunt(owner, e, 1);
+        }
+        if (owner.alive && this.inZone(owner, z)) { const b = owner.buffs.find(b => b.type === 'dr' && b.name === 'Consecrated Ground'); if (b) b.t = 0.3; else this.addBuff(owner, 'dr', 0.3, { value: 0.1, src: owner.id, name: 'Consecrated Ground', icon: '❂' }); }
       } else if (z.type === 'stoneskin') {
         z.data.acc = (z.data.acc || 0) + dt;
         const tick = z.data.acc >= 1; if (tick) z.data.acc -= 1;
         for (const a of this.fighters) {
           if (!a.alive || a.team !== owner.team || !this.inZone(a, z)) continue;
           const b = a.buffs.find(b => b.type === 'stoneskin');
-          if (b) b.t = 0.3; else this.addBuff(a, 'stoneskin', 0.3, { value: 0.2, src: owner.id, name: 'Stoneskin', icon: '⬢' });
+          if (b) b.t = 0.3; else this.addBuff(a, 'stoneskin', 0.3, { value: 0.25, src: owner.id, name: 'Stoneskin', icon: '⬢' });
           if (tick) this.heal(owner, a, 20, 'stoneskin');
         }
         for (const e of this.enemiesOf(owner)) if (this.inZone(e, z)) {
@@ -1060,10 +1087,10 @@ export class Sim {
     const dead = this.fighters.filter(f => f.alive && f.hp <= 0);
     if (!dead.length) return;
     for (const f of dead) {
-      f.alive = false; f.cast = null; f.dash = null; f.locked = false; f.autoOn = false; f.buffs = [];
+      f.alive = false; f.cast = null; f.dash = null; f.locked = false; f.atkReq = 0; f.atkHold = false; f.buffs = [];
       const k = this.fighters[f.killer]; if (k && k.team !== f.team) k.stats.kills++;
       this.event({ e: 'death', id: f.id, killer: f.killer ?? -1 });
-      for (const o of this.fighters) if (o.target === f.id) { o.autoOn = false; if (o.cast && o.cast.tid === f.id) this.cancelCast(o, false); }
+      for (const o of this.fighters) if (o.target === f.id) { o.atkReq = 0; if (o.cast && o.cast.tid === f.id) this.cancelCast(o, false); }
     }
     const aliveTeams = [0, 1].map(t => this.fighters.some(f => f.team === t && f.alive));
     if (aliveTeams[0] && aliveTeams[1]) return;
@@ -1084,7 +1111,7 @@ export class Sim {
         cds: f.cds.map(r), ch: f.ch, gcd: r(f.gcd), cast: f.cast ? { idx: f.cast.idx, t: r(f.cast.t), dur: f.cast.dur, tid: f.cast.tid } : null,
         buffs: f.buffs.map(b => ({ type: b.type, t: r(b.t), dur: r(b.dur), value: r(b.value), name: b.name, icon: b.icon, src: b.src, fx: b.fx })),
         cp: f.cp, alive: f.alive, forceSeq: f.forceSeq, forceYaw: f.forceYaw, locked: f.locked, target: f.target, friend: f.friend,
-        autoOn: f.autoOn, autoT: r(f.autoT), moving: f.moving, sprinting: f.sprinting, stamina: Math.round(f.stamina),
+        autoOn: f.atkHold || f.atkReq > 0, autoT: r(f.autoT), moving: f.moving, sprinting: f.sprinting, stamina: Math.round(f.stamina),
         stats: f.stats,
       })),
       p: this.projectiles.map(p => ({ id: p.id, kind: p.kind, x: r(p.x), y: r(p.y), z: r(p.z), owner: p.owner })),

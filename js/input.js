@@ -29,7 +29,7 @@ export class Input {
     });
     addEventListener('keyup', e => this.keys.delete(e.code));
     addEventListener('mouseup', e => { if (e.button === 0) this.mouseHeld = false; });
-    addEventListener('blur', () => this.keys.clear());
+    addEventListener('blur', () => { this.keys.clear(); this.mouseHeld = false; });
     canvas.addEventListener('contextmenu', e => { if (this.enabled) e.preventDefault(); });
     canvas.addEventListener('mousedown', e => {
       if (!this.enabled) return;
@@ -53,7 +53,7 @@ export class Input {
     document.addEventListener('pointerlockchange', () => {
       const was = this.locked;
       this.locked = document.pointerLockElement === canvas;
-      if (was && !this.locked) { this.keys.clear(); this.onUnlock && this.onUnlock(); }
+      if (was && !this.locked) { this.keys.clear(); this.mouseHeld = false; this.onUnlock && this.onUnlock(); }
     });
   }
 
@@ -73,7 +73,7 @@ export class Input {
     const k = this.keys;
     const mz = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const mx = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    const out = { mx, mz, yaw: this.yaw, jump: this.jumpPressed, sprint: k.has('ShiftLeft') || k.has('ShiftRight'), abilities: this.pressed.slice(), targetReq: this.tabPressed, attack: this.attackPressed, clickPos: this.clickPos, friendKey: this.friendKey };
+    const out = { mx, mz, yaw: this.yaw, jump: this.jumpPressed, sprint: k.has('ShiftLeft') || k.has('ShiftRight'), abilities: this.pressed.slice(), targetReq: this.tabPressed, attack: this.attackPressed, atkHeld: this.mouseHeld, clickPos: this.clickPos, friendKey: this.friendKey };
     this.pressed.length = 0; this.jumpPressed = false; this.tabPressed = false; this.attackPressed = false; this.friendKey = 0;
     return out;
   }

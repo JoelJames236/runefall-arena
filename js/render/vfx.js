@@ -31,6 +31,9 @@ const PROJ_STYLE = {
   soul_rot: { color: 0x7aff6a, core: 0xe8ffe0, size: 0.48, trail: 0x2a6a1a, smoke: true, halo: true },
   hex_bolt: { color: 0xb070ff, core: 0xf0e0ff, size: 0.3, trail: 0x5a1aa0, caster: true, orbit: 2 },
   wrath: { color: 0xb8ff6a, core: 0xf8ffe0, size: 0.3, trail: 0x5aaa2a, caster: true, rays: true },
+  judgment: { color: 0xffe680, core: 0xffffff, size: 0.55, trail: 0xfff0b0, rays: true, halo: true },
+  hammer_of_light: { color: 0xffd84a, core: 0xfff6d0, size: 0.6, trail: 0xffe890, axe: true, metal: 0xe8c060, emissive: 0xffc030 },
+  sentinels_shield: { color: 0xbfe0ff, core: 0xffffff, size: 0.7, trail: 0xffe9a0, axe: true, metal: 0xc8d8f0, emissive: 0xffd870 },
 };
 const SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff7a2a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff, phys: 0xffffff };
 const CAST_SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff8a3a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff };
@@ -300,7 +303,7 @@ export class VFX {
       if (!m) {
         const g = new THREE.Group();
         const core = new THREE.Mesh(st.rock ? this.G.rock : (st.shard || st.axe) ? this.G.shard : this.G.sphereLo,
-          st.axe ? new THREE.MeshStandardMaterial({ color: 0x8a8078, roughness: 0.35, metalness: 0.9 }) :
+          st.axe ? new THREE.MeshStandardMaterial({ color: st.metal || 0x8a8078, roughness: 0.35, metalness: 0.9, emissive: st.emissive || 0, emissiveIntensity: st.emissive ? 1.1 : 0 }) :
           st.rock ? new THREE.MeshStandardMaterial({ color: 0x3a2010, emissive: 0xff4a0a, emissiveIntensity: 1.5, flatShading: true }) : st.shard ? new THREE.MeshStandardMaterial({ color: 0xcff4ff, emissive: 0x6ac8ff, emissiveIntensity: 1.2, roughness: 0.1 }) : new THREE.MeshBasicMaterial({ color: st.core }));
         const halo = new THREE.Mesh(this.G.sphereLo, this.addMat(st.color, 0.5));
         core.scale.setScalar(st.size * (st.rock ? 0.6 : st.shard ? 0.35 : 0.5)); halo.scale.setScalar(st.size);
@@ -378,6 +381,11 @@ export class VFX {
         const wx = z.x + U.rock.position.x, wy = (z.y || 0) + h, wz = z.z + U.rock.position.z;
         for (let k = 0; k < 3; k++) this.glow.emit({ x: wx + (Math.random() - 0.5) * 0.8, y: wy + (Math.random() - 0.5) * 0.8, z: wz + (Math.random() - 0.5) * 0.8, vy: 1, life: 0.6, size: 1.4, color: k % 2 ? 0xff5a1a : 0xffc060, grow: -0.6, drag: 1 });
         if (Math.random() < 0.6) this.smoke.emit({ x: wx, y: wy, z: wz, vy: 0.5, life: 1.2, size: 1.6, color: 0x2a1a14, grow: 1.4, drag: 1, alpha: 0.5 });
+      } else if (z.type === 'consecration') {
+        const U = m.userData, fade = Math.min(1, (z.dur - z.t) * 1.5, z.t * 4);
+        U.ring.rotation.z += dt * 0.35; U.inner.rotation.z -= dt * 0.6;
+        U.fill.material.opacity = (0.14 + Math.sin(z.t * 4) * 0.04) * fade; U.ring.material.opacity = 0.85 * fade; U.inner.material.opacity = 0.5 * fade;
+        if (Math.random() < 0.7 * this.budget) { const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * z.r; this.glow.emit({ x: z.x + Math.sin(a) * r, y: (z.y || 0) + 0.1, z: z.z + Math.cos(a) * r, vy: 1.0 + Math.random(), life: 0.9, size: 0.22, color: Math.random() < 0.5 ? 0xffe070 : 0xffffff, grow: -0.4 }); }
       } else if (z.type === 'stoneskin') {
         m.userData.dome.material.opacity = 0.1 + Math.sin(z.t * 4) * 0.03;
         m.userData.ring.rotation.z += dt * 0.5;
@@ -438,6 +446,13 @@ export class VFX {
       rock.scale.setScalar(0.9); const halo = new THREE.Mesh(this.G.sphereLo, this.addMat(0xff7a2a, 0.45)); halo.scale.setScalar(1.6); rock.add(halo);
       g.add(rock);
       g.userData = { fill, edge, rock };
+    } else if (z.type === 'consecration') {
+      // Paladin: consecrated ground — a slowly turning golden sigil with a warm glow
+      const ring = new THREE.Mesh(this.G.plane, this.addMat(hostile ? 0xffb040 : 0xffe070, 0.85, { map: this.teleTexture }));
+      ring.scale.setScalar(z.r); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring);
+      const fill = new THREE.Mesh(new THREE.CircleGeometry(z.r, 40), this.addMat(0xffd84a, 0.16)); fill.rotation.x = -Math.PI / 2; fill.position.y = 0.07; g.add(fill);
+      const inner = new THREE.Mesh(this.G.plane, this.addMat(0xfff0b0, 0.5, { map: this.teleTexture })); inner.scale.setScalar(z.r * 0.55); inner.rotation.x = -Math.PI / 2; inner.position.y = 0.08; g.add(inner);
+      g.userData = { ring, fill, inner };
     } else if (z.type === 'stoneskin') {
       const dome =new THREE.Mesh(new THREE.SphereGeometry(z.r, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), this.addMat(hostile ? 0xd07050 : 0x9ad070, 0.1));
       g.add(dome);
@@ -495,6 +510,10 @@ export class VFX {
       for (const b of (f.alive ? f.buffs : [])) {
         let key = null;
         if (b.type === 'absorb') key = b.fx || 'absorb';
+        else if (b.type === 'dr' && (b.fx === 'holy_shield' || b.fx === 'guardians_resolve')) key = b.fx; // Paladin
+        else if (b.type === 'dr' && b.name === 'Consecrated Ground') key = null; // the ground itself glows
+        else if (b.type === 'wrath' && b.fx === 'crusader_power') key = 'crusader_power';
+        else if (b.type === 'divine' || b.type === 'taunt' || b.type === 'judged') key = b.type;
         else if (['stun', 'root', 'disorient', 'silence', 'dr', 'tempest', 'mark', 'spirit', 'speed', 'stoneskin', 'slow', 'healred', 'stealth', 'berserk', 'lifesteal'].includes(b.type)) key = b.type === 'dr' && b.fx === 'undying' ? 'undying' : b.type;
         else if (b.type === 'dot') key = b.data?.school === 'holy' || b.name === 'Holy Burn' ? 'dot_holy' : 'dot';
         if (!key) continue;
@@ -562,15 +581,40 @@ export class VFX {
         const core = new THREE.Mesh(this.G.sphereLo, new THREE.MeshBasicMaterial({ color: 0xffe8b0 })); core.scale.setScalar(0.28); g.add(core);
         const h = new THREE.Mesh(this.G.sphereLo, add(0xff8a2a, 0.45)); h.scale.setScalar(0.6); g.add(h);
         for (const s of [-1, 1]) { const horn = new THREE.Mesh(this.G.cone, add(0xffb03a, 0.7)); horn.scale.set(0.1, 0.4, 0.1); horn.position.set(s * 0.25, 0.35, 0); horn.rotation.z = -s * 0.5; g.add(horn); }
-        const L = new THREE.PointLight(0xff8a3a, 10, 8, 2); g.add(L);
+
         g.userData.spirit = true; return g; }
       case 'berserk': {
         const r = new THREE.Mesh(this.G.plane, add(0xff2a1a, 0.55)); r.material.map = this.ringTexture; r.rotation.x = -Math.PI / 2; r.position.y = 0.07; r.scale.setScalar(1.3); g.add(r);
-        const L = new THREE.PointLight(0xff3a1a, 8, 7, 2); L.position.y = 1.3; g.add(L);
+
         g.userData.pulse2 = r; return g; }
       case 'undying': {
         const s = new THREE.Mesh(this.G.sphere, add(0xa01020, 0.14)); s.scale.setScalar(1.35); s.position.y = 1.15; g.add(s);
         g.userData.pulse = s; return g; }
+      // ---- Paladin
+      case 'divine': { // Divine Shield: a golden bubble of light
+        const s = new THREE.Mesh(new THREE.IcosahedronGeometry(1.35, 3), add(0xfff0a0, 0.2)); s.position.y = 1.1; g.add(s);
+        const w = new THREE.Mesh(new THREE.IcosahedronGeometry(1.37, 1), new THREE.MeshBasicMaterial({ color: 0xffe680, wireframe: true, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false })); w.position.y = 1.1; g.add(w);
+        g.userData.spin = w; g.userData.pulse = s; g.userData.holyMotes = true; return g; }
+      case 'holy_shield': { // three golden rune-discs circling the paladin
+        for (let i = 0; i < 3; i++) { const d = new THREE.Mesh(this.G.plane, add(0xffe680, 0.8)); d.material.map = this.ringTexture; d.scale.setScalar(0.5); g.add(d); }
+        g.userData.orbitDiscs = true; return g; }
+      case 'guardians_resolve': {
+        const c = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.25, 3.2, 24, 1, true), add(0xffe9a0, 0.12)); c.position.y = 1.6; g.add(c);
+        const r = new THREE.Mesh(this.G.plane, add(0xffe9a0, 0.6)); r.material.map = this.ringTexture; r.rotation.x = -Math.PI / 2; r.position.y = 0.08; r.scale.setScalar(1.8); g.add(r);
+        g.userData.spin = r; g.userData.pulse2 = r; g.userData.holyMotes = true; return g; }
+      case 'crusader_power': { // wings of light spread behind the shoulders
+        const feather = new THREE.Shape(); feather.moveTo(0, 0); feather.quadraticCurveTo(0.12, 0.35, 0.03, 0.9); feather.quadraticCurveTo(-0.08, 0.4, 0, 0);
+        const fg = new THREE.ShapeGeometry(feather, 6);
+        for (const s of [-1, 1]) { const wing = new THREE.Group(); wing.position.set(s * 0.18, 1.55, -0.22);
+          for (let i = 0; i < 7; i++) { const m = new THREE.Mesh(fg, add(i % 2 ? 0xfff0b0 : 0xffd060, 0.55)); m.material.side = THREE.DoubleSide; m.scale.setScalar(1.1 + i * 0.1); m.rotation.z = -s * (0.25 + i * 0.2); m.position.x = s * i * 0.03; wing.add(m); }
+          wing.rotation.y = s * 0.35; g.add(wing); }
+        g.userData.face = true; g.userData.wings = g.children.slice(0, 2); return g; }
+      case 'taunt': case 'judged': {
+        const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+        const taunt = key === 'taunt';
+        x.fillStyle = taunt ? '#ff9a3a' : '#ffe680'; x.font = `bold ${taunt ? 96 : 84}px serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.shadowColor = taunt ? '#ff5a00' : '#ffc000'; x.shadowBlur = 18; x.fillText(taunt ? '⚑' : '⚖', 64, 70);
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); sp.scale.setScalar(taunt ? 0.55 : 0.45); sp.position.y = taunt ? 2.75 : 2.5; g.add(sp);
+        return g; }
       case 'lifesteal': return g;
       case 'healred': case 'speed': case 'slow': case 'dot': case 'dot_holy': case 'stoneskin': case 'stealth': return g; // particle-only
     }
@@ -585,6 +629,10 @@ export class VFX {
     if (u.pulse) u.pulse.material.opacity = 0.12 + Math.sin(t * 3) * 0.04;
     if (u.stars) fx.children.forEach((s, i) => { const a = t * 4 + i * (Math.PI * 2 / fx.children.length); s.position.set(Math.sin(a) * 0.4, 2.35 + Math.sin(t * 6 + i) * 0.05, Math.cos(a) * 0.4); s.rotation.y += dt * 4; });
     if (u.pulse2) { const s = 1 + Math.sin(t * 6) * 0.15; u.pulse2.scale.set(s, s, s); }
+    if (u.face && ch) fx.rotation.y = ch.root.rotation.y;
+    if (u.wings) u.wings.forEach((w, i) => { w.rotation.y = (i ? 1 : -1) * (0.35 + Math.sin(t * 2.2) * 0.12); });
+    if (u.orbitDiscs) fx.children.forEach((d, i) => { const a = t * 2.4 + i * 2.094; d.position.set(Math.sin(a) * 0.75, 1.1 + Math.sin(t * 3 + i) * 0.25, Math.cos(a) * 0.75); d.lookAt(fx.position.x + d.position.x * 3, fx.position.y + d.position.y, fx.position.z + d.position.z * 3); });
+    if (u.holyMotes && Math.random() < dt * 18 * this.budget) { const a = Math.random() * 6.28; this.glow.emit({ x: pos.x + Math.sin(a) * 0.9, y: pos.y + 0.2 + Math.random() * 1.6, z: pos.z + Math.cos(a) * 0.9, vy: 1.2, life: 0.8, size: 0.22, color: Math.random() < 0.5 ? 0xffe680 : 0xffffff, grow: -0.5 }); }
     if (u.spirit) {
       const a = t * 1.6;
       fx.position.set(pos.x + Math.sin(a) * 1.2, pos.y + 2.4 + Math.sin(t * 3) * 0.2, pos.z + Math.cos(a) * 1.2);
@@ -704,6 +752,7 @@ export class VFX {
       // weapon trail sparks for melee swings
       const ch = ctx.chars[ev.id];
       if (ch && ch.weaponTipWorld) { const tp = ch.weaponTipWorld(V3); this.burst(tp.x, tp.y, tp.z, src.cls === 'rogue' ? 0x9be36a : 0xffc88a, 6, 1.5, 0.25, 0.2); }
+      if (src.cls === 'paladin' && src.spec !== 'protection') { const T = at(ev.tid); if (T) { this.burst(T.x, T.y + 1.2, T.z, [0xffe680, 0xffffff], 18, 4, 0.35, 0.32, { drag: 3 }); this.sphereFlash(T.x, T.y + 1.2, T.z, 0xffe680, 0.2, 1.0, 0.2, 0.45); } } // holy hammer blows
     }
   }
 
@@ -736,6 +785,15 @@ export class VFX {
       case 'arcane_bolt': this.burst(ev.x, ev.y, ev.z, [0xb98cff, 0xffffff, 0x8a5aff], 22, 5, 0.4, 0.3, { drag: 3 }); this.sphereFlash(ev.x, ev.y, ev.z, 0xb98cff, 0.2, 1.1, 0.22, 0.5); this.flash(ev.x, ev.y, ev.z, 0xb98cff, 14, 0.2); break;
       case 'holy_spark': this.burst(ev.x, ev.y, ev.z, [0xffe680, 0xffffff], 22, 5, 0.4, 0.3, { drag: 3 }); this.sphereFlash(ev.x, ev.y, ev.z, 0xffe680, 0.2, 1.1, 0.22, 0.5); this.flash(ev.x, ev.y, ev.z, 0xffe680, 14, 0.2); break;
       case 'static_bolt': this.burst(ev.x, ev.y, ev.z, [0x7ae0ff, 0xffffff], 22, 6, 0.3, 0.26, { drag: 3 }); this.flash(ev.x, ev.y, ev.z, 0x7ae0ff, 14, 0.15); for (let i = 0; i < 3; i++) { const a = new THREE.Vector3(ev.x, ev.y, ev.z); this.beam(a, a.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6)), 0x7ae0ff, 0.1, 0.02, 0.3); } break;
+      case 'judgment': case 'hammer_of_light': case 'sentinels_shield': {
+        // Paladin: a hammer of light / thrown shield bursting into radiant sparks and a column of light
+        const big = ev.kind === 'hammer_of_light';
+        this.burst(ev.x, ev.y, ev.z, [0xffe680, 0xffffff, 0xffc040], big ? 44 : 30, big ? 7 : 5, 0.5, 0.45, { drag: 2.5 });
+        this.sphereFlash(ev.x, ev.y, ev.z, 0xffe680, 0.2, big ? 2 : 1.4, 0.3, 0.6);
+        this.lightRays(ev.x, ev.y - 1.2, ev.z, 0xfff0a0, big ? 5 : 3, big ? 6 : 4, 0.55);
+        this.flash(ev.x, ev.y, ev.z, 0xffe070, big ? 45 : 28, 0.3);
+        if (ev.kind === 'sentinels_shield') this.ringBurst(ev.x, ev.y, ev.z, 0xbfe0ff, 22, 4, 0.4, 0.3);
+        break; }
       default: this.burst(ev.x, ev.y, ev.z, [c, 0xffd080], 24, 6, 0.5, 0.5, { up: 1 }); this.flash(ev.x, ev.y, ev.z, c, 30, 0.3);
     }
   }
@@ -771,11 +829,44 @@ export class VFX {
       case 'gale_dash': this.burst(P.x, P.y + 0.6, P.z, [0xc8fff0, 0xffffff], 30, 4, 0.5, 0.45); this.groundRing(P.x, P.z, 0xc8fff0, 0.3, 3, 0.4); break;
       case 'bull_rush': this.burst(P.x, 0.3, P.z, 0xc9a070, 20, 3, 0.5, 0.5, { flat: true }); break;
       case 'fade': break;
+      // ---- Paladin
+      case 'holy_strike': case 'pal_shield_slam': if (T) {
+        const blue = ev.ab === 'pal_shield_slam';
+        this.burst(T.x, T.y + 1.3, T.z, [blue ? 0xcfe0ff : 0xffe680, 0xffffff], 34, 6, 0.45, 0.42, { drag: 2 });
+        this.sphereFlash(T.x, T.y + 1.3, T.z, blue ? 0xcfe0ff : 0xffe680, 0.3, 1.6, 0.28, 0.55);
+        this.lightRays(T.x, T.y, T.z, 0xfff0a0, 2, 3.5, 0.4); this.flash(T.x, T.y + 1.3, T.z, 0xffe070, 30, 0.3);
+      } break;
+      case 'judgment': case 'hammer_of_light': case 'sentinels_shield': this.burst(hp.x, hp.y, hp.z, [0xffe680, 0xffffff], 18, 3, 0.35, 0.35); this.flash(hp.x, hp.y, hp.z, 0xffe070, 18, 0.25); break;
+      case 'divine_shield': this.sphereFlash(P.x, P.y + 1.1, P.z, 0xfff0a0, 0.6, 2.2, 0.5, 0.6); this.ringBurst(P.x, P.y + 1.1, P.z, 0xfff6c0, 40, 5, 0.6, 0.4); this.lightRays(P.x, 0, P.z, 0xfff6c0, 5, 7, 0.7); this.flash(P.x, P.y + 1.5, P.z, 0xfff0a0, 70, 0.6); break;
+      case 'holy_shield': this.ringBurst(P.x, P.y + 1.1, P.z, 0xfff6c0, 30, 4, 0.5, 0.35); this.sphereFlash(P.x, P.y + 1.1, P.z, 0xffe680, 0.4, 1.5, 0.35, 0.4); this.spiral(P.x, 0.1, P.z, 0xffe680, 30, 0.9, 2.6, 0.9, 0.3); break;
+      case 'consecration': this.groundRing(P.x, P.z, 0xffd84a, 0.5, 8, 0.6); this.flash(P.x, 1, P.z, 0xffd84a, 45, 0.5); this.burst(P.x, 0.3, P.z, [0xffe680, 0xffffff], 40, 6, 0.6, 0.4, { flat: true }); break;
     }
   }
 
   namedFx(ev, ctx, at) {
     switch (ev.fx) {
+      case 'radiant_storm': // Crusader spender: a whirling storm of light around the paladin
+        this.groundRing(ev.x, ev.z, 0xffe680, 0.6, 8, 0.5);
+        this.ringBurst(ev.x, 1.0, ev.z, 0xfff0b0, 60, 14, 0.5, 0.5);
+        this.spiral(ev.x, 0.2, ev.z, 0xffe680, 60, 3.5, 2.2, 0.6, 0.45);
+        this.burst(ev.x, 1.0, ev.z, [0xffffff, 0xffd84a], 40, 9, 0.5, 0.4, { flat: true });
+        this.flash(ev.x, 1.5, ev.z, 0xffe070, 70, 0.45);
+        break;
+      case 'divine_wrath': { // a pillar of holy light slams down on the target
+        const T = ev.tid >= 0 ? at(ev.tid) : { x: ev.x, y: ev.y || 0, z: ev.z };
+        this.pillar(T.x, T.z, 0xfff0a0, 16, 1.6, 0.8); this.pillar(T.x, T.z, 0xffffff, 16, 0.7, 0.6);
+        this.lightRays(T.x, 0, T.z, 0xffe680, 7, 12, 0.8);
+        this.groundRing(T.x, T.z, 0xffd84a, 0.5, 5.5, 0.6);
+        this.burst(T.x, T.y + 1, T.z, [0xffe680, 0xffffff, 0xffc040], 70, 9, 0.8, 0.55, { up: 2 });
+        this.flash(T.x, T.y + 2, T.z, 0xfff0a0, 110, 0.7);
+        const P = at(ev.id); this.sphereFlash(P.x, P.y + 1.3, P.z, 0xffe680, 0.4, 2.4, 0.5, 0.5);
+        break; }
+      case 'guardians_resolve':
+        this.groundRing(ev.x, ev.z, 0xffe9a0, 0.6, 15, 0.8);
+        this.pillar(ev.x, ev.z, 0xffe9a0, 10, 1.4, 0.8); this.lightRays(ev.x, 0, ev.z, 0xfff6c0, 6, 9, 0.8);
+        this.flash(ev.x, 2, ev.z, 0xffe9a0, 90, 0.6);
+        break;
+      case 'shield_bounce': { const T = at(ev.tid); if (T) this.beam(new THREE.Vector3(ev.x, (ev.y || 0) + 1.3, ev.z), new THREE.Vector3(T.x, T.y + 1.3, T.z), 0xffe9a0, 0.3, 0.06, 0.1); break; }
       case 'glacial_nova':
         this.groundRing(ev.x, ev.z, 0xbfefff, 0.5, 9, 0.6);
         this.ringBurst(ev.x, 0.5, ev.z, 0xbfefff, 60, 16, 0.6, 0.6);

@@ -78,8 +78,9 @@ export class HUD {
     this.buildBar(me);
     const pips = () => Array.from({ length: RULES.winsNeeded }, () => '<div class="pip"></div>').join('');
     $('pipsA').innerHTML = pips(); $('pipsB').innerHTML = pips();
-    $('cpA').style.display = me.cls === 'rogue' || me.cls === 'berserker' || (me.cls === 'druid' && me.spec === 'feral') ? '' : 'none';
-    $('cpA').innerHTML = me.cls === 'berserker' ? '<span class="bloodrage"></span>' : '<i></i>'.repeat(5);
+    $('cpA').style.display = me.cls === 'rogue' || me.cls === 'berserker' || me.cls === 'paladin' || (me.cls === 'druid' && me.spec === 'feral') ? '' : 'none';
+    $('cpA').classList.toggle('holy', me.cls === 'paladin'); // Paladin Holy Power: 3 golden pips
+    $('cpA').innerHTML = me.cls === 'berserker' ? '<span class="bloodrage"></span>' : '<i></i>'.repeat(me.cls === 'paladin' ? 3 : 5);
     this.lastBuffKey = {};
     this.hintT = 14; $('controlsHint').style.opacity = 1;
   }
@@ -132,7 +133,7 @@ export class HUD {
       setText($('nameB'), 'No Target'); setText($('classB'), ''); $('portB').innerHTML = '?'; $('portB').style.cssText = 'font-size:30px;color:#666';
       setStyle($('hpB'), 'width', '0%'); setStyle($('resB'), 'width', '0%'); setText($('hpTextB'), ''); setText($('resTextB'), ''); $('buffsB').innerHTML = ''; $('castB').classList.add('hidden');
     }
-    if (me.cls === 'rogue') [...$('cpA').children].forEach((c, i) => setCls(c, 'on', i < me.cp));
+    if (me.cls === 'rogue' || me.cls === 'paladin' || me.cls === 'druid') [...$('cpA').children].forEach((c, i) => setCls(c, 'on', i < me.cp));
     if (me.cls === 'berserker') { const bonus = Math.round(CLASSES.berserker.passive.maxBonus * (1 - Math.max(0, me.hp) / me.maxHp) * 100); const el = $('cpA').firstChild; setText(el, `Bloodrage +${bonus}% damage`); setStyle(el, 'color', bonus > 35 ? '#ff4a3a' : bonus > 15 ? '#ff9a6a' : '#c8a080'); }
     this.castbar($('castA'), me, true);
     setStyle($('stamFill'), 'width', (me.stamina ?? 100) + '%');

@@ -68,7 +68,7 @@ their champion so the match can finish.
 | --- | --- |
 | `W A S D` | Move / strafe |
 | Mouse | Turn camera & champion (click to capture the mouse; if capture is blocked, hold the right button and drag) |
-| **Left click** | Basic attack on the enemy under the crosshair (auto-repeats at your attack speed) |
+| **Left click** | Basic attack on your target — one swing per click, hold to keep swinging at your attack speed. Clicking a different enemy only selects it |
 | `1`–`6` | Abilities (`Q` / `E` also trigger 5 / 6) |
 | `Tab` | Cycle enemy targets |
 | `F1` / `F2` | Friendly target: yourself / your ally (heals and shields go to the friendly target) |
@@ -77,9 +77,12 @@ their champion so the match can finish.
 
 ## Combat rules
 
-- Every class has a basic attack: Warrior sword swings, Rogue twin slashes (melee); Mage arcane bolts,
-  Priest holy sparks, Shaman static bolts (30-yard projectiles, usable while moving). The swing timer caps
-  the rate — clicking faster doesn't attack faster.
+- Every class has a basic attack: Warrior cleaver swings, Rogue twin slashes, Paladin hammer blows (melee); Mage arcane
+  bolts, Priest holy sparks, Shaman static bolts (30-yard projectiles, usable while moving).
+- **Basic attacks only happen when you click.** One left click = one swing (a click shortly before the swing timer
+  is ready is buffered); holding the button keeps swinging. The swing timer caps the rate — clicking faster or
+  holding never attacks faster. Selecting a target (Tab, or clicking a different enemy) never attacks, and switching
+  targets drops a buffered click. Bots play by the same rule (they "hold the button" on their focus).
 - **Hits from behind deal 10% more damage.** Direct hits and heals can **crit** (8%, +50%).
 - Cast-time spells require standing still; moving or jumping cancels them. The four rune pillars block
   line of sight.
@@ -89,20 +92,25 @@ their champion so the match can finish.
 - 1.0 s global cooldown with a short spell-queue window.
 - Crowd control has diminishing returns (100% → 50% → 25% → immune, resets after 15 s).
 - **Dampening** starts after 60 s and steadily reduces healing and shields, so every round ends.
+- **Taunt (Challenge)**: a Protection Paladin's Shield Slam, Sentinel's Shield, Consecration and Guardian's Resolve
+  *Challenge* enemies — a Challenged enemy deals 25% less damage to anyone but that paladin, and bots turn on him.
 
 ## Classes
 
-| Class | Resource | Identity | Signature |
-| --- | --- | --- | --- |
-| Mage | Mana | Ranged frost/fire/arcane burst, frost slows, root, blink | Arcane Comet (big hit + stun) |
-| Rogue | Energy + combo points | Fast melee, stealth, teleport behind target, stun finisher | Death Mark (delayed detonation) |
-| Warrior | Rage | Tanky melee, charge, slows, interrupt + silence, damage reduction; *Shieldwall* passive in 2v2: takes 15% less damage, nearby ally 10% less, gains rage when the ally is hit | Steel Tempest (CC-immune spin) |
-| Berserker | Rage | Bare-chested dual-axe brute: bleeds, execute, axe throw (root), leap slam, lifesteal; *Bloodrage* passive — up to +50% damage as his health drops (in 2v2 also up to 25% less damage taken) | Berserk (sacrifice health for damage + attack speed) |
-| Priest | Mana | Sustain: heals and shields (self or ally), disorient, purge | Halo of Judgment (damage + group heal + purge) |
-| Shaman | Mana | Lightning & magma, stun totem, team-protecting totem, wind dash | Fire Spirit (summoned elemental) |
-| Hunter *(jungle troll)* | Focus | Ranged bow / crossbow, stings, traps, disengage; Beastmaster fights with a jungle cat | Bestial Wrath / Piercing Volley |
-| Necromancer *(undead)* | Mana | Ranged only: rot, bone spears, a ghoul servant or stacking curses; fragile in melee | Abomination / Doom |
-| Druid *(bull-folk)* | Mana / Energy | Feral shapeshifts between panther (damage) and bear (tank); Restoration heals over time and roots | Berserk Instinct / Tree of Life |
+Every class has a fixed race; both specs share it, but each spec has its own equipment set.
+
+| Class | Race | Resource | Identity | Signature |
+| --- | --- | --- | --- | --- |
+| Mage | Sun Elf | Mana | Ranged frost/fire/arcane burst, frost slows, root, blink | Arcane Comet (big hit + stun) / Meteor |
+| Rogue | Human | Energy + combo points | Fast melee, stealth, teleport behind target, stun finisher | Death Mark / Plague Cloud |
+| Warrior | Orc | Rage | Tanky melee, charge, slows, interrupt + silence, damage reduction; *Shieldwall* passive in 2v2 | Steel Tempest / Bladestorm |
+| Berserker | Dwarf | Rage | Bare-chested slayer: bleeds, execute, axe throw (root), leap slam, lifesteal; *Bloodrage* — up to +50% damage as his health drops | Berserk / Headtaker |
+| **Paladin** | Human | Mana + Holy Power (3) | Plate-clad holy warrior: builds Holy Power, spends it on a healing Radiant Storm (Crusader) or on Holy Shield (Protection tank with taunts) | Divine Wrath / Guardian's Resolve |
+| Priest | Human | Mana | Sustain: heals and shields (self or ally), disorient, purge | Halo of Judgment / Void Eruption |
+| Shaman | Orc | Mana | Lightning & magma, stun totem, team-protecting totem, wind dash | Fire Spirit / Spirit Wolf |
+| Hunter | Jungle Troll | Focus | Ranged bow / crossbow, stings, traps, disengage; Beastmaster fights with a jungle cat | Bestial Wrath / Piercing Volley |
+| Necromancer | Undead | Mana | Ranged only: rot, bone spears, a ghoul servant or stacking curses; fragile in melee | Abomination / Doom |
+| Druid | Bull-folk | Mana / Energy | Feral shapeshifts between panther (damage) and bear (tank); Restoration heals over time and roots | Berserk Instinct / Tree of Life |
 
 Full numbers live in [`js/data/classes.js`](js/data/classes.js) and are shown in-game on the class screen.
 
@@ -115,24 +123,46 @@ The spec shows on unit frames, nameplates and in the lobby.
 | Class | Spec 1 (original kit) | Spec 2 |
 | --- | --- | --- |
 | Mage | ❄ **Frost**: turret caster, *Shatter* (+20% crit vs rooted, crits +60%), Frostbite, Arcane Shift with 2 charges | 🔥 **Fire**: Fireball and Meteor cast on the move (at 65% speed), *Kindling* Burning stacks, Flame Ring, Blazing Step, Meteor (delayed AoE knockdown) |
-| Rogue | 🗡 Subtlety | 🐍 **Assassination**: *Venom Mastery* (slashes stack Deadly Poison, +3% damage per stack), Envenom, Crippling Poison, Plague Cloud |
+| Rogue | 🗡 Subtlety | 🐍 **Assassination**: *Venom Mastery* (slashes stack Deadly Poison, +3.5% damage per stack), Envenom, Crippling Poison, Plague Cloud |
 | Warrior | 🛡 Protection | ⚔ **Arms**: two-handed greatsword, *Battle Trance* (+35% vs targets below 30%), Execute, Die by the Sword, Bladestorm leap |
-| Berserker | 🪓 Fury: two axes, fast flurries | 💀 **Executioner**: one great axe, slow swings, big crits (*Heavy Hands*: +12% crit chance, crits +80%); Skullsplitter, Ground Breaker, Iron Hide, Headtaker |
+| Berserker | 🪓 Fury: two axes, fast flurries | 💀 **Executioner**: one great axe, slow swings, big crits (*Heavy Hands*: +15% crit chance, crits +80%); Skullsplitter, Ground Breaker, Iron Hide, Headtaker |
+| Paladin | ☀ **Crusader**: two-handed sun hammer with holy autos, Holy Strike, Judgment (+15% holy damage taken, speed burst), Radiant Storm (Holy Power spender, AoE + self-heal), Hammer of Light (stun), Divine Shield (immunity), Divine Wrath | 🛡 **Protection**: sword & tower shield tank, *Righteous Vow* (5% less damage taken, Challenge/taunt), Shield Slam, Sentinel's Shield (bouncing silence), Consecration, Holy Shield (Holy Power → damage reduction + heal), Guardian's Resolve |
 | Priest | ✦ Discipline | 🌑 **Shadow**: *Shadowform* (+15% shadow damage, 15% less taken), Shadow Word: Pain, Mind Blast (self-heal), Psychic Scream, Void Eruption |
 | Shaman | ⚡ Elemental | 🐺 **Enhancement**: melee with two storm axes, *Maelstrom* (lightning procs), Stormstrike, Lava Lash, Healing Surge, Earthbind Totem, Spirit Wolf pet |
 | Hunter | 🐾 **Beastmaster**: jungle cat pet, Kill Command, Serpent Sting, Intimidation, Bestial Wrath | 🎯 **Sharpshooter**: no pet, crossbow, *Steady Aim*, Aimed Shot, Freezing Trap, Piercing Volley |
 | Necromancer | 💀 **Summoner**: ghoul servant that keeps rising, Soul Rot, Corpse Explosion, Abomination | ☠ **Curser**: *Martyr's Curse* (more curses = more damage taken, both ways), Curse of Agony / Weakness, Soul Siphon, Doom |
 | Druid | 🐾 **Feral**: cat form (Rake, Shred, Ferocious Bite) ⇄ bear form (Maul, Thrash, Frenzied Regeneration), Wild Pounce, Berserk Instinct | 🌳 **Restoration**: stacking Rejuvenation, Regrowth, Moonfire, Entangling Roots, Wild Charge, Tree of Life |
 
-Design of all specs and the planned new classes: [`docs/CLASSES_AND_SPECS.md`](docs/CLASSES_AND_SPECS.md).
+Design of all specs: [`docs/CLASSES_AND_SPECS.md`](docs/CLASSES_AND_SPECS.md).
+
+## Graphics
+
+- **Races with real proportions.** One CC0 humanoid rig serves every race; [`races.js`](js/render/races.js) bakes
+  each race's limb lengths, thickness, chest width, neck, head size and face shape (jaw, brow, nose, muzzle, chin)
+  into the bind pose, so animations never shear. Dwarves are short and stocky, orcs massive and hunched, sun elves
+  tall and slender, trolls long-limbed, the undead gaunt, the bull-folk huge with a muzzle and hooves.
+- **A gear set per spec.** [`outfits.js`](js/render/outfits.js) builds a complete equipment set for each of the
+  20 specs — different pauldrons, helms, chest pieces, bracers, belts, skirts and back items (crystal-shard
+  pauldrons and an ice crown for Frost, phoenix plumes for Fire, spiked tusked iron for orc Protection, a single
+  colossal pauldron for Arms, winged helm and sunburst plate for Crusader, a visored bastion helm and tower shield
+  for Protection Paladin, cowls, wolf pelts, beast skulls, a feathered hat, antler crowns …).
+- **Druid forms** ([`beasts.js`](js/render/beasts.js)): a skinned great cat and bear with real anatomy (one swept
+  mesh over a full skeleton), fur colouring and an alpha-tested fur shell, and procedural walk, gallop, pounce /
+  rear-up maul, idle and death animation.
+- **Look**: brighter, more saturated grade, warm key light with a cool back light, and a fresnel rim light on all
+  champions so silhouettes read at any distance.
+- **Performance**: every champion is folded into one skinned mesh per material ([`consolidate.js`](js/render/consolidate.js)):
+  body, outfit, head, hair, rigid armor and static weapon parts — roughly 55 draw calls per champion became about 20.
+  Glow / rune materials are shared, effects never add lights at runtime (no shader recompiles mid-fight), and the
+  Low / Medium / High quality setting still controls shadows, bloom and resolution.
 
 ## Balance lab
 
-Open <http://localhost:8080/balance.html> to run headless AI-vs-AI simulations: a 1v1 win-rate matrix, or
-every 2v2 team composition against every other. It measures the AI's play rather than expert human play,
-so use it as a guide. Every playable spec is its own entry (e.g. `berserker:fury`, `berserker:executioner`).
-Latest runs (hard AI, 18 class/spec entries): **1v1**: between 36% (Berserker Executioner) and 66% (Elemental Shaman);
-**2v2** (2,400 random team-ups): between 37% (Executioner) and 64% (Discipline Priest); every new class and spec lands 41–58%.
+Open <http://localhost:8080/balance.html> to run headless AI-vs-AI simulations: a 1v1 win-rate matrix, every 2v2
+team composition against every other, or the **spec benchmark** (every spec under identical conditions: sustained
+and burst DPS against a target dummy, survival time under a fixed damage stream, healing on a partner). It measures
+the AI's play rather than expert human play, so use it as a guide. Every playable spec is its own entry
+(e.g. `paladin:crusader`). Latest numbers and the full change log: [`docs/BALANCE.md`](docs/BALANCE.md).
 
 ## Project layout
 
@@ -149,9 +179,13 @@ js/audio.js              Synthesized SFX + generative orchestral music (Web Audi
 js/render/world.js       Scene, lighting, post-processing, camera, team rings, selection circles
 js/render/arena.js       Procedural arena, sky, terrain, crowd, banners, statues, backdrop
 js/render/bridge.js      The central arch bridge (same dimensions as BRIDGE in sim.js)
-js/render/heroes.js      Rigged champions (outfits, animation mixer, weapon grips)
-js/render/armory.js      Class armor sets, race features + weapons (built in code, merged per bone for few draw calls)
-js/render/minions.js     Pets & summons (wolf, jungle cat, ghoul hookup) and Druid forms (panther, bear, treant)
+js/render/heroes.js      Rigged champions (looks per class + spec, animation mixer, weapon grips, rim light)
+js/render/races.js       Race proportions + face shapes baked into the bind pose
+js/render/outfits.js     Race anatomy (ears, tusks, beards, horns, hooves) and one gear set per spec
+js/render/consolidate.js Folds a champion into one skinned mesh per material (draw calls)
+js/render/beasts.js      Druid Cat Form / Bear Form: skinned procedural creatures with gait animation
+js/render/armory.js      Materials, armor building blocks and all weapons (built in code)
+js/render/minions.js     Pets & summons (wolf, jungle cat, ghoul hookup) and the treant form; cat / bear come from beasts.js
 js/render/characters.js  Procedural fallback champion models
 js/render/vfx.js         Pooled particles (glow + smoke), projectiles, casting circles, spell effects
 js/ui/hud.js             Unit/party/arena frames, action bar, cast bars, nameplates, combat text
@@ -159,5 +193,5 @@ balance.html             Balance lab
 serve.ps1                Tiny local static server
 ```
 
-All models, textures, music and sound effects are generated in code — there are no external art or
-audio assets.
+The champions are built from CC0 assets (see [`assets/CREDITS.md`](assets/CREDITS.md)); every armor set, weapon,
+race feature, creature, spell effect, the music and the sound effects are generated in code.

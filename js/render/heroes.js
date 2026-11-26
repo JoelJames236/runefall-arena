@@ -13,6 +13,16 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { makeMaterials, makeClassWeapon, equipArmor } from './armory.js';
 import { makeFormModel } from './minions.js';
+import { applyRace, RACES, RACE_OF } from './races.js';
+import { consolidate } from './consolidate.js';
+
+// Rim light for champions: a cheap view-dependent fresnel glow added to the emissive term of any
+// material that defines USE_RIM, so every silhouette reads clearly against the arena at any distance.
+THREE.ShaderChunk.emissivemap_fragment += `
+#ifdef USE_RIM
+  { float rimV = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0); totalEmissiveRadiance += RIM_COLOR * (rimV * rimV * rimV); }
+#endif`;
+export function addRim(m, color = 'vec3(0.34, 0.33, 0.38)') { if (!m || m.isMeshBasicMaterial || m.isSpriteMaterial || (m.defines && m.defines.USE_RIM !== undefined)) return; m.defines = { ...(m.defines || {}), USE_RIM: '', RIM_COLOR: color }; m.needsUpdate = true; }
 
 const M = 'assets/models/', P = 'assets/props/', TX = 'assets/tex/';
 const GL = {};        // loaded glTFs by name
@@ -21,47 +31,64 @@ let TEX = null;       // shared PBR textures for procedural weapons
 let ready = false;
 
 // ------------------------------------------------------------------ class looks
+// Every class has a fixed race (races.js bakes its proportions and face); every spec has its own
+// look: base outfit, hair, skin, weapons and (in outfits.js) a complete equipment set of its own.
+//   outfit/head/parts: CC0 body pieces   hide: outfit meshes to drop   tint/tintAmt: cloth colour grade
+//   skinTint: race skin colour            hair/hairTint: hair meshes     weapons: hand props   idle: stance clip
+const ORC_SKIN = [0.42, 0.62, 0.3], ELF_SKIN = [1.0, 0.88, 0.8], DWARF_SKIN = [1.0, 0.76, 0.64];
 const LOOKS = {
-  warrior: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: ['Hair_Buzzed', 'Hair_Beard'], hide: ['Head_Hood'],
-    tint: [0.34, 0.31, 0.3], tintAmt: 0.55, skinTint: [1, 0.92, 0.86], scale: 1.06, weapons: ['runesword', 'kiteshield'], idle: 'Idle_Shield_Loop' },
-  rogue: { outfit: 'Female_Ranger', head: 'Superhero_Female_FullBody', hair: [], hide: [],
-    tint: [0.16, 0.13, 0.2], tintAmt: 0.82, skinTint: [0.95, 0.88, 0.85], scale: 0.98, weapons: ['fang', 'fangL'], idle: 'Crouch_Idle_Loop' },
-  mage: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: ['Hair_Beard'], hide: [],
-    tint: [0.16, 0.2, 0.46], tintAmt: 0.8, skinTint: [1, 0.95, 0.92], scale: 1.0, weapons: ['archstaff'], idle: 'Idle_Loop', glow: 0xa070ff },
-  berserker: { outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], hair: ['Hair_Long', 'Hair_Beard'], hide: [],
-    tint: [0.22, 0.16, 0.12], tintAmt: 0.65, skinTint: [0.96, 0.82, 0.72], scale: 1.13, weapons: ['warAxe', 'warAxeL'], idle: 'Sword_Idle', weaponScale: 1.15, axeTint: [0.5, 0.48, 0.46] },
+  // Sun Elf magisters: slender, long platinum hair, glowing eyes
+  mage: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: ['Hair_Long'], hairTint: [0.92, 0.88, 0.74], hide: ['Head_Hood', 'Acc_Pauldron'],
+    tint: [0.12, 0.18, 0.48], tintAmt: 0.82, skinTint: ELF_SKIN, scale: 1.0, weapons: ['archstaff'], idle: 'Idle_Loop', glow: 0x7fd0ff },
+  // Human rogue: hooded black leathers
+  rogue: { outfit: 'Female_Ranger', head: 'Superhero_Female_FullBody', hair: [], hide: ['Head_Hood', 'Acc_Pauldron'],
+    tint: [0.12, 0.1, 0.15], tintAmt: 0.85, skinTint: [0.95, 0.86, 0.8], scale: 0.98, weapons: ['fang', 'fangL'], idle: 'Crouch_Idle_Loop' },
+  // Orc warrior: green skin, heavy black-iron plate, cleaver and spiked round shield
+  warrior: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: ['Head_Hood', 'Acc_Pauldron'],
+    tint: [0.2, 0.17, 0.15], tintAmt: 0.75, skinTint: ORC_SKIN, scale: 1.08, weapons: ['cleaver', 'orcshield'], idle: 'Idle_Shield_Loop' },
+  // Dwarf berserker: bare-chested slayer with a blazing crest and beard
+  berserker: { outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], hair: [], hairTint: [0.86, 0.32, 0.07], hide: [],
+    tint: [0.22, 0.16, 0.12], tintAmt: 0.65, skinTint: DWARF_SKIN, scale: 1.0, weapons: ['warAxe', 'warAxeL'], idle: 'Sword_Idle', weaponScale: 1.0, axeTint: [0.5, 0.48, 0.46] },
+  // Human paladin: gilded plate and a two-handed sun hammer
+  paladin: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: ['Hair_Beard'], hairTint: [0.36, 0.24, 0.12], hide: ['Head_Hood', 'Acc_Pauldron'],
+    tint: [0.8, 0.74, 0.6], tintAmt: 0.7, skinTint: [1, 0.9, 0.82], scale: 1.06, weapons: ['sunhammer'], idle: 'Sword_Idle', glow: 0xffe08a },
+  // Human priest: vestments and a radiant mace
   priest: { outfit: 'Female_Peasant', head: 'Superhero_Female_FullBody', hair: ['Hair_Buns'], hide: [],
     tint: [0.9, 0.85, 0.72], tintAmt: 0.72, skinTint: [1, 0.96, 0.94], scale: 1.0, weapons: ['sunmace'], idle: 'Idle_Loop', halo: true, glow: 0xffd98a },
-  shaman: { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: ['Hair_Long', 'Hair_Beard'], hide: ['Arms_1'],
-    tint: [0.42, 0.3, 0.2], tintAmt: 0.6, skinTint: [0.86, 0.72, 0.62], scale: 1.03, weapons: ['stormaxe', 'fireOrb'], idle: 'Idle_Loop', glow: 0x4ad8ff },
+  // Orc shaman: brown-green skin, long black hair, fur and bone
+  shaman: { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: ['Hair_Long'], hairTint: [0.08, 0.06, 0.05], hide: ['Arms_1'],
+    tint: [0.4, 0.3, 0.2], tintAmt: 0.6, skinTint: [0.5, 0.6, 0.32], scale: 1.06, weapons: ['stormaxe', 'fireOrb'], idle: 'Idle_Loop', glow: 0x4ad8ff },
+  // Jungle troll hunter: tall, blue-green skin
+  hunter: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: ['Head_Hood', 'Acc_Pauldron'],
+    tint: [0.28, 0.3, 0.22], tintAmt: 0.6, skinTint: [0.42, 0.62, 0.66], scale: 1.1, weapons: ['bow'], idle: 'Idle_Loop', hairTint: [0.62, 0.12, 0.08] },
+  // Undead necromancer: grey-green skin, hooded grave robes
+  necromancer: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: ['Head_Hood', 'Acc_Pauldron'],
+    tint: [0.14, 0.17, 0.13], tintAmt: 0.85, skinTint: [0.55, 0.62, 0.5], scale: 1.0, weapons: ['bonestaff'], idle: 'Idle_Loop', glow: 0x7aff6a },
+  // Bull-folk druid: huge, brown fur; hooves instead of boots
+  druid: { outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs'] }], hair: [], hide: [],
+    tint: [0.3, 0.24, 0.14], tintAmt: 0.6, skinTint: [0.52, 0.36, 0.24], scale: 1.12, weapons: ['druidstaff'], idle: 'Idle_Loop', glow: 0x8ad86a, hairTint: [0.18, 0.11, 0.07] },
 };
 // spec looks ("class:spec"): overrides on top of the class look
-// new classes, each with a fixed race (built from the same CC0 bodies; race features are added by the armory)
-LOOKS.hunter = { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: ['Head_Hood'], // jungle troll: tall, blue-green skin
-  tint: [0.28, 0.3, 0.22], tintAmt: 0.6, skinTint: [0.42, 0.62, 0.66], scale: 1.12, weapons: ['bow'], idle: 'Idle_Loop' };
+LOOKS['mage:fire'] = { ...LOOKS.mage, tint: [0.44, 0.1, 0.06], hairTint: [0.95, 0.62, 0.3], weapons: ['flamestaff'], glow: 0xff7a2a };
+LOOKS['rogue:assassination'] = { ...LOOKS.rogue, hair: ['Hair_Buns'], hairTint: [0.32, 0.08, 0.05], tint: [0.1, 0.18, 0.08], tintAmt: 0.85 };
+LOOKS['warrior:arms'] = { ...LOOKS.warrior, outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], hide: [], weapons: ['greatsword'], idle: 'Sword_Idle', tint: [0.3, 0.2, 0.16] };
+LOOKS['berserker:executioner'] = { ...LOOKS.berserker, hairTint: [0.1, 0.08, 0.07], beardLen: 0.42, weapons: ['greatAxe'], weaponScale: 1.0, tint: [0.14, 0.12, 0.11], tintAmt: 0.75, castPose: 'Sword_Block' }; // castPose: Skullsplitter wind-up
+LOOKS['paladin:protection'] = { ...LOOKS.paladin, weapons: ['holysword', 'towershield'], idle: 'Idle_Shield_Loop', tint: [0.3, 0.36, 0.52] };
+LOOKS['priest:shadow'] = { ...LOOKS.priest, hair: [], tint: [0.26, 0.14, 0.36], tintAmt: 0.82, halo: false, glow: 0xa060ff, voidOrb: true };
+LOOKS['shaman:enhancement'] = { ...LOOKS.shaman, hair: [], weapons: ['stormaxe', 'stormaxeL'], idle: 'Sword_Idle', tint: [0.3, 0.34, 0.4], glow: 0x9ae8ff };
 LOOKS['hunter:sharpshooter'] = { ...LOOKS.hunter, weapons: ['crossbow'], idle: 'Pistol_Idle_Loop', tint: [0.24, 0.2, 0.16] };
-LOOKS.necromancer = { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: [], // undead: grey-green skin, hooded grave-robes
-  tint: [0.14, 0.17, 0.13], tintAmt: 0.85, skinTint: [0.55, 0.62, 0.5], scale: 1.0, weapons: ['bonestaff'], idle: 'Idle_Loop', glow: 0x7aff6a };
 LOOKS['necromancer:curser'] = { ...LOOKS.necromancer, tint: [0.15, 0.1, 0.2], glow: 0xb070ff };
-LOOKS.druid = { outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], hair: ['Hair_Long'], hide: [], // bull-folk: huge, brown fur
-  tint: [0.3, 0.24, 0.14], tintAmt: 0.6, skinTint: [0.52, 0.36, 0.24], scale: 1.24, weapons: ['druidstaff'], idle: 'Idle_Loop', glow: 0x8ad86a, hairTint: [0.18, 0.11, 0.07] };
 LOOKS['druid:feral'] = { ...LOOKS.druid, weapons: [] };
 // undead summons (minions)
-LOOKS.ghoul = { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: [], hide: [], tint: [0.2, 0.24, 0.16], tintAmt: 0.8, skinTint: [0.5, 0.6, 0.42], scale: 0.95, weapons: [], idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', noArmor: true };
-LOOKS.abomination = { ...LOOKS.ghoul, outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], skinTint: [0.55, 0.66, 0.46], scale: 1.55 };
-LOOKS['rogue:assassination'] = { ...LOOKS.rogue, tint: [0.1, 0.2, 0.1], tintAmt: 0.85 }; // dark green poisoner leathers
-LOOKS['warrior:arms'] = { ...LOOKS.warrior, weapons: ['greatsword'], idle: 'Sword_Idle', tint: [0.36, 0.2, 0.18] }; // two-handed greatsword, no shield
-LOOKS['priest:shadow'] = { ...LOOKS.priest, tint: [0.26, 0.14, 0.36], tintAmt: 0.82, halo: false, glow: 0xa060ff, voidOrb: true }; // violet vestments, void glow
-LOOKS['shaman:enhancement'] = { ...LOOKS.shaman, weapons: ['stormaxe', 'stormaxeL'], idle: 'Sword_Idle', tint: [0.3, 0.34, 0.4], glow: 0x9ae8ff }; // two storm axes, wolf-pelt
-LOOKS['mage:fire'] = { ...LOOKS.mage, tint: [0.44, 0.11, 0.07], tintAmt: 0.82, glow: 0xff7a2a }; // crimson robes, burning staff crystal
-LOOKS['berserker:executioner'] = { ...LOOKS.berserker, weapons: ['greatAxe'], weaponScale: 1.08, tint: [0.14, 0.12, 0.11], tintAmt: 0.75, castPose: 'Sword_Block' }; // castPose: Skullsplitter wind-up
+LOOKS.ghoul = { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: [], hide: [], tint: [0.2, 0.24, 0.16], tintAmt: 0.8, skinTint: [0.5, 0.6, 0.42], scale: 0.95, weapons: [], idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', noArmor: true, race: 'undead' };
+LOOKS.abomination = { ...LOOKS.ghoul, outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], skinTint: [0.55, 0.66, 0.46], scale: 1.4, race: 'orc' };
 
 // one-shot actions: kind -> per-class clip list (alternated) + whether it should use the full body
 const ACTIONS = {
-  attack: { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], 'shaman:enhancement': ['Sword_Regular_A', 'Sword_Regular_B'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'], hunter: ['Pistol_Shoot'], necromancer: ['Spell_Simple_Shoot'], druid: ['Spell_Simple_Shoot'], ghoul: ['Zombie_Scratch'], abomination: ['Zombie_Scratch'] },
+  attack: { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], paladin: ['TreeChopping_Loop'], 'paladin:protection': ['Sword_Regular_A', 'Sword_Regular_B'], 'shaman:enhancement': ['Sword_Regular_A', 'Sword_Regular_B'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'], hunter: ['Pistol_Shoot'], necromancer: ['Spell_Simple_Shoot'], druid: ['Spell_Simple_Shoot'], ghoul: ['Zombie_Scratch'], abomination: ['Zombie_Scratch'] },
   slash: { any: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Cross'] },
   stab: { any: ['Punch_Cross', 'Punch_Jab'] },
-  finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'], berserker: ['Sword_Regular_C'], 'berserker:executioner': ['Sword_Attack'], 'warrior:arms': ['Sword_Attack'] },
+  finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'], berserker: ['Sword_Regular_C'], paladin: ['Sword_Regular_C'], 'paladin:protection': ['Sword_Attack'], 'berserker:executioner': ['Sword_Attack'], 'warrior:arms': ['Sword_Attack'] },
   bash: { any: ['Shield_OneShot'], rogue: ['Melee_Hook'] },
   release: { any: ['Spell_Simple_Shoot'] },
   raise: { any: ['Spell_Simple_Shoot'], berserker: ['Punch_Cross'] },
@@ -230,7 +257,7 @@ function makeWeapon(kind, look) {
 // How each weapon is held, in WORLD terms at the idle pose of a champion facing +Z:
 //   dir  = where the weapon's +Y (blade / shaft) points,  side = where its +X points,
 //   palm = offset from the bone toward the fingers (m),   up/fwd = extra world offsets.
-const ARMORY_KINDS = new Set(['runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'greatsword', 'stormaxeL', 'bow', 'crossbow', 'bonestaff', 'druidstaff', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
+const ARMORY_KINDS = new Set(['sunhammer', 'holysword', 'towershield', 'cleaver', 'orcshield', 'flamestaff', 'runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'greatsword', 'stormaxeL', 'bow', 'crossbow', 'bonestaff', 'druidstaff', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
 const GRIP = {
   sword: { bone: 'hand_r', dir: [0, 0.55, 1], side: [-1, 0, 0], palm: 0.085 },
   axe: { bone: 'hand_r', dir: [0, 0.35, 1], side: [-1, 0, 0], palm: 0.085 },
@@ -242,7 +269,8 @@ const GRIP = {
   shield: { bone: 'lowerarm_l', dir: [0, 1, 0], side: [0, 0, -1], palm: 0.14, out: [0.14, 0, 0.05] },
   fireOrb: { bone: 'hand_l', dir: [0, 1, 0], side: [1, 0, 0], palm: 0.06, up: 0.05 },
 };
-Object.assign(GRIP, { runesword: GRIP.sword, kiteshield: GRIP.shield, fang: GRIP.daggerR, fangL: GRIP.daggerL, archstaff: GRIP.staff, sunmace: GRIP.mace, 
+Object.assign(GRIP, { runesword: GRIP.sword, kiteshield: GRIP.shield, holysword: GRIP.sword, towershield: GRIP.shield, cleaver: GRIP.sword, orcshield: GRIP.shield, flamestaff: GRIP.staff,
+  sunhammer: { bone: 'hand_r', dir: [0, 0.92, 0.3], side: [-1, 0, 0.35], palm: 0.085 }, fang: GRIP.daggerR, fangL: GRIP.daggerL, archstaff: GRIP.staff, sunmace: GRIP.mace, 
   // axes held upright-forward with the cutting edge facing the enemy
   warAxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 }, warAxeL: { bone: 'hand_l', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 },
   stormaxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 },
@@ -292,14 +320,16 @@ export class Character {
     this.materials = [];
     const skinMats = new Map();
     const skin = m => { if (!skinMats.has(m)) { const c = m.clone(); c.color.setRGB(...look.skinTint); skinMats.set(m, c); this.skinMat = this.skinMat || c; } return skinMats.get(m); };
+    const gradedMats = new Map(); // one graded copy per source material, so the pieces can merge into one draw
+    const graded = m => { if (!gradedMats.has(m)) gradedMats.set(m, gradeMaterial(m, look.tint, look.tintAmt)); return gradedMats.get(m); };
     // outfit meshes: grade cloth, keep skin, hide parts
     body.traverse(o => {
       if (!o.isSkinnedMesh) return;
       o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true;
       if (look.hide.some(h => o.name.includes(h))) { o.visible = false; return; }
       const isSkin = /Regular|Superhero/i.test(o.material.name);
-      if (/Hair|Eye/i.test(o.material.name)) { o.material = o.material.clone(); if (cls === 'berserker' && /Hair/i.test(o.material.name)) o.material.color.setRGB(0.16, 0.1, 0.07); return; }
-      o.material = isSkin ? skin(o.material) : gradeMaterial(o.material, look.tint, look.tintAmt);
+      if (/Hair|Eye/i.test(o.material.name)) { o.material = o.material.clone(); if (look.hairTint && /Hair/i.test(o.material.name)) o.material.color.setRGB(...look.hairTint); return; }
+      o.material = isSkin ? skin(o.material) : graded(o.material);
     });
     // transplant head (+ eyes) and hair onto the outfit skeleton
     const holder = body.children.find(c => c.isSkinnedMesh)?.parent || body;
@@ -315,9 +345,13 @@ export class Character {
     if (look.head) for (const h of HEADS[look.head]) attach(h.src, h.geo, /Eye/i.test(h.src.name) ? h.src.material : skin(h.src.material));
     // extra clothing pieces borrowed from other outfits (e.g. trousers + boots on a bare body)
     for (const part of look.parts || []) GL[part.src].scene.traverse(o => {
-      if (o.isSkinnedMesh && part.only.some(n => o.name.includes(n))) attach(o, o.geometry, gradeMaterial(o.material, look.tint, look.tintAmt));
+      if (o.isSkinnedMesh && part.only.some(n => o.name.includes(n))) attach(o, o.geometry, graded(o.material));
     });
-    for (const hn of look.hair) GL[hn].scene.traverse(o => { if (o.isSkinnedMesh) { const mat = o.material.clone(); if (cls === 'mage') mat.color.setRGB(0.75, 0.75, 0.78); if (cls === 'shaman') mat.color.setRGB(0.35, 0.25, 0.2); if (cls === 'berserker') mat.color.setRGB(0.16, 0.1, 0.07); if (look.hairTint) mat.color.setRGB(...look.hairTint); attach(o, o.geometry, mat); } });
+    for (const hn of look.hair) GL[hn].scene.traverse(o => { if (o.isSkinnedMesh) { const mat = o.material.clone(); if (look.hairTint) mat.color.setRGB(...look.hairTint); attach(o, o.geometry, mat); } });
+    // RACE: bake the race's proportions and face into this champion's bind pose (see races.js)
+    this.race = look.race || RACE_OF[cls] || 'human'; this.raceDef = RACES[this.race] || RACES.human;
+    const { lift } = applyRace(this, this.race, look.outfit);
+    if (lift) body.position.y -= lift * look.scale;
     // weapons: grips are solved from the hand's pose in the idle clip, so a weapon points
     // the intended world direction at rest and then simply follows the hand bone.
     this.weapons = {};
@@ -329,6 +363,8 @@ export class Character {
       const bone = this.bones[gp.bone] || this.bones.hand_r;
       solveGrip(wp, bone, gp, this.bones);
       if (look.weaponScale) wp.scale.multiplyScalar(look.weaponScale);
+      // static weapon parts fold into the champion mesh (consolidate.js); pulsing / spinning parts stay separate
+      const U = wp.userData; if (U.fire) U.noMerge = true; else for (const p of [U.pulse, U.crystal, U.spin, U.drop]) if (p) p.userData.noMerge = true;
       bone.add(wp);
       this.weapons[w] = wp;
     }
@@ -339,9 +375,11 @@ export class Character {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.008, 6, 40), glowMat(0xffe2a0, 2.5));
       const glowR = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.03, 6, 40), addGlow(0xffd27a, 0.22));
       const h = new THREE.Group(); h.add(ring, glowR); h.position.set(0, 0.26, -0.06); h.rotation.x = Math.PI / 2 - 0.25;
-      this.bones.Head.add(h); this.halo = h;
+      this.bones.Head.add(h); this.halo = h; h.userData.noMerge = true;
     }
-    this.root.traverse(o => { if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; for (const mm of ms) if (!this.materials.includes(mm)) { mm.userData.baseOpacity = mm.opacity; mm.userData.baseTransparent = mm.transparent; this.materials.push(mm); } } });
+    // fold the body, outfit, head, hair and rigid armor into one skinned mesh per material (draw calls)
+    this.drawGroups = consolidate(this);
+    this.root.traverse(o => { if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; for (const mm of ms) if (!this.materials.includes(mm)) { mm.userData.baseOpacity = mm.opacity; mm.userData.baseTransparent = mm.transparent; this.materials.push(mm); if (!mm.transparent) addRim(mm); } } });
 
     // ---- animation
     this.mixer = new THREE.AnimationMixer(body);
@@ -350,8 +388,8 @@ export class Character {
     this.cur = null;   // active one-shot { kind, name, t, dur, full, weight }
     this.deadT = 0; this.vic = false; this.hitT = 0; this.hitBig = 0;
     const W = this.weapons, tipOf = k => W[k] && (W[k].userData.tip || W[k]);
-    this.focus = ['archstaff', 'sunmace', 'fireOrb', 'bonestaff', 'druidstaff', 'crossbow', 'bow', 'stormaxe', 'runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
-    this.tipR = ['runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
+    this.focus = ['archstaff', 'flamestaff', 'sunhammer', 'holysword', 'cleaver', 'sunmace', 'fireOrb', 'bonestaff', 'druidstaff', 'crossbow', 'bow', 'stormaxe', 'runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
+    this.tipR = ['runesword', 'sunhammer', 'holysword', 'cleaver', 'greatsword', 'warAxe', 'greatAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
     this.tipL = (W.fangL || W.warAxeL || W.stormaxeL)?.userData.tip;
     this.tmpQ = new THREE.Quaternion(); this.tmpE = new THREE.Euler();
     this.setLoco(look.idle, 0);
@@ -413,6 +451,17 @@ export class Character {
   setOpacity(a) {
     if (Math.abs(a - this.opacity) < 0.01) return;
     this.opacity = a;
+    // armor materials are shared by every champion: the first fade gives this champion its own copies
+    if (a < 0.999 && !this.privateMats) {
+      this.privateMats = true; const map = new Map();
+      this.root.traverse(o => {
+        if (!o.material || Array.isArray(o.material) || !o.material.userData.shared) return;
+        let c = map.get(o.material);
+        if (!c) { const s = o.material; c = s.clone(); c.userData.shared = false; c.userData.baseOpacity = s.userData.baseOpacity ?? s.opacity; c.userData.baseTransparent = s.userData.baseTransparent ?? s.transparent; map.set(s, c); }
+        o.material = c;
+      });
+      this.materials = this.materials.map(m => map.get(m) || m);
+    }
     for (const m of this.materials) {
       m.transparent = a < 0.999 || m.userData.baseTransparent;
       m.opacity = m.userData.baseOpacity * a;
@@ -431,7 +480,7 @@ export class Character {
       if (fk) { this.formModel = makeFormModel(fk); this.root.add(this.formModel.root); }
       this.body.visible = !fk;
     }
-    if (this.formModel) this.formModel.update(dt, (st.speed || 0) > 0.1, !!(this.cur && this.cur.t < 0.35));
+    if (this.formModel) this.formModel.update(dt, (st.speed || 0) > 0.1, !!(this.cur && this.cur.t < 0.35 && this.cur.kind !== 'hit'), st);
     this.time += dt;
     const speed = st.speed || 0;
     // ---- choose the locomotion / pose clip
@@ -503,6 +552,8 @@ export class Character {
     if (st.disoriented && !dying) { this.addRot(b.Head, -0.2, Math.sin(this.time * 2.4) * 0.5, 0); this.addRot(b.spine_02, 0, Math.sin(this.time * 2.4) * 0.25, 0); }
     if (this.hitT > 0) { this.hitT -= dt; const k = Math.max(0, this.hitT / 0.3); this.addRot(b.spine_02, -0.25 * k * (1 + this.hitBig), 0, 0); }
     if (st.casting && b.hand_r) { this.addRot(b.spine_03, -0.05, 0, 0); }
+    const hunch = this.raceDef.hunch; // orcs, trolls, undead and bull-folk lean into the world; the head stays level
+    if (hunch && !dying) { this.addRot(b.spine_02, hunch * 0.45, 0, 0); this.addRot(b.spine_03, hunch * 0.55, 0, 0); this.addRot(b.neck_01, -hunch * 0.6, 0, 0); this.addRot(b.Head, -hunch * 0.35, 0, 0); }
     // props
     const T = this.time;
     for (const w of Object.values(this.weapons)) {

@@ -217,7 +217,7 @@ function selectClass(id) {
     </button>`).join('')}</div></div>`;
   $('csDetails').innerHTML = `
     <h3 style="color:${C.color}">${C.name} <span class="spec-name" style="color:${C.specColor}">${C.specIcon} ${C.specName}</span></h3>
-    <div class="role">${C.role}</div>
+    <div class="role">${C.role}${C.race ? ` · <span class="race">Race: ${C.race}</span>` : ''}</div>
     ${specCards}
     <p>${C.desc}</p>
     <div class="gear"><b>Weapon:</b> ${C.weapon}<br><b>Armor:</b> ${C.armor}<br><b>Resource:</b> ${resName} (${C.res})</div>
@@ -869,19 +869,27 @@ function gameFrame(dt) {
   const raw = input.poll();
   const overlay = $('pause').classList.contains('active') || $('matchEnd').classList.contains('active');
   const canControl = input.active && !overlay;
-  if (!canControl) { raw.mx = 0; raw.mz = 0; raw.jump = false; raw.sprint = false; raw.abilities = []; raw.attack = false; raw.friendKey = 0; }
+  if (!canControl) { raw.mx = 0; raw.mz = 0; raw.jump = false; raw.sprint = false; raw.abilities = []; raw.attack = false; raw.atkHeld = false; raw.friendKey = 0; }
   const dir = worldDir(raw);
   const pre = currentView();
   const meV = pre.fighters[S.myId];
-  // click-targeting: the enemy under the crosshair / cursor becomes the target
+  // Left click = basic attack on the current target. A click on a DIFFERENT enemy only selects it
+  // (selecting never attacks), and that press does not start a held attack until the button is released.
   let setTarget, setFriend;
-  if (raw.attack) { const pick = world.pickEnemy(pre, S.myId, raw.clickPos.x, raw.clickPos.y); if (pick >= 0) setTarget = pick; }
+  S.selPend = S.selPend && S.selPend.t > 0 ? { ...S.selPend, t: S.selPend.t - dt } : null; // guest: our selection before the host confirms it
+  if (raw.attack) {
+    const pick = world.pickEnemy(pre, S.myId, raw.clickPos.x, raw.clickPos.y);
+    const cur = S.selPend ? S.selPend.id : meV.target;
+    if (pick >= 0 && pick !== cur) { setTarget = pick; raw.attack = false; S.holdBlock = true; S.selPend = { id: pick, t: 0.6 }; }
+  }
+  if (!raw.atkHeld) S.holdBlock = false;
+  const atkHold = !!raw.atkHeld && !S.holdBlock;
   if (raw.friendKey === 1) setFriend = S.myId;
   if (raw.friendKey === 2) {
     const allies = pre.fighters.filter(f => f.team === meV.team && f.id !== S.myId);
     setFriend = allies.length ? (meV.friend === allies[0].id && allies[1] ? allies[1].id : allies[0].id) : S.myId;
   }
-  const local = { mx: raw.mx, mz: raw.mz, yaw: input.yaw, jump: raw.jump, sprint: raw.sprint, abilities: raw.abilities.map(i => ({ i, dir })), targetReq: raw.targetReq, attack: raw.attack, setTarget, setFriend };
+  const local = { mx: raw.mx, mz: raw.mz, yaw: input.yaw, jump: raw.jump, sprint: raw.sprint, abilities: raw.abilities.map(i => ({ i, dir })), targetReq: raw.targetReq, attack: raw.attack, atkHold, setTarget, setFriend };
 
   let view;
   if (S.mode === 'guest') {
@@ -892,9 +900,9 @@ function gameFrame(dt) {
       if (state === 'countdown' && last) { L.x = last.f[S.myId].x; L.z = last.f[S.myId].z; }
     }
     S.sendT -= dt;
-    if (local.abilities.length) S.sendT = 0; // an ability press must reach the host with our latest movement
+    if (local.abilities.length || atkHold !== !!S.sentHold) S.sendT = 0; // an ability press or attack-button change must reach the host with our latest movement
     const net = S.net;
-    if (net && S.sendT <= 0) { S.sendT = 1 / 30; net.send({ t: 'in', x: +L.x.toFixed(3), y: +L.y.toFixed(3), z: +L.z.toFixed(3), yaw: +L.yaw.toFixed(3), moving: L.moving, sprinting: L.sprinting, stamina: Math.round(L.stamina), ack: S.ack }); }
+    if (net && S.sendT <= 0) { S.sendT = 1 / 30; net.send({ t: 'in', x: +L.x.toFixed(3), y: +L.y.toFixed(3), z: +L.z.toFixed(3), yaw: +L.yaw.toFixed(3), moving: L.moving, sprinting: L.sprinting, stamina: Math.round(L.stamina), h: atkHold ? 1 : 0, ack: S.ack }); S.sentHold = atkHold; }
     if (net) {
       if (setTarget !== undefined || setFriend !== undefined) net.send({ t: 'sel', tid: setTarget, fid: setFriend });
       for (const a of local.abilities) net.send({ t: 'ab', i: a.i, dir: a.dir });

@@ -220,17 +220,48 @@ Look: original large horned bull-folk: hooves, horns, braided mane, wooden totem
 
 ---
 
-## 4. Races (cosmetic first)
+### ☀ Paladin — NEW, melee, mana + Holy Power, plate, human
 
-New races requested: undead (Necromancer), jungle troll (Hunter), bull-folk (Druid). Proposal:
+Look: a human holy warrior in full plate. Crusader: gilded white plate, sunburst pauldrons, a winged helm,
+white tabard and cape, a two-handed sun hammer. Protection: heavy blue-steel bastion plate, layered square
+pauldrons, a visored great helm with a slit of light, a blue tabard, an arming sword and a sun-crested tower shield.
 
-- **Decided: fixed race per class.** Necromancer = undead, Hunter = jungle troll, Druid = bull-folk;
-  the six existing classes stay human. Races carry no stat bonuses (balance stays per class and spec).
-- Models: the current champions use the CC0 Quaternius base characters. Undead, troll and bull-folk need
-  new or modified models (horns, tusks, hooves, skeletal parts), which means new assets. **Downloads need
-  your approval** before I add any.
-- Keep the designs original. They can feel like classic fantasy races, but must not copy a specific
-  game's races, art or names.
+Class mechanic — **Holy Power** (0–3, shown as three golden pips): builders add 1, spenders consume all of it.
+
+| | ☀ Crusader (holy damage) | 🛡 Protection (tank) |
+|---|---|---|
+| Identity | Holy warrior: holy-school hammer autos, burst windows, self-sustain through damage | Survives everything, challenges (taunts) enemies off the partner, low damage |
+| Stats | 1250 hp, 12% armor, auto 48 holy / 2.5 s | 1420 hp, 15% armor, auto 36 / 1.9 s |
+| Passive | **Holy Power**; Judged targets take +15% holy damage from you | **Righteous Vow**: 5% less damage taken; Challenge = the enemy deals 15% less damage to anyone but you, bots turn on you while the challenge is fresh |
+| 1 | Holy Strike — 74 holy, +1 HP | **Shield Slam** — 55, Challenge 6 s, +1 HP |
+| 2 | Judgment — 20 yd, 68 holy, Judged 6 s, +30% speed 3 s, +1 HP | Judgment (shared) |
+| 3 | **Radiant Storm** — spender: 40 + 45 / HP holy to everything within 8 yd, heals 15% of the damage | **Sentinel's Shield** — 25 yd throw: 60 holy, interrupt + 2.5 s silence, bounces to a 2nd enemy, Challenges both, +1 HP |
+| 4 | Hammer of Light — 20 yd: 40 holy, interrupt + 1.5 s stun | **Consecration** — 8 yd holy ground for 8 s: 12 holy / s, Challenges, 10% less damage taken while standing in it |
+| 5 | **Divine Shield** — 3 s immunity to damage and harmful effects, cleanses; you deal 50% less damage; usable while stunned (90 s) | **Holy Shield** — spender: 5% + 6% / HP damage reduction for 6 s and 25 + 30 / HP self-heal |
+| 6 | **Divine Wrath** — pillar of light: 128 holy (+55 nearby), 3 Holy Power, +15% damage for 8 s (wings of light) | **Guardian's Resolve** — 8 s: 30% less damage taken, allies within 20 yd 10% less, Challenges every enemy within 15 yd |
+
+---
+
+## 4. Races
+
+**Decided and built: fixed race per class**, with real body proportions (see `js/render/races.js`):
+
+| Class | Race | What makes it recognizable |
+|---|---|---|
+| Mage | **Sun Elf** | Tall and slender, long neck, long swept-back ears, narrow face with a pointed chin, glowing eyes, long platinum (Frost) or copper-gold (Fire) hair |
+| Rogue | Human | Athletic, hooded or goggled |
+| Warrior | **Orc** | Green skin, massive shoulders and arms, bull neck, heavy jaw with an underbite and tusks, brutal brow, a forward hunch |
+| Berserker | **Dwarf** | Very short and stocky: short thick legs, barrel chest, big head and nose, huge braided beard (fiery crest and beard for Fury, black beard and masked helm for Executioner) |
+| Paladin | Human | Broad and armored |
+| Priest | Human | Refined, robed |
+| Shaman | **Orc** | Brown-green orc skin, same orc build |
+| Hunter | **Jungle Troll** | Tall and rangy: long arms and legs, big hands, long jaw, big tusks, long ears, red mohawk, strong hunch |
+| Necromancer | **Undead** | Gaunt: wasted limbs, thin neck, sunken cheeks, exposed jaw and ribs, glowing eyes |
+| Druid | **Bull-folk** | Huge: bull neck, massive arms and hands, the face drawn out into a muzzle, great curved horns, nose ring, braided mane, hooves and a tufted tail |
+
+Races carry no stat bonuses (balance stays per class and spec). The races are original designs in the classic
+fantasy archetypes (no copied art, names or races of any specific game). Everything is built from the CC0
+Quaternius base bodies plus code — no new downloads were needed.
 
 ---
 
@@ -249,8 +280,9 @@ New races requested: undead (Necromancer), jungle troll (Hunter), bull-folk (Dru
 Decided:
 - Specs are locked per match.
 - Warrior gets Arms + Protection.
-- Fixed race per class (old classes human; Necromancer undead, Hunter troll, Druid bull-folk).
+- Fixed race per class: Mage sun elf, Warrior and Shaman orc, Berserker dwarf, Hunter jungle troll, Necromancer undead, Druid bull-folk; Rogue, Priest and Paladin human.
 - Build order: spec system + second spec for the 6 existing classes first.
+- ✅ **Built: the Paladin** (Crusader + Protection, Holy Power, taunts) — 10 classes, 20 specs. Races got real body proportions and every spec its own gear set.
 - ✅ **Built: all 18 specs** — Assassination, Arms, Shadow, Enhancement (pet system), Hunter, Necromancer, Druid (forms) with races built from the existing bodies (no new downloads). Max 1 pet per player.
 - ✅ **Built: Mage Frost + Fire** (charges, cast-while-moving, Meteor). Fire got 1 Blazing Step charge and Flame Ring instead of Glacial Nova after balance tests.
 - ✅ **First spec built: Berserker Executioner** (slow two-handed axe, big crits). Final numbers in `js/data/classes.js` (balanced to Fury in the lab).

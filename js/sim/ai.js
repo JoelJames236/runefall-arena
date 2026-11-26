@@ -11,11 +11,11 @@ const DIFF = {
   hard: { react: 0.15, interrupt: 0.9, defensive: 1.0, kite: 1.0, dodge: 0.95, focus: 1.0 },
 };
 
-const MELEE_CLASSES = new Set(['rogue', 'warrior', 'berserker']);
+const MELEE_CLASSES = new Set(['rogue', 'warrior', 'berserker', 'paladin']);
 // melee or not: a spec can override its class (e.g. Enhancement Shaman fights in melee)
 const isMelee = f => { const k = kitOf(f); return k.melee ?? MELEE_CLASSES.has(f.cls); };
 const HEALERS = new Set(['priest']);
-const INTERRUPTS = { berserker: [], warrior: ['shield_slam'], rogue: ['skull_crack'], priest: ['blinding_light', 'psychic_scream'], mage: [], shaman: ['quake_totem'], hunter: ['intimidation'], necromancer: [], druid: [] };
+const INTERRUPTS = { paladin: ['sentinels_shield', 'hammer_of_light'], berserker: [], warrior: ['shield_slam'], rogue: ['skull_crack'], priest: ['blinding_light', 'psychic_scream'], mage: [], shaman: ['quake_totem'], hunter: ['intimidation'], necromancer: [], druid: [] };
 
 export class AI {
   constructor(sim, id, difficulty = 'normal') {
@@ -48,6 +48,7 @@ export class AI {
     if (!sim.los(me, e)) score += 25;                                                  // hiding behind cover: worth switching
     if (HEALERS.has(e.cls)) score -= 15 * this.d.focus;                                // pressure the healer
     if (e.buffs.some(b => b.type === 'stun' || b.type === 'root')) score -= 10;        // free damage
+    if (e.buffs.some(b => b.type === 'divine')) score += 80;                             // Divine Shield: hit someone else
     if (e.buffs.some(b => b.type === 'disorient' && sim.fighters[b.src]?.team === me.team)) score += 60; // don't break our own CC
     if (sim.fightT > 1.5) for (const a of allies) if (a.alive && a.target === e.id) score -= 22 * this.d.focus; // team up
     return score;
@@ -80,7 +81,11 @@ export class AI {
     if (this.round !== sim.round) { this.round = sim.round; this.focus = -1; this.focusT = 0; this.seenCasts.clear(); }
     this.focusT -= dt;
     let foe = sim.fighters[this.focus];
-    if (!foe || !foe.alive || this.focusT <= 0 || !sim.visibleTo(foe, me)) {
+    // Challenged by a Protection Paladin: a bot has to turn on him (that's what a taunt is for)
+    // (only while the challenge is fresh — the tank has to keep re-challenging to hold a bot)
+    const tn = me.buffs.find(b => b.type === 'taunt' && b.age < 2.5), taunter = tn && sim.fighters[tn.src];
+    if (taunter && taunter.alive && sim.visibleTo(taunter, me)) { this.focus = taunter.id; foe = taunter; this.focusT = Math.max(this.focusT, 2.5 - tn.age); }
+    else if (!foe || !foe.alive || this.focusT <= 0 || !sim.visibleTo(foe, me)) {
       const f = this.pickFocus(me, living, allies);
       if (f) { this.focus = f.id; foe = f; }
       this.focusT = 1.5 + Math.random();
@@ -100,8 +105,8 @@ export class AI {
     const threatCC = isStunned(threat) || hasBuff(threat, 'root');
     this.closeT = (td < 7 && threatMelee) ? this.closeT + dt : 0;
 
-    // keep auto-attack running on the focus
-    if (visible && (!me.autoOn || me.target !== foe.id)) inp.attack = true;
+    // bots "hold the attack button" on their focus: the swing timer limits them exactly like a player
+    inp.atkHold = visible;
 
     // ---- react to enemy casts (interrupts), with human-like reaction time
     for (const e of living) {
@@ -482,6 +487,33 @@ export class AI {
         if (!hasBuff(foe, 'slow') && (p = use('bone_spear'))) return p;
         if (freeCast && (p = use('soul_rot'))) return p;
         if ((p = use('bone_spear'))) return p;
+        return null; }
+      case 'paladin': {
+        if (me.spec === 'protection') {
+          // tank: keep Holy Shield up when hurt, hold the enemies on Consecration, challenge whoever hits the partner
+          if (def && hp < 0.4 && (p = use('guardians_resolve'))) return p;
+          if (allies.length && def && allies.some(a => a.hp / a.maxHp < 0.4) && near(15) && (p = use('guardians_resolve'))) return p;
+          if (me.cp >= 3 || (me.cp >= 1 && hp < 0.5 && !me.buffs.some(b => b.name === 'Holy Shield'))) { if ((p = use('holy_shield'))) return p; }
+          if (!visible) return null;
+          // challenge an enemy that is busy with our partner
+          const loose = allies.length ? living.find(e => e.target !== me.id && !e.buffs.some(b => b.type === 'taunt' && b.src === me.id) && sim.dist(me, e) <= 25) : null;
+          if (loose && (p = use('sentinels_shield', { tid: loose.id }))) return p;
+          if (dist < 7 && (p = use('consecration'))) return p;
+          if ((p = use('pal_shield_slam'))) return p;
+          if (dist > 6 && (p = use('judgment'))) return p;
+          if ((p = use('judgment'))) return p;
+          if (dist > 8 && !foeCC && (p = use('sentinels_shield'))) return p;
+          return null;
+        }
+        // Crusader: build to 3 Holy Power, then Radiant Storm; Divine Wrath for the kill, bubble when about to die
+        if (def && hp < 0.25 && (p = use('divine_shield'))) return p;
+        if (def && isStunned(me) && hp < 0.45 && (p = use('divine_shield'))) return p;
+        if (!visible) return null;
+        if (dist > 9 && !foeCC && (p = use('hammer_of_light'))) return p;
+        if (dist < 9 && (foeHp < 0.6 || hp < 0.5) && (p = use('divine_wrath'))) return p;
+        if (dist < 7.5 && (me.cp >= 3 || (me.cp >= 2 && (foeHp < 0.2 || hp < 0.35))) && (p = use('radiant_storm'))) return p;
+        if (me.cp < 3 && (p = use('holy_strike'))) return p;
+        if (me.cp < 3 && (p = use('judgment'))) return p;
         return null; }
       case 'druid': {
         if (me.spec === 'feral') {
