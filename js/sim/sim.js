@@ -106,13 +106,59 @@ const BR = BRIDGE, BR_END = BRIDGE.hx + BRIDGE.ramp, BW = BRIDGE.hz + 0.25; // B
 // one edge for everything: inside it you either stand on the bridge or are blocked by it (never trapped in between)
 export const EDGE = BW + 0.3;
 export const rampH = ax => BR.H * Math.max(0, Math.min(1, (BR_END - ax) / BR.ramp));
+// ---------------------------------------------------------------- the map
+// null = the arena (a ring of radius ARENA_R with four pillars). A battleground map (js/sim/maps/) adds box
+// geometry on top of the central bridge: solid blocks (walls, cliffs, floor slabs, parapets, gates), ramps
+// (solid wedges you walk up), a rectangular boundary and water. Every geometry query below consults it.
+let GEO = null;
+export const currentMap = () => GEO;
+export function useMap(map) { GEO = map || null; if (GEO) GEO.gatesOpen = !!GEO.gatesOpen; }
+const BOX_M = 0.45;                                   // body radius used against boxes (feet are a point)
+const inFoot = (b, x, z, m = BOX_M) => x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m;
+const live = b => !b.gate || !GEO.gatesOpen;          // gates are solid until they open
+export const rampAt = (r, x, z) => { const u = Math.max(0, Math.min(1, r.axis === 'x' ? (x - r.x0) / (r.x1 - r.x0) : (z - r.z0) / (r.z1 - r.z0))); return r.h0 + (r.h1 - r.h0) * u; };
+function boxFloor(x, z, y, tol = 0.9) {
+  let fl = 0;
+  for (const b of GEO.blocks) if (b.y1 > fl && b.y1 <= y + tol && live(b) && inFoot(b, x, z)) fl = b.y1;
+  for (const r of GEO.ramps) if (inFoot(r, x, z, 0.05)) { const h = rampAt(r, x, z); if (h > fl && h <= y + tol - 0.15) fl = h; }
+  return fl;
+}
+function boxSolid(x, z, y) {
+  for (const b of GEO.blocks) if (y < b.y1 - 0.6 && y + 1.9 > b.y0 && live(b) && inFoot(b, x, z)) return b;
+  for (const r of GEO.ramps) if (inFoot(r, x, z, 0.05) && y < rampAt(r, x, z) - 0.75) return r;
+  return null;
+}
+function boxCeil(x, z, y) {
+  let c = Infinity;
+  for (const b of GEO.blocks) if (b.y0 > y + 0.5 && b.y0 - 2.0 < c && live(b) && inFoot(b, x, z)) c = b.y0 - 2.0;
+  return c;
+}
+// inside the playable area (with a margin)?
+export function inBounds(x, z, m = FIGHTER_R) {
+  if (!GEO) return Math.hypot(x, z) <= ARENA_R - m;
+  const B = GEO.bounds; return x >= B.x0 + m && x <= B.x1 - m && z >= B.z0 + m && z <= B.z1 - m;
+}
+export function clampToBounds(o, m = FIGHTER_R) {
+  if (!GEO) { const d = Math.hypot(o.x, o.z), max = ARENA_R - m; if (d > max) { o.x *= max / d; o.z *= max / d; } return; }
+  const B = GEO.bounds; o.x = Math.max(B.x0 + m, Math.min(B.x1 - m, o.x)); o.z = Math.max(B.z0 + m, Math.min(B.z1 - m, o.z));
+}
+export const inWater = (x, z, y) => !!(GEO && GEO.water && y < 0.3 && Math.abs(x - GEO.water.x) < GEO.water.hw && !(Math.abs(z) <= EDGE && Math.abs(x) <= BR.hx));
+// is the point inside map masonry? (camera collision)
+export function pointBlocked(x, y, z) {
+  if (!GEO) return false;
+  for (const b of GEO.blocks) if (y > b.y0 && y < b.y1 && live(b) && inFoot(b, x, z, 0.2)) return true;
+  for (const r of GEO.ramps) if (inFoot(r, x, z, 0) && y < rampAt(r, x, z)) return true;
+  return false;
+}
+
 // height of the walkable surface under a fighter whose feet are at y
 export function floorAt(x, z, y) {
-  if (Math.abs(z) > EDGE) return 0;
+  const g = GEO ? boxFloor(x, z, y) : 0;
+  if (Math.abs(z) > EDGE) return g;
   const ax = Math.abs(x);
-  if (ax <= BR.hx) return y >= BR.H - 0.9 ? BR.H : 0;
-  if (ax <= BR_END) { const h = rampH(ax); return y >= h - 0.75 ? h : 0; }
-  return 0;
+  if (ax <= BR.hx) return Math.max(g, y >= BR.H - 0.9 ? BR.H : 0);
+  if (ax <= BR_END) { const h = rampH(ax); return Math.max(g, y >= h - 0.75 ? h : 0); }
+  return g;
 }
 // The arch: a barrel vault through the whole bridge. archY = height of its underside at |x|
 // (flattened ellipse, so the opening is wide). Above it, up to the deck, is solid stone.
@@ -123,6 +169,7 @@ export const HEAD_ROOM = 2.35; // tallest champion (horns included) fits where t
 export const ARCH_OPEN = BRIDGE.hx * Math.pow(1 - Math.pow(HEAD_ROOM / ARCH_TOP, ARCH_P), 1 / ARCH_P) - 0.35;
 // true when a fighter with feet at y can't stand here (inside a ramp embankment or the arch masonry)
 export function solidAt(x, z, y) {
+  if (GEO && boxSolid(x, z, y)) return true;
   const ax = Math.abs(x), az = Math.abs(z);
   if (az > EDGE) return false;
   if (ax <= BR.hx) return y < BR.H - 0.9 && ax > ARCH_OPEN;
@@ -130,27 +177,88 @@ export function solidAt(x, z, y) {
 }
 // where a leap/teleport ending at height y comes to rest (never inside a ramp)
 export function landAt(x, z, y) {
-  if (Math.abs(z) > EDGE) return 0;
+  const g = GEO ? boxFloor(x, z, y, 1.4) : 0;
+  if (Math.abs(z) > EDGE) return g;
   const ax = Math.abs(x);
-  if (ax <= BR.hx) return y >= BR.H - 1.4 ? BR.H : 0;
-  return ax <= BR_END ? rampH(ax) : 0;
+  if (ax <= BR.hx) return Math.max(g, y >= BR.H - 1.4 ? BR.H : 0);
+  return Math.max(g, ax <= BR_END ? rampH(ax) : 0);
 }
-// under the vault a jump bumps the ceiling: highest feet position at this spot (Infinity = open sky)
+// under the vault (or a floor slab) a jump bumps the ceiling: highest feet position at this spot (Infinity = open sky)
 export function ceilAt(x, z, y) {
+  const g = GEO ? boxCeil(x, z, y) : Infinity;
   const ax = Math.abs(x);
-  if (ax > BR.hx + 0.2 || Math.abs(z) > EDGE || y >= BR.H - 0.9) return Infinity;
-  return Math.max(0, archY(Math.min(BR.hx, ax + 0.3)) - 2.1);
+  if (ax > BR.hx + 0.2 || Math.abs(z) > EDGE || y >= BR.H - 0.9) return g;
+  return Math.min(g, Math.max(0, archY(Math.min(BR.hx, ax + 0.3)) - 2.1));
 }
 export const airborne = f => f.y - floorAt(f.x, f.z, f.y) > 0.05;
 // shoved into the masonry (by another fighter, a pillar push, lag...): move out the shortest way
 export function unstick(f) {
   if (!solidAt(f.x, f.z, f.y)) return;
+  if (GEO) { const b = boxSolid(f.x, f.z, f.y); if (b) { unstickBox(f, b); return; } }
   const ax = Math.abs(f.x), az = Math.abs(f.z);
   const opts = [{ c: EDGE + 0.02 - az, go: () => { f.z = Math.sign(f.z || 1) * (EDGE + 0.02); } }];
   if (ax <= BR.hx) opts.push({ c: ax - ARCH_OPEN + 0.02, go: () => { f.x = Math.sign(f.x) * (ARCH_OPEN - 0.02); } });
   else { const h = rampH(ax); opts.push({ c: (h - f.y) * 0.6, go: () => { f.y = h; f.vy = 0; } }); }
   opts.sort((a, b) => a.c - b.c)[0].go();
 }
+// pushed into a block or ramp: out through the nearest side (or onto it, if it is only a step up)
+function unstickBox(f, b) {
+  const top = b.axis ? rampAt(b, f.x, f.z) : b.y1;
+  const opts = [
+    { c: f.x - (b.x0 - BOX_M - 0.02), go: () => { f.x = b.x0 - BOX_M - 0.02; } },
+    { c: (b.x1 + BOX_M + 0.02) - f.x, go: () => { f.x = b.x1 + BOX_M + 0.02; } },
+    { c: f.z - (b.z0 - BOX_M - 0.02), go: () => { f.z = b.z0 - BOX_M - 0.02; } },
+    { c: (b.z1 + BOX_M + 0.02) - f.z, go: () => { f.z = b.z1 + BOX_M + 0.02; } },
+    { c: (top - f.y) * 1.2, go: () => { f.y = top; f.vy = 0; } },
+  ];
+  opts.sort((a, c) => a.c - c.c)[0].go();
+}
+// 3D segment vs an axis-aligned block (slab test)
+function segBox(ax, ay, az, bx, by, bz, b) {
+  let t0 = 0, t1 = 1;
+  for (const [p, d, lo, hi] of [[ax, bx - ax, b.x0, b.x1], [ay, by - ay, b.y0, b.y1], [az, bz - az, b.z0, b.z1]]) {
+    if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) return false; continue; }
+    let u0 = (lo - p) / d, u1 = (hi - p) / d; if (u0 > u1) [u0, u1] = [u1, u0];
+    t0 = Math.max(t0, u0); t1 = Math.min(t1, u1); if (t0 > t1) return false;
+  }
+  return true;
+}
+// a ramp as a solid wedge: footprint, ground, and the sloping top
+function rampPlanes(r) {
+  if (r._planes) return r._planes;
+  const P = [[-1, 0, 0, -r.x0], [1, 0, 0, r.x1], [0, 0, -1, -r.z0], [0, 0, 1, r.z1], [0, -1, 0, 0]];
+  if (r.axis === 'x') { const k = (r.h1 - r.h0) / (r.x1 - r.x0); P.push([-k, 1, 0, r.h0 - k * r.x0]); }
+  else { const k = (r.h1 - r.h0) / (r.z1 - r.z0); P.push([0, 1, -k, r.h0 - k * r.z0]); }
+  return (r._planes = P);
+}
+function boxBlocks(ax, ay, az, bx, by, bz) {
+  const lx = Math.min(ax, bx), hx = Math.max(ax, bx), lz = Math.min(az, bz), hz = Math.max(az, bz), ly = Math.min(ay, by), hy = Math.max(ay, by);
+  for (const b of GEO.blocks) {
+    if (b.x1 < lx || b.x0 > hx || b.z1 < lz || b.z0 > hz || b.y1 < ly || b.y0 > hy || b.noSight || !live(b)) continue;
+    if (segBox(ax, ay, az, bx, by, bz, b)) return true;
+  }
+  for (const r of GEO.ramps) {
+    if (r.x1 < lx || r.x0 > hx || r.z1 < lz || r.z0 > hz || Math.max(r.h0, r.h1) < ly) continue;
+    if (clipSeg([ax, ay, az], [bx - ax, by - ay, bz - az], rampPlanes(r))) return true;
+  }
+  return false;
+}
+// a straight walk from a to b at ground level: possible without climbing, and without dropping unless allowed?
+// (bots use this to link their waypoints; y follows the floor along the way)
+export function walkLine(ax, ay, az, bx, bz, allowDrop = false) {
+  const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 0.5));
+  let y = ay;
+  for (let i = 1; i <= n; i++) {
+    const x = ax + (bx - ax) * i / n, z = az + (bz - az) * i / n;
+    if (!inBounds(x, z, 0.3)) return null;
+    const fl = floorAt(x, z, y);
+    if (y - fl > 0.6) { if (!allowDrop) return null; y = fl; }
+    else y = fl;
+    if (solidAt(x, z, y)) return null;
+  }
+  return y;
+}
+
 // distance used for ranges: a level difference counts double (no melee from under the bridge)
 export function rangeDist(a, b) {
   const dh = floorAt(a.x, a.z, a.y) - floorAt(b.x, b.z, b.y);
@@ -194,6 +302,7 @@ function bridgeBlocks(ax, ay, az, bx, by, bz) {
 // line of sight between eye points (y = eye height; defaults to standing on the floor)
 export function segBlocked(ax, az, bx, bz, ay = 1.5, by = 1.5) {
   if (bridgeBlocks(ax, ay, az, bx, by, bz)) return true;
+  if (GEO) return boxBlocks(ax, ay, az, bx, by, bz);
   for (const p of PILLARS) {
     const dx = bx - ax, dz = bz - az;
     const L2 = dx * dx + dz * dz || 1e-6;
@@ -207,12 +316,11 @@ export function segBlocked(ax, az, bx, bz, ay = 1.5, by = 1.5) {
 
 // others: array of fighters to keep distance from (may include f itself; it is skipped)
 export function collide(f, others) {
-  for (const p of PILLARS) {
+  if (!GEO) for (const p of PILLARS) {
     const dx = f.x - p.x, dz = f.z - p.z, d = Math.hypot(dx, dz), min = p.r + FIGHTER_R;
     if (d < min) { const k = (min - d) / (d || 1e-6); f.x += dx * k; f.z += dz * k; }
   }
-  const d = Math.hypot(f.x, f.z), max = ARENA_R - FIGHTER_R;
-  if (d > max) { f.x *= max / d; f.z *= max / d; }
+  clampToBounds(f);
   if (others) for (const o of others) {
     if (!o || o === f || o.id === f.id || !o.alive) continue;
     const dx = f.x - o.x, dz = f.z - o.z, dd = Math.hypot(dx, dz), min = FIGHTER_R * 2;
@@ -237,6 +345,7 @@ export function moveFighter(f, inp, dt, others, canAct = true) {
   if (wantsSprint && f.stamina > 0.5) { speed *= 1.3; f.stamina = Math.max(0, f.stamina - 30 * dt); f.sprinting = true; }
   else { f.sprinting = false; if (!inp.sprint || len === 0) f.stamina = Math.min(100, f.stamina + 15 * dt); }
   if (mz < -0.1) speed *= 0.65;
+  if (GEO && inWater(f.x, f.z, f.y)) speed *= 0.85; // wading through the river
   if (!canAct || stunned || rooted || f.locked) { mx = 0; mz = 0; }
   const sy = Math.sin(f.yaw), cy = Math.cos(f.yaw);
   const vx = (sy * mz - cy * mx) * speed, vz = (cy * mz + sy * mx) * speed;
@@ -287,6 +396,7 @@ export class Sim {
   // roster: [{ cls, team, name, bot }]  — or legacy (clsA, clsB) for a 1v1
   constructor(roster, clsB) {
     if (typeof roster === 'string') roster = [{ cls: roster, team: 0 }, { cls: clsB, team: 1 }];
+    useMap(this.constructor.MAP || null); // the arena, or a battleground subclass's map
     this.fighters = roster.map((s, i) => makeFighter(i, s));
     this.teamSize = [0, 1].map(t => this.fighters.filter(f => f.team === t).length);
     this.fmt = this.teamSize[0] >= 2 && this.teamSize[1] >= 2 ? 'team' : 'duel'; // which arena tuning applies (data/tuning.js)
@@ -379,7 +489,7 @@ export class Sim {
 
     // ---- fight
     this.fightT += dt;
-    this.damp = Math.min(100, Math.max(0, (this.fightT - RULES.dampStart) * RULES.dampRate));
+    this.damp = this.noDamp ? 0 : Math.min(100, Math.max(0, (this.fightT - RULES.dampStart) * RULES.dampRate)); // battlegrounds: no dampening
 
     for (const f of this.fighters) {
       const inp = inputs[f.id] || {};
@@ -786,10 +896,10 @@ export class Sim {
     const nx = f.x + vx * step, nz = f.z + vz * step;
     let blocked = false;
     if (!d.arc) {
-      for (const p of PILLARS) if (Math.hypot(nx - p.x, nz - p.z) < p.r + FIGHTER_R) blocked = true; // leaps clear pillars
+      if (!GEO) for (const p of PILLARS) if (Math.hypot(nx - p.x, nz - p.z) < p.r + FIGHTER_R) blocked = true; // leaps clear pillars
       if (solidAt(nx, nz, f.y)) blocked = true;
-    }
-    if (Math.hypot(nx, nz) > ARENA_R - FIGHTER_R) blocked = true;
+    } else if (GEO && solidAt(nx, nz, f.y) && f.y < 7) blocked = true; // leaps don't pass through keep walls
+    if (!inBounds(nx, nz)) blocked = true;
     if (!blocked) {
       f.x = nx; f.z = nz;
       if (!d.arc) { const fl = floorAt(nx, nz, f.y); if (fl > f.y || f.y - fl < 0.6) f.y = fl; } // dashes follow ramps
@@ -812,7 +922,7 @@ export class Sim {
   // ------------------------------------------------------------ effects API (used by abilities)
   damage(src, tgt, amount, o = {}) {
     if (!tgt.alive || this.state !== 'fight') return 0;
-    if (src !== tgt && hasBuff(tgt, 'divine')) { this.event({ e: 'immune', id: tgt.id }); return 0; } // Paladin Divine Shield
+    if (src !== tgt && (hasBuff(tgt, 'divine') || hasBuff(tgt, 'sanctuary'))) { this.event({ e: 'immune', id: tgt.id }); return 0; } // Paladin Divine Shield / battleground spawn protection
     let amt = amount * (0.94 + Math.random() * 0.12) * tuningOf(this.fmt, src.cls, src.spec); // arena tuning: per spec and format
     if (hasBuff(src, 'divine')) amt *= 0.5; // ...but the shielded paladin hits half as hard
     // Paladin: Judged targets take more holy damage from that paladin; a Challenged (taunted) enemy
@@ -842,6 +952,10 @@ export class Sim {
     if (TP && TP.martyr) { let mine = 0; for (const e of this.fighters) if (e.team !== tgt.team) mine += e.buffs.filter(b => b.src === tgt.id && b.data && b.data.curse).length; amt *= 1 + 0.03 * Math.min(5, mine); }
     if (SP.steadyAim && (src.stillT || 0) >= 1 && !o.dot) amt *= 1 + SP.steadyAim; // Sharpshooter: standing still
     const bz = getBuff(src, 'berserk'); if (bz) amt *= 1 + bz.value;
+    // battleground effects: the Fury power-up (+ damage dealt, + damage taken) and a flag carrier's Exposed stacks
+    const fu = getBuff(src, 'fury'); if (fu) amt *= 1 + fu.value;
+    if (hasBuff(tgt, 'fury')) amt *= 1.1;
+    const ex = getBuff(tgt, 'exposed'); if (ex) amt *= 1 + ex.value;
     amt *= 1 - kitOf(tgt).defense;
     for (const b of tgt.buffs) if (b.type === 'dr' || b.type === 'stoneskin') amt *= 1 - b.value;
     amt *= this.shieldwall(tgt);
@@ -906,7 +1020,7 @@ export class Sim {
 
   addBuff(f, type, dur, o = {}) {
     if (!f.alive) return null;
-    if (hasBuff(f, 'divine') && o.src !== undefined && this.fighters[o.src] && this.fighters[o.src].team !== f.team) { this.event({ e: 'immune', id: f.id }); return null; } // Divine Shield: immune to harmful effects
+    if ((hasBuff(f, 'divine') || hasBuff(f, 'sanctuary')) && o.src !== undefined && this.fighters[o.src] && this.fighters[o.src].team !== f.team) { this.event({ e: 'immune', id: f.id }); return null; } // Divine Shield: immune to harmful effects
     if (type === 'slow' && o.src !== f.id && (hasBuff(f, 'berserk') || hasBuff(f, 'treeform'))) return null; // berserk / Tree of Life: immune to slows
     if (o.cc) {
       if (hasBuff(f, 'tempest') || hasBuff(f, 'ccimmune')) { this.event({ e: 'immune', id: f.id }); return null; }
@@ -1196,16 +1310,16 @@ export class Sim {
       }
       // walls, pillars and the bridge: same rules as fighters
       if (solidAt(m.x, m.z, m.y)) { if (!solidAt(ox, m.z, m.y)) m.x = ox; else if (!solidAt(m.x, oz, m.y)) m.z = oz; else { m.x = ox; m.z = oz; } }
-      for (const p of PILLARS) { const px = m.x - p.x, pz = m.z - p.z, pd = Math.hypot(px, pz), min = p.r + 0.5; if (pd < min) { m.x += px / pd * (min - pd); m.z += pz / pd * (min - pd); } }
-      const rr = Math.hypot(m.x, m.z), mx = ARENA_R - 0.6; if (rr > mx) { m.x *= mx / rr; m.z *= mx / rr; }
+      if (!GEO) for (const p of PILLARS) { const px = m.x - p.x, pz = m.z - p.z, pd = Math.hypot(px, pz), min = p.r + 0.5; if (pd < min) { m.x += px / pd * (min - pd); m.z += pz / pd * (min - pd); } }
+      clampToBounds(m, 0.6);
       const fl = floorAt(m.x, m.z, m.y); if (fl > m.y || m.y - fl < 0.6) m.y = fl; else m.y = Math.max(fl, m.y - 12 * dt);
     }
   }
 
   // ------------------------------------------------------------ movement abilities
   validSpot(x, z, y = 0) {
-    if (Math.hypot(x, z) > ARENA_R - FIGHTER_R) return false;
-    for (const p of PILLARS) if (Math.hypot(x - p.x, z - p.z) < p.r + FIGHTER_R) return false;
+    if (!inBounds(x, z)) return false;
+    if (!GEO) for (const p of PILLARS) if (Math.hypot(x - p.x, z - p.z) < p.r + FIGHTER_R) return false;
     return !solidAt(x, z, y);
   }
 
@@ -1276,7 +1390,8 @@ export class Sim {
   }
 
   // ------------------------------------------------------------ network snapshot
-  snapshot() {
+  // lite: without the match statistics (they change slowly; a big match sends them only now and then)
+  snapshot(lite = false) {
     const r = v => Math.round(v * 100) / 100;
     return {
       s: this.state, st: r(this.stateT), r: this.round, sc: this.score, ft: r(this.fightT), dp: r(this.damp), w: this.winner,
@@ -1287,7 +1402,7 @@ export class Sim {
         buffs: f.buffs.map(b => ({ type: b.type, t: r(b.t), dur: r(b.dur), value: r(b.value), name: b.name, icon: b.icon, src: b.src, fx: b.fx })),
         cp: f.cp, alive: f.alive, forceSeq: f.forceSeq, forceYaw: f.forceYaw, locked: f.locked, target: f.target, friend: f.friend,
         autoOn: f.atkHold || f.atkReq > 0, autoT: r(f.autoT), moving: f.moving, sprinting: f.sprinting, stamina: Math.round(f.stamina),
-        stats: f.stats,
+        stats: lite ? undefined : f.stats,
       })),
       p: this.projectiles.map(p => ({ id: p.id, kind: p.kind, x: r(p.x), y: r(p.y), z: r(p.z), owner: p.owner })),
       m: this.minions.map(m => ({ id: m.id, kind: m.kind, owner: m.owner, team: m.team, x: r(m.x), y: r(m.y), z: r(m.z), yaw: r(m.yaw), hp: Math.round(m.hp), maxHp: m.maxHp, moving: m.moving, atk: m.atkFlash > 0 })),

@@ -4,7 +4,8 @@
 // target) is not the kit that wins team fights (team defense, cleave, peels), so a spec tuned to 50 % in 1v1 can
 // sit at 37 % or 65 % in 2v2. These factors close that gap. They were found by the balance lab (balance.html →
 // "auto-tune"): run the format with hard bots, move every spec's factor against its distance from 50 %, repeat
-// until the win rates stop moving. `duel` applies in 1v1, `team` whenever both teams have two or more champions.
+// until the win rates stop moving. `duel` applies in 1v1, `team` whenever both teams have two or more champions,
+// `bg5` on the 5v5 flag battleground (it starts as a copy of `team`: a battleground is many small team fights).
 // A missing entry means 1 (untouched). docs/BALANCE.md has the win rates these produce.
 export const TUNING = {
   duel: {
@@ -22,4 +23,5 @@ export const TUNING = {
     'necromancer:summoner': 1.018, 'necromancer:curser': 0.997, 'druid:feral': 0.903, 'druid:restoration': 1.01,
   },
 };
-export const tuningOf = (fmt, cls, spec) => TUNING[fmt]?.[cls + ':' + spec] ?? 1;
+TUNING.bg5 = { ...TUNING.team };
+export const tuningOf =(fmt, cls, spec) => TUNING[fmt]?.[cls + ':' + spec] ?? 1;

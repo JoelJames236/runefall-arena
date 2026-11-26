@@ -4,10 +4,13 @@
 import { Arena } from './arena.js';
 import { GibbArena } from './gibb-arena.js';
 import { buildBridge } from './bridge.js';
+import { Thornwater } from './thornwater.js';
 
 export const ARENAS = [
   { id: 'runefall', name: 'Runefall Colosseum', create: (scene, quality) => new Arena(scene, quality) },
   { id: 'gibb', name: 'gibb Lorraine, Bern', create: scene => new GibbArena(scene) },
+  // battleground maps: picked by the mode, not in the arena list of the menu
+  { id: 'thornwater', name: 'Thornwater Gorge', battleground: true, create: (scene, quality) => new Thornwater(scene, quality) },
 ];
 
 export function createArena(id, scene, quality) {

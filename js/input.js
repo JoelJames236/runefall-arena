@@ -3,7 +3,7 @@
 // Ability key bindings: up to two keys per action-bar slot (codes from KeyboardEvent.code, or Mouse1/3/4).
 export const DEFAULT_BINDS = [['Digit1'], ['Digit2'], ['Digit3'], ['Digit4'], ['Digit5', 'KeyQ'], ['Digit6', 'KeyE']];
 // keys that already do something and can't be bound to an ability
-export const RESERVED_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'Tab', 'Escape', 'F1', 'F2']);
+export const RESERVED_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'Tab', 'Escape', 'F1', 'F2', 'KeyG', 'KeyB']); // G: drop the flag, B (hold): battleground scoreboard
 export function keyLabel(code) {
   if (!code) return '';
   if (code.startsWith('Digit')) return code.slice(5);
@@ -18,7 +18,7 @@ export class Input {
     this.canvas = canvas;
     this.keys = new Set();
     this.pressed = []; // ability presses since last poll
-    this.jumpPressed = false; this.tabPressed = false; this.attackPressed = false; this.friendKey = 0;
+    this.jumpPressed = false; this.tabPressed = false; this.attackPressed = false; this.friendKey = 0; this.dropPressed = false;
     this.clickPos = { x: 0.5, y: 0.45 }; this.mouseHeld = false;
     this.yaw = 0; this.pitch = 0.32; this.zoom = 9;
     this.sens = 1; this.invert = false;
@@ -40,6 +40,7 @@ export class Input {
       this.keys.add(e.code);
       const slot = this.binds.get(e.code) ?? (/^Numpad([1-6])$/.exec(e.code) ? +e.code.slice(6) - 1 : undefined);
       if (slot !== undefined) { this.pressed.push(slot); if (e.code.startsWith('Key') || e.code.startsWith('Digit')) e.preventDefault(); }
+      else if (e.code === 'KeyG') this.dropPressed = true;
       if (e.code === 'Space') { this.jumpPressed = true; e.preventDefault(); }
     });
     // extra mouse buttons (middle, back, forward) can be bound to abilities
@@ -113,9 +114,9 @@ export class Input {
     const k = this.keys;
     const mz = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const mx = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    const out = { mx, mz, yaw: this.yaw, jump: this.jumpPressed, sprint: k.has('ShiftLeft') || k.has('ShiftRight'), abilities: this.pressed.slice(), targetReq: this.tabPressed, attack: this.attackPressed, atkHeld: this.mouseHeld, clickPos: this.clickPos, friendKey: this.friendKey,
+    const out = { mx, mz, yaw: this.yaw, jump: this.jumpPressed, sprint: k.has('ShiftLeft') || k.has('ShiftRight'), abilities: this.pressed.slice(), targetReq: this.tabPressed, attack: this.attackPressed, atkHeld: this.mouseHeld, clickPos: this.clickPos, friendKey: this.friendKey, dropFlag: this.dropPressed, scoreHeld: k.has('KeyB') && !this.binds.has('KeyB'),
       aimPos: this.locked ? { x: 0.5, y: 0.45 } : this.mousePos };
-    this.pressed.length = 0; this.jumpPressed = false; this.tabPressed = false; this.attackPressed = false; this.friendKey = 0;
+    this.pressed.length = 0; this.jumpPressed = false; this.tabPressed = false; this.attackPressed = false; this.friendKey = 0; this.dropPressed = false;
     return out;
   }
 }

@@ -1,8 +1,8 @@
 # Runefall Arena
 
 A browser-based 3D fantasy **arena PvP** game in the spirit of classic MMO arenas: nine classes (three of them with their own race),
-two specs per class (18 playable kits), pets and shapeshifting, **1v1 duels and 2v2 team fights**, bots, parties, matchmaking and
-peer-to-peer online play via a shareable link. No install, no build step.
+two specs per class (18 playable kits), pets and shapeshifting, **1v1 duels, 2v2 team fights and a 5v5 capture-the-flag battleground**, bots, parties,
+matchmaking and peer-to-peer online play via a shareable link. No install, no build step.
 
 **▶ Play now: https://joeljames236.github.io/runefall-arena/**
 
@@ -12,11 +12,12 @@ peer-to-peer online play via a shareable link. No install, no build step.
 | --- | --- |
 | **Duel vs. AI** | 1v1 against a bot (Squire / Knight / Champion difficulty). Pick its class and spec, or leave it on 🎲 Random. |
 | **2v2 vs. Bots** | You + an AI ally (Aldor) against the bots **Zigi** and **Jöggu**. Pick every class or leave them random. |
-| **Play with Friends** | Opens a party lobby (1v1 or 2v2). Share the invite link; friends join your team. Empty slots can be filled with bots (new bots are 🎲 Random — class and spec are rolled at every match start — or pick one), players can be moved between teams. |
+| **5v5 Battleground** | **Thornwater Gorge**: capture the flag, you + 4 bots against 5 bots (classes rolled at random, at most two of a class per team). Take the enemy flag from the upper room of their keep and carry it to your own flag stand — it only counts while your own flag is at home. 3 captures win, otherwise the clock (15 min) decides. The dead return in waves every 20 s; power-ups appear every minute. Rules and map: [`docs/FUTURE_BATTLEGROUNDS.md`](docs/FUTURE_BATTLEGROUNDS.md). |
+| **Play with Friends** | Opens a party lobby (1v1, 2v2 or the 5v5 battleground with up to 10 players). Share the invite link; friends join your team. Empty slots can be filled with bots (new bots are 🎲 Random — class and spec are rolled at every match start — or pick one), players can be moved between teams. |
 | **Find Opponents** | In a 2v2 lobby, the party leader searches for another party that is also searching; when found, their party joins your arena as the Crimson team. |
 | **Join Match** | Enter a 6-letter room code (or open an invite link). |
 
-Every match is best of 7 (first to 4 round wins). A round ends when one team is wiped out.
+Arena matches are best of 7 (first to 4 round wins). A round ends when one team is wiped out.
 
 ## Play locally
 
@@ -73,10 +74,11 @@ host refused or queued disappears again within half a second.
 | **Left click** | Basic attack where the dot in the middle of the screen points (aimed — it hits the enemy hitbox under the dot, or nothing). One swing per click, hold to keep swinging at your attack speed. The enemy you click on also becomes your target |
 | `1`–`6` | Abilities (`Q` / `E` also trigger 5 / 6). **Rebind them in Settings** → Ability Keys: two keys per slot, any key or the middle / back / forward mouse button |
 | `Tab` | Cycle enemy targets |
-| `F1` / `F2` | Friendly target: yourself / your ally (heals and shields go to the friendly target) |
+| `F1` / `F2` | Friendly target: yourself / your ally — press `F2` again for the next ally (heals and shields go to the friendly target) |
 | Crosshair on an ally | **Mouseover healing**: heals and shields go to the ally under the crosshair (or under the cursor without mouse capture) without changing your friendly target; the ally's frame and nameplate light up green. Can be turned off in Settings |
 | `Space` / `Shift` | Jump / sprint (stamina) |
 | Mouse wheel / `Esc` | Zoom / menu |
+| `G` / hold `B` | Battleground: drop the flag (to hand it to a tankier teammate) / scoreboard |
 
 ## Combat rules
 
@@ -203,15 +205,19 @@ index.html               UI markup + import map (Three.js, PeerJS from CDN)
 css/style.css            Menus, lobby & HUD styling (responsive)
 js/main.js               App flow: screens, modes, rooms/parties, matchmaking hand-off, game loop, net glue
 js/data/classes.js       Classes, specs, forms, stats and all abilities (gameplay in each ability's exec)
-js/data/tuning.js        Arena tuning: power factor per spec for 1v1 and 2v2 (found by the lab's auto-tune)
-js/sim/sim.js            Authoritative combat simulation for N fighters in two teams (no rendering)
+js/data/tuning.js        Arena tuning: power factor per spec for 1v1, 2v2 and the 5v5 battleground (lab's auto-tune)
+js/sim/sim.js            Authoritative combat simulation for N fighters in two teams + the map layer (no rendering)
 js/sim/ai.js             Bots (same inputs and rules as players): focus targeting, kiting, interrupts, healing
-js/net.js                PeerJS star network (host + up to 3 guests) and serverless 2v2 matchmaking
+js/sim/flag.js           5v5 flag battleground rules (FlagSim): flags, respawn waves, Exposed, power-ups, points
+js/sim/flagai.js         Battleground bots (FlagAI): roles, waypoint graph, routes, carriers
+js/sim/maps/thornwater.js The battleground map as data (walls, ramps, gates, river, flags, graveyards, waypoints)
+js/net.js                PeerJS star network (host + up to 9 guests) and serverless 2v2 matchmaking
 js/input.js              Keyboard + mouse, pointer lock with drag-to-look fallback
 js/audio.js              Synthesized SFX + generative orchestral music (Web Audio)
 js/render/world.js       Scene, lighting, post-processing, camera, team rings, selection circles
 js/render/arena.js       Procedural arena, sky, terrain, crowd, banners, statues, backdrop
 js/render/bridge.js      The central arch bridge (same dimensions as BRIDGE in sim.js)
+js/render/thornwater.js  The battleground's look, built from the map data, plus gates, flags and power-ups
 js/render/heroes.js      Rigged champions (looks per class + spec, animation mixer, weapon grips, rim light)
 js/render/races.js       Race proportions + face shapes baked into the bind pose
 js/render/outfits.js     Race anatomy (ears, tusks, beards, horns, hooves) and one gear set per spec
@@ -222,7 +228,7 @@ js/render/minions.js     Pets & summons (wolf, gorilla, ghoul hookup) and the tr
 js/render/creatures.js   Generated Cat / Bear form models (Tripo, four-legged rig) with a procedural gait; beasts.js is the fallback
 js/render/characters.js  Procedural fallback champion models
 js/render/vfx.js         Pooled particles (glow + smoke), projectiles, casting circles, spell effects
-js/ui/hud.js             Unit/party/arena frames, action bar, cast bars, nameplates, combat text
+js/ui/hud.js             Unit/party/arena frames, action bar, cast bars, nameplates, combat text, battleground HUD
 balance.html             Balance lab
 serve.ps1                Tiny local static server
 ```

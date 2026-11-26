@@ -734,6 +734,9 @@ export const BUFF_ICONS = {
   hot: { icon: '✿', color: '#8aff9a' }, wrath: { icon: '🔥', color: '#ff7a3a' }, weaken: { icon: '⇣', color: '#9a7aff', debuff: true },
   hexed: { icon: '☠', color: '#b070ff', debuff: true }, doom: { icon: '☄', color: '#7a3aff', debuff: true }, treeform: { icon: '🌳', color: '#5aff7a' },
   judged: { icon: '⚖', color: '#ffe680', debuff: true }, taunt: { icon: '⚑', color: '#ff9a4a', debuff: true }, divine: { icon: '◯', color: '#fff6c0' },
+  // battleground: the flag, spawn protection, Exposed and the power-ups
+  flagcarrier: { icon: '⚑', color: '#ffd27a' }, sanctuary: { icon: '☩', color: '#fff6c0' }, exposed: { icon: '◎', color: '#ff7a3a', debuff: true },
+  fury: { icon: '⚔', color: '#ff6a4a' }, mending: { icon: '✚', color: '#8aff9a' }, shockcharge: { icon: '✸', color: '#ffd27a' }, clarity: { icon: '✦', color: '#c8a0ff' },
 };
 
 // Bot names. Enemy bots in 2v2 are always Zigi and Jöggu.

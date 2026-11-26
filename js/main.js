@@ -2,7 +2,8 @@
 //
 // Modes:  duel     — 1v1 vs an AI (offline)
 //         bots2v2  — you + ally bot vs Zigi & Jöggu (offline)
-//         host     — you host a room (1v1 or 2v2; empty slots can be bots); authoritative sim
+//         bg       — the 5v5 flag battleground (Thornwater Gorge): you + 4 bots vs 5 bots (offline)
+//         host     — you host a room (1v1, 2v2 or the 5v5 battleground; empty slots can be bots); authoritative sim
 //         guest    — you joined a room; inputs go to the host, state comes back as snapshots
 import { World } from './render/world.js';
 import { loadHeroAssets, preloadChampions } from './render/heroes.js';
@@ -11,6 +12,10 @@ import { Input, DEFAULT_BINDS, RESERVED_KEYS, keyLabel } from './input.js';
 import { Audio, AB_SOUND, HIT_SOUND, CAST_SOUND } from './audio.js';
 import { Sim, moveFighter, RULES, rangeDist, segBlocked, angleTo, angleDiff, FACE_ARC, meleeBonus, airborne, MOVE_ABS, aimPick, MELEE_AIM_WIDTH, MELEE_AUTO_RANGE } from './sim/sim.js';
 import { AI } from './sim/ai.js';
+import { useMap } from './sim/sim.js';
+import { FlagSim, FLAG_RULES, POWERUPS } from './sim/flag.js';
+import { FlagAI } from './sim/flagai.js';
+import { THORNWATER } from './sim/maps/thornwater.js';
 import { Net } from './net.js';
 import { ARENAS } from './render/arenas.js';
 import { CLASSES, CLASS_ORDER, BOT_NAMES, kit, kitOf, specsOf, validSpec } from './data/classes.js';
@@ -37,6 +42,7 @@ catch (e) { $('loadmsg').textContent = 'WebGL could not start in this browser: '
 function buildArenaPicker() {
   const row = $('arenaPick'); if (!row || !world) return;
   for (const a of ARENAS) {
+    if (a.battleground) continue; // battleground maps belong to their mode
     const b = document.createElement('button');
     b.className = 'chip' + (world.arenaId === a.id ? ' on' : ''); b.textContent = a.name; b.dataset.arena = a.id;
     b.addEventListener('click', () => {
@@ -141,6 +147,7 @@ $('menu').addEventListener('click', e => {
   const act = e.target.closest('[data-act]')?.dataset.act; if (!act) return;
   if (act === 'duel') openClassSelect('duel');
   else if (act === 'bots2v2') openClassSelect('bots2v2');
+  else if (act === 'bg') openClassSelect('bg');
   else if (act === 'create') startHost();
   else if (act === 'join') { show('join'); $('joinStatus').textContent = ''; $('joinCode').focus(); }
   else if (act === 'browse') openClassSelect('browse');
@@ -193,11 +200,12 @@ $('howtoBack').addEventListener('click', () => { if (S.howtoBack === 'pause') { 
 function openClassSelect(mode) {
   S.csMode = mode;
   show('classSelect');
-  $('csTitle').textContent = { browse: 'The Champions', room: 'Choose Your Champion', duel: 'Duel — Choose Your Champion', bots2v2: '2v2 — Choose Your Champion' }[mode];
-  $('csDifficulty').classList.toggle('hidden', mode !== 'duel' && mode !== 'bots2v2');
-  $('csTeam').classList.toggle('hidden', mode !== 'bots2v2' && mode !== 'duel');
+  $('csTitle').textContent = { browse: 'The Champions', room: 'Choose Your Champion', duel: 'Duel — Choose Your Champion', bots2v2: '2v2 — Choose Your Champion', bg: 'Thornwater Gorge — Choose Your Champion' }[mode];
+  const vsBots = mode === 'duel' || mode === 'bots2v2' || mode === 'bg';
+  $('csDifficulty').classList.toggle('hidden', !vsBots);
+  $('csTeam').classList.toggle('hidden', !vsBots);
   $('csConfirm').classList.toggle('hidden', mode === 'browse');
-  $('csConfirm').textContent = mode === 'room' ? 'Confirm' : 'Enter the Arena';
+  $('csConfirm').textContent = mode === 'room' ? 'Confirm' : mode === 'bg' ? 'Enter the Gorge' : 'Enter the Arena';
   document.querySelectorAll('#csDifficulty .chip').forEach(c => c.classList.toggle('on', c.dataset.diff === S.difficulty));
   const list = $('csList'); list.innerHTML = '';
   for (const id of CLASS_ORDER) {
@@ -207,7 +215,7 @@ function openClassSelect(mode) {
     el.addEventListener('click', () => selectClass(id));
     list.appendChild(el);
   }
-  if (mode === 'bots2v2' || mode === 'duel') renderTeamPanel();
+  if (vsBots) renderTeamPanel();
   selectClass(S.myCls);
 }
 
@@ -224,11 +232,37 @@ const saveBots = () => localStorage.setItem('runefall-bots', JSON.stringify({ te
 // a class for a bot: the chosen one, or (for 'random') any class not in `avoid` (falls back to any class)
 const botClass = (v, avoid = []) => CLASSES[v] ? v : rand(CLASS_ORDER.filter(c => !avoid.includes(c)).length ? CLASS_ORDER.filter(c => !avoid.includes(c)) : CLASS_ORDER);
 
+// a bot's class in a 5v5 team: random, but at most two of a class per team (design: FUTURE_BATTLEGROUNDS.md)
+function bgClass(v, mates) {
+  if (CLASSES[v]) return v;
+  const n = c => mates.filter(m => m === c).length;
+  const fresh = CLASS_ORDER.filter(c => n(c) === 0), ok = CLASS_ORDER.filter(c => n(c) < 2);
+  return rand(fresh.length ? fresh : ok.length ? ok : CLASS_ORDER);
+}
+const BG_NAMES = [['Aldor', 'Brann', 'Selka', 'Tovi', 'Maelis'], ['Zigi', 'Jöggu', 'Rasko', 'Vendra', 'Ilk', 'Grummar']];
+function bgRoster() {
+  const roster = [{ cls: S.myCls, spec: mySpec(), team: 0, name: S.playerName }];
+  for (const team of [0, 1]) {
+    const names = BG_NAMES[team].filter(n => n !== S.playerName);
+    while (roster.filter(r => r.team === team).length < 5) {
+      const mates = roster.filter(r => r.team === team).map(r => r.cls), cls = bgClass('random', mates);
+      roster.push({ cls, spec: pickSpec(cls, 'random'), team, name: names.shift() || 'Bot', bot: true, diff: S.difficulty });
+    }
+  }
+  return roster;
+}
+
 function renderTeamPanel() {
   const opts = v => `<option value="random"${v === 'random' ? ' selected' : ''}>🎲 Random</option>` + CLASS_ORDER.map(c => `<option value="${c}"${v === c ? ' selected' : ''}>${CLASSES[c].name}</option>`).join('');
   // a bot row: class picker + spec picker (spec picker only once a class is chosen)
   const row = (label, k) => `<div class="tm"><span>${label}</span><select data-k="${k}">${opts(S.team[k])}</select>${S.team[k] !== 'random' ? `<select data-ks="${k}">${specOptions(S.team[k], S.teamSpec[k])}</select>` : ''}</div>`;
   const me = `<div class="tm"><span>${esc(S.playerName)}</span><b style="color:${CLASSES[S.myCls].color}">${specLabel(S.myCls, mySpec())}</b></div>`;
+  if (S.csMode === 'bg') {
+    $('csTeam').innerHTML = `<div class="ally"><h4>Gold Team</h4>${me}<div class="tm"><span>+ 4 bots</span><b>🎲 random classes</b></div></div>
+      <div class="foe"><h4>Crimson Team</h4><div class="tm"><span>5 bots</span><b>🎲 random classes</b></div></div>
+      <div class="bg-rules muted">Capture the enemy flag 3 times · 15 minutes · respawn every 20 s · at most 2 of a class per team</div>`;
+    return;
+  }
   $('csTeam').innerHTML = S.csMode === 'duel'
     ? `<div class="ally"><h4>You</h4>${me}</div><div class="foe"><h4>Opponent</h4>${row('Bot', 'duel')}</div>`
     : `<div class="ally"><h4>Your Team</h4>${me}${row(`${BOT_NAMES.ally[0]} (bot)`, 'ally')}</div>
@@ -293,7 +327,7 @@ function selectClass(id) {
     world.previewAbility(ab);
     audio.play(AB_SOUND[ab.id]);
   }));
-  if (S.csMode === 'bots2v2' || S.csMode === 'duel') renderTeamPanel();
+  if (S.csMode === 'bots2v2' || S.csMode === 'duel' || S.csMode === 'bg') renderTeamPanel();
 }
 
 document.querySelectorAll('#csDifficulty .chip').forEach(c => c.addEventListener('click', () => {
@@ -319,6 +353,8 @@ $('csConfirm').addEventListener('click', () => {
       { cls: f1, spec: pickSpec(f1, S.teamSpec.foe1), team: 1, name: BOT_NAMES.enemy[0], bot: true, diff: S.difficulty },
       { cls: f2, spec: pickSpec(f2, S.teamSpec.foe2), team: 1, name: BOT_NAMES.enemy[1], bot: true, diff: S.difficulty },
     ], 'bots2v2', 0);
+  } else if (S.csMode === 'bg') {
+    startMatch(bgRoster(), 'bg', 0, true);
   } else if (S.csMode === 'room') {
     if (S.net?.role === 'host') { const s = S.room.slots[S.mySlot]; s.cls = S.myCls; s.spec = mySpec(); s.ready = false; roomBroadcast(); }
     else if (S.net) { S.net.send({ t: 'pick', cls: S.myCls, spec: mySpec() }); S.net.send({ t: 'ready', v: false }); }
@@ -327,21 +363,42 @@ $('csConfirm').addEventListener('click', () => {
 });
 
 // ------------------------------------------------------------------ rooms (parties)
-// Slots 0,1 = Gold team, 2,3 = Crimson team. 1v1 uses slots 0 and 2.
+// A room always has 10 slots. 1v1 / 2v2: slots 0,1 = Gold, 2,3 = Crimson (1v1 uses 0 and 2).
+// 5v5 battleground: slots 0–4 = Gold, 5–9 = Crimson.
 const SLOT_TEAM = [0, 0, 1, 1];
-const activeSlots = room => room.format === '1v1' ? [0, 2] : [0, 1, 2, 3];
+const slotTeam = (room, i) => (room.format === '5v5' ? (i < 5 ? 0 : 1) : SLOT_TEAM[i] ?? 1);
+const activeSlots = room => room.format === '1v1' ? [0, 2] : room.format === '5v5' ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] : [0, 1, 2, 3];
+const TEAM_CAP = { '1v1': 1, '2v2': 2, '5v5': 5 };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const emptySlots = () => Array.from({ length: 10 }, () => ({ kind: 'empty' }));
 
 function newRoom() {
-  return { format: '2v2', botDiff: 'normal', slots: [
-    { kind: 'human', name: S.playerName, cls: S.myCls, spec: mySpec(), ready: false, cid: 'host' },
-    { kind: 'empty' }, { kind: 'empty' }, { kind: 'empty' },
-  ] };
+  const slots = emptySlots(); slots[0] = { kind: 'human', name: S.playerName, cls: S.myCls, spec: mySpec(), ready: false, cid: 'host' };
+  return { format: '2v2', botDiff: 'normal', slots };
+}
+// lay a room out for another format: each team keeps its players (humans first, then bots) up to the new size;
+// players who no longer fit are told why
+function relayoutRoom(room, fmt) {
+  const teams = [[], []];
+  for (const i of activeSlots(room)) { const s = room.slots[i]; if (s.kind !== 'empty') teams[slotTeam(room, i)].push(s); }
+  const cap = TEAM_CAP[fmt], slots = emptySlots();
+  room.format = fmt;
+  const order = activeSlots(room);
+  for (const t of [0, 1]) {
+    const list = teams[t].sort((a, b) => (b.cid === 'host') - (a.cid === 'host') || (b.kind === 'human') - (a.kind === 'human'));
+    const free = order.filter(i => slotTeam(room, i) === t);
+    list.forEach((s, k) => {
+      if (k < cap) slots[free[k]] = s;
+      else if (s.kind === 'human') { S.net.sendTo(s.cid, { t: 'kicked', msg: `The lobby switched to ${fmt} and is full.` }); S.net.kick(s.cid); }
+    });
+  }
+  room.slots = slots;
+  S.mySlot = slots.findIndex(s => s.cid === 'host');
 }
 function botFor(i) {
-  const enemy = SLOT_TEAM[i] === 1;
+  const enemy = slotTeam(S.room, i) === 1;
   const used = S.room.slots.filter(s => s.kind === 'bot').map(s => s.name);
-  const names = enemy ? BOT_NAMES.enemy : [...BOT_NAMES.ally, ...BOT_NAMES.enemy];
+  const names = S.room.format === '5v5' ? [...BG_NAMES[enemy ? 1 : 0], ...BG_NAMES[enemy ? 0 : 1]] : enemy ? BOT_NAMES.enemy : [...BOT_NAMES.ally, ...BOT_NAMES.enemy];
   const name = names.find(n => !used.includes(n)) || (enemy ? 'Zigi' : 'Aldor');
   // new bots are a surprise: class and spec are rolled when the match starts (the host can pick one instead)
   return { kind: 'bot', name, cls: 'random', spec: 'random', ready: true };
@@ -356,7 +413,7 @@ function startHost() {
   S.room = newRoom(); S.mySlot = 0; S.queueing = false;
   const net = S.net = new Net();
   bindNet(net);
-  net.role = 'host';
+  net.role = 'host'; net.maxGuests = 9; // a 5v5 battleground room: the host + 9 guests (smaller formats turn extra guests away in onGuestHello)
   show('room'); renderRoom();
   $('roomStatus').textContent = 'Opening the arena gates…';
   net.host(code => { $('roomCode').textContent = code; renderRoom(); });
@@ -378,7 +435,8 @@ function renderRoom() {
   const room = isHost ? publicRoom() : S.roomView;
   if (!room) return;
   $('roomCode').textContent = S.net?.code || '······';
-  $('roomTitle').textContent = room.format === '2v2' ? '2v2 Party Lobby' : '1v1 Duel Lobby';
+  $('roomTitle').textContent = room.format === '5v5' ? '5v5 Battleground — Thornwater Gorge' : room.format === '2v2' ? '2v2 Party Lobby' : '1v1 Duel Lobby';
+  $('room').classList.toggle('bg5', room.format === '5v5');
   document.querySelectorAll('#roomFormat .chip').forEach(c => { c.classList.toggle('on', c.dataset.format === room.format); c.disabled = !isHost; });
   const act = activeSlots(room);
   const card = i => {
@@ -392,8 +450,8 @@ function renderRoom() {
       <div class="sinfo"><div class="sname">${esc(s.name)}${s.host ? ' <span class="muted">♛</span>' : ''}${me ? ' <span class="muted">(you)</span>' : ''}</div><div class="ssub" style="color:${C.color}">${slotLabel(s)}${s.kind === 'bot' ? ' · Bot' : ''}</div></div>
       <span class="sready ${s.ready ? 'ok' : 'no'}">${s.kind === 'bot' ? 'BOT' : s.ready ? '✔ READY' : 'NOT READY'}</span><span class="sbtns">${ctrl}</span></div>`;
   };
-  $('slotsA').innerHTML = act.filter(i => SLOT_TEAM[i] === 0).map(card).join('');
-  $('slotsB').innerHTML = act.filter(i => SLOT_TEAM[i] === 1).map(card).join('');
+  $('slotsA').innerHTML = act.filter(i => slotTeam(room, i) === 0).map(card).join('');
+  $('slotsB').innerHTML = act.filter(i => slotTeam(room, i) === 1).map(card).join('');
   $('room').querySelector('.room-actions').classList.toggle('guest', !isHost);
   const mine = room.slots[S.mySlot];
   // everyone (host included) readies up; the host then starts the match
@@ -421,22 +479,19 @@ function canStart() {
 }
 
 $('roomFormat').addEventListener('click', e => {
-  const f = e.target.closest('[data-format]')?.dataset.format; if (!f || S.net?.role !== 'host') return;
-  S.room.format = f;
+  const f = e.target.closest('[data-format]')?.dataset.format; if (!f || S.net?.role !== 'host' || f === S.room.format) return;
   if (f === '1v1') {
-    // 1v1 uses slots 0 (Gold) and 2 (Crimson): keep the host plus the first other player,
-    // put them on opposite sides; anyone beyond two players can't fit and is told why.
-    const humans = S.room.slots.filter(s => s.kind === 'human').sort((a, b) => (b.cid === 'host') - (a.cid === 'host'));
-    const bots = S.room.slots.filter(s => s.kind === 'bot');
-    const keep = humans.slice(0, 2);
+    // 1v1: the host plus the first other player, on opposite sides; anyone beyond two can't fit and is told why
+    const humans = activeSlots(S.room).map(i => S.room.slots[i]).filter(s => s.kind === 'human').sort((a, b) => (b.cid === 'host') - (a.cid === 'host'));
+    const bots = activeSlots(S.room).map(i => S.room.slots[i]).filter(s => s.kind === 'bot');
     for (const s of humans.slice(2)) { S.net.sendTo(s.cid, { t: 'kicked', msg: 'The lobby switched to 1v1 and is full.' }); S.net.kick(s.cid); }
-    const slots = [{ kind: 'empty' }, { kind: 'empty' }, { kind: 'empty' }, { kind: 'empty' }];
-    slots[0] = keep[0] || bots.shift() || { kind: 'empty' };
-    slots[2] = keep[1] || bots.find(b => BOT_NAMES.enemy.includes(b.name)) || bots[0] || { kind: 'empty' };
-    S.room.slots = slots;
+    const slots = emptySlots();
+    slots[0] = humans[0] || bots.shift() || { kind: 'empty' };
+    slots[2] = humans[1] || bots.find(b => BOT_NAMES.enemy.includes(b.name)) || bots[0] || { kind: 'empty' };
+    S.room.format = f; S.room.slots = slots;
     S.mySlot = slots.findIndex(s => s.cid === 'host');
-    stopQueue();
-  }
+  } else relayoutRoom(S.room, f);
+  stopQueue();
   roomBroadcast();
 });
 $('room').addEventListener('click', e => {
@@ -447,7 +502,7 @@ $('room').addEventListener('click', e => {
     if (s.kind === 'human' && s.cid !== 'host') { S.net.sendTo(s.cid, { t: 'kicked', msg: 'You were removed from the lobby.' }); S.net.kick(s.cid); }
     S.room.slots[i] = { kind: 'empty' };
   } else if (b.dataset.act === 'swap') {
-    const other = activeSlots(S.room).filter(j => SLOT_TEAM[j] !== SLOT_TEAM[i]);
+    const other = activeSlots(S.room).filter(j => slotTeam(S.room, j) !== slotTeam(S.room, i));
     const j = other.find(j => S.room.slots[j].kind !== 'human') ?? other[0];
     [S.room.slots[i], S.room.slots[j]] = [S.room.slots[j], S.room.slots[i]];
     if (S.room.slots[j].cid === 'host') S.mySlot = j; else if (S.room.slots[i].cid === 'host') S.mySlot = i;
@@ -537,6 +592,7 @@ function bindNet(net) {
   });
   net.on('tg', (m, cid) => { const r = remoteOf(cid); if (r) r.targetReq = true; });
   net.on('atk', (m, cid) => { const r = remoteOf(cid); if (r) { r.attack = true; if (m.tid >= 0) r.setTarget = m.tid; } });
+  net.on('drop', (m, cid) => { const r = remoteOf(cid); if (r) r.drop = true; }); // battleground: drop the flag (G)
   net.on('sel', (m, cid) => { const r = remoteOf(cid); if (r) { if (m.tid !== undefined) r.setTarget = m.tid; if (m.fid !== undefined) r.setFriend = m.fid; } });
   // ---- guest side
   net.on('room', m => {
@@ -546,7 +602,7 @@ function bindNet(net) {
     if (S.screen !== 'room' && S.screen !== 'classSelect') show('room');
     if (S.screen === 'room') renderRoom();
   });
-  net.on('start', m => { if (net.role === 'guest') transition(() => startMatch(m.roster, 'guest', m.you)); });
+  net.on('start', m => { if (net.role === 'guest') transition(() => startMatch(m.roster, 'guest', m.you, !!m.bg)); });
   net.on('snap', m => onSnapshot(m.s));
   net.on('ev', m => { if (S.inGame && S.mode === 'guest') handleEvents(m.l, buildGuestView()); });
   net.on('goto', m => { if (net.role === 'guest') { S.moving = true; toast('Your party found opponents — moving to their arena…'); setTimeout(() => { S.moving = false; closeNet(); startJoin(m.code, 1); }, 900); } });
@@ -560,7 +616,7 @@ function onGuestHello(cid, m) {
   if (S.inGame) { S.net.sendTo(cid, { t: 'full' }); return; }
   const room = S.room, want = m.want === 1 ? 1 : 0;
   const act = activeSlots(room);
-  const order = [...act.filter(i => SLOT_TEAM[i] === want), ...act.filter(i => SLOT_TEAM[i] !== want)];
+  const order = [...act.filter(i => slotTeam(room, i) === want), ...act.filter(i => slotTeam(room, i) !== want)];
   const i = order.find(j => room.slots[j].kind === 'empty') ?? order.find(j => room.slots[j].kind === 'bot');
   if (i === undefined) { S.net.sendTo(cid, { t: 'full' }); setTimeout(() => S.net?.kick(cid), 300); return; }
   const cls = CLASSES[m.cls] ? m.cls : 'warrior';
@@ -578,7 +634,7 @@ function onGuestLeft(cid) {
   if (S.inGame) {
     // keep the match going: a bot takes over the departed player's champion
     const fid = S.cidToFid.get(cid);
-    if (fid !== undefined && S.sim) { S.remotes.delete(fid); S.ais.set(fid, new AI(S.sim, fid, room.botDiff)); S.sim.fighters[fid].bot = true; }
+    if (fid !== undefined && S.sim) { S.remotes.delete(fid); S.ais.set(fid, S.bg ? new FlagAI(S.sim, fid, room.botDiff) : new AI(S.sim, fid, room.botDiff)); S.sim.fighters[fid].bot = true; }
     S.cidToFid.delete(cid);
     room.slots[i] = { kind: 'bot', name: name, cls: room.slots[i].cls, spec: room.slots[i].spec, ready: true };
     toast(`${name} left — a bot takes over their champion.`, 3500);
@@ -591,21 +647,21 @@ function onGuestLeft(cid) {
 
 function startOnline() {
   stopQueue();
-  const room = S.room, act = activeSlots(room);
+  const room = S.room, act = activeSlots(room), bg = room.format === '5v5';
   const roster = [], owners = [];
   for (const i of act) {
     const s = room.slots[i];
     // random bots are rolled now (a fresh roll every match), avoiding classes already on their team
-    const mates = act.filter(j => j !== i && SLOT_TEAM[j] === SLOT_TEAM[i]).map(j => roster[act.indexOf(j)]?.cls || room.slots[j].cls);
-    const cls = botClass(s.cls, mates), spec = s.spec === 'random' ? pickSpec(cls, 'random') : validSpec(cls, s.spec);
-    roster.push({ cls, spec, team: SLOT_TEAM[i], name: s.name, bot: s.kind === 'bot', diff: room.botDiff });
+    const mates = act.filter(j => j !== i && slotTeam(room, j) === slotTeam(room, i)).map(j => roster[act.indexOf(j)]?.cls || room.slots[j].cls);
+    const cls = bg ? bgClass(s.cls, mates) : botClass(s.cls, mates), spec = s.spec === 'random' ? pickSpec(cls, 'random') : validSpec(cls, s.spec);
+    roster.push({ cls, spec, team: slotTeam(room, i), name: s.name, bot: s.kind === 'bot', diff: room.botDiff });
     owners.push(s.kind === 'human' ? s.cid : null);
   }
   const myFid = owners.indexOf('host');
   S.cidToFid = new Map();
-  owners.forEach((cid, fid) => { if (cid && cid !== 'host') { S.cidToFid.set(cid, fid); S.net.sendTo(cid, { t: 'start', roster, you: fid }); } });
+  owners.forEach((cid, fid) => { if (cid && cid !== 'host') { S.cidToFid.set(cid, fid); S.net.sendTo(cid, { t: 'start', roster, you: fid, bg }); } });
   for (const s of room.slots) if (s.kind === 'human') s.ready = false; // everyone readies again next time
-  transition(() => startMatch(roster, 'host', myFid));
+  transition(() => startMatch(roster, 'host', myFid, bg));
 }
 
 function backToLobby() {
@@ -628,9 +684,14 @@ function leaveOnline(msg, quiet) {
 }
 
 // ------------------------------------------------------------------ match lifecycle
-function startMatch(roster, mode, myId) {
+function startMatch(roster, mode, myId, bg = false) {
   clearTimeout(S.endTimer);
-  S.mode = mode; S.inGame = true; S.paused = false; S.acc = 0; S.prev = null;
+  S.mode = mode; S.bg = bg; S.inGame = true; S.paused = false; S.acc = 0; S.prev = null;
+  S.bgWasDead = false; S.lastRespawnN = null;
+  // the battleground has its own map; every other mode plays in the arena picked on the main menu
+  world.setArena(bg ? 'thornwater' : menuArena());
+  useMap(bg ? THORNWATER : null); // guests: their own movement prediction collides with the map too (a host's FlagSim sets it itself)
+  if (bg) THORNWATER.gatesOpen = false;
   S.roster = roster; S.myId = myId;
   S.lastCount = null; S.lastWinner = -1;
   S.snaps = []; S.lastSnap = null; S.ack = 0; S.lastForceYaw = -1; S.pred = newPred();
@@ -638,29 +699,44 @@ function startMatch(roster, mode, myId) {
   const me = roster[myId];
   if (mode === 'guest') {
     S.sim = null;
-    S.local = { id: myId, cls: me.cls, spec: validSpec(me.cls, me.spec), team: me.team, x: 0, y: 0, z: me.team === 0 ? -20 : 20, vy: 0, yaw: me.team === 0 ? 0 : Math.PI, stamina: 100, buffs: [], alive: true, locked: false, moving: false };
+    const sp = startSpot(roster, myId, bg);
+    S.local = { id: myId, cls: me.cls, spec: validSpec(me.cls, me.spec), team: me.team, x: sp.x, y: sp.y, z: sp.z, vy: 0, yaw: sp.yaw, stamina: 100, buffs: [], alive: true, locked: false, moving: false };
   } else {
-    S.sim = new Sim(roster);
+    S.sim = bg ? new FlagSim(roster) : new Sim(roster);
     roster.forEach((r, fid) => {
       if (fid === myId) return;
-      if (r.bot || mode === 'duel' || mode === 'bots2v2') S.ais.set(fid, new AI(S.sim, fid, r.diff || S.difficulty));
+      if (r.bot || offlineMode(mode)) S.ais.set(fid, bg ? new FlagAI(S.sim, fid, r.diff || S.difficulty) : new AI(S.sim, fid, r.diff || S.difficulty));
       else S.remotes.set(fid, { remote: null, abs: [], targetReq: false, attack: false });
     });
     if (S.local === null || mode !== 'guest') S.local = null;
   }
   world.setFighters(roster, myId);
   const v = currentView();
+  hud.setBg(bg ? { caps: FLAG_RULES.caps } : null);
   hud.setup(v.fighters, myId);
   hud.show(true); hud.clearAnnounce();
   show(null); showOverlay('pause', false); showOverlay('matchEnd', false);
-  input.enabled = true; input.yaw = me.team === 0 ? 0 : Math.PI; input.pitch = 0.3; input.keys.clear();
-  world.camPos.set(0, 6, me.team === 0 ? -30 : 30);
+  const sp = startSpot(roster, myId, bg);
+  input.enabled = true; input.yaw = sp.yaw; input.pitch = 0.3; input.keys.clear();
+  world.camPos.set(sp.x - Math.sin(sp.yaw) * 9, sp.y + 5, sp.z - Math.cos(sp.yaw) * 9);
+  $('bgHint').classList.toggle('hidden', !bg);
   audio.setTrack('arena');
   input.requestLock();
   $('lockHint').classList.add('hidden');
 }
 
+// the arena picked on the main menu (never a battleground map)
+const menuArena = () => (ARENAS.some(a => a.id === settings.arena && !a.battleground) ? settings.arena : 'runefall');
+// where my champion starts (the camera starts behind it): the arena's two sides, or my team's great hall
+function startSpot(roster, myId, bg) {
+  const me = roster[myId];
+  if (!bg) return { x: 0, y: 0, z: me.team === 0 ? -20 : 20, yaw: me.team === 0 ? 0 : Math.PI };
+  const p = THORNWATER.prep.find(q => q.team === me.team), mates = roster.filter(r => r.team === me.team), k = mates.indexOf(me);
+  return { x: p.x, y: 0, z: p.z + (k - (mates.length - 1) / 2) * 2.6, yaw: p.yaw };
+}
+
 function endGame() {
+  if (S.bg) { useMap(null); S.bg = false; world.setArena(menuArena()); hud.setBg(null); $('bgHint').classList.add('hidden'); $('bgBoard').classList.add('hidden'); $('bgRespawn').classList.add('hidden'); }
   S.inGame = false; S.sim = null; S.ais = new Map(); S.local = null; S.remotes = new Map();
   input.enabled = false; input.exitLock(); canvas.style.cursor = '';
   hud.show(false);
@@ -679,7 +755,8 @@ input.onEscape = () => {
   else if (!$('matchEnd').classList.contains('active')) openPause();
 };
 input.onFallback = () => toast('Mouse capture is not possible here: the cursor aims, hold the right mouse button and drag to look around.', 6000);
-const offline = () => S.mode === 'duel' || S.mode === 'bots2v2';
+const offlineMode = m => m === 'duel' || m === 'bots2v2' || m === 'bg';
+const offline = () => offlineMode(S.mode);
 function openPause() {
   if (offline()) S.paused = true;
   $('pauseNote').textContent = offline() ? 'The match is paused.' : 'Online match — the fight continues while this menu is open!';
@@ -695,6 +772,7 @@ $('pauseLeave').addEventListener('click', () => {
 canvas.addEventListener('click', () => { if (S.inGame && !input.active && !$('pause').classList.contains('active') && !$('matchEnd').classList.contains('active')) input.requestLock(); });
 
 function showMatchEnd(winner) {
+  if (S.bg) { showBgEnd(winner); return; }
   const v = currentView();
   const F = v.fighters, me = F[S.myId];
   const won = winner === me.team;
@@ -720,20 +798,49 @@ function showMatchEnd(winner) {
   audio.play('crowd', null, { big: true });
   setTimeout(() => { if ($('matchEnd').classList.contains('active')) audio.setTrack('menu'); }, 4500);
 }
+// battleground end screen: captures, returns, carrier kills and match points for all ten
+function showBgEnd(winner) {
+  const v = currentView(), F = v.fighters, me = F[S.myId];
+  const won = winner === me.team, draw = winner < 0;
+  input.exitLock(); showOverlay('pause', false);
+  const t = $('endTitle'); t.textContent = draw ? 'Draw' : won ? 'Victory' : 'Defeat'; t.classList.toggle('defeat', !won && !draw);
+  $('endScore').textContent = `${v.score[me.team]} – ${v.score[1 - me.team]}`;
+  const st = f => f.stats || {};
+  const pts = f => st(f).points ?? 0;
+  const mvp = F.reduce((b, f) => (pts(f) > pts(b) ? f : b), F[0]);
+  const rows = [...F].sort((a, b) => (a.team === me.team ? 0 : 1) - (b.team === me.team ? 0 : 1) || pts(b) - pts(a)).map(f => { const s = st(f);
+    return `<tr class="t${f.team === me.team ? 0 : 1} ${f.id === S.myId ? 'me' : ''}"><td>${esc(f.name)} <span class="muted">${specLabel(f.cls, f.spec)}</span>${f.id === mvp.id ? '<span class="mvp">★ MVP</span>' : ''}</td><td>${s.caps || 0}</td><td>${s.returns || 0}</td><td>${s.fcKills || 0}</td><td>${s.kills || 0}</td><td>${s.dmg || 0}</td><td>${s.heal || 0}</td><td><b>${pts(f)}</b></td></tr>`; }).join('');
+  $('endStats').innerHTML = `<table class="end-stats bg"><tr><th>Champion</th><th>Captures</th><th>Returns</th><th>Carrier kills</th><th>Kills</th><th>Damage</th><th>Healing</th><th>Points</th></tr>${rows}</table>`;
+  $('endStatus').textContent = (S.mode === 'guest' ? 'Waiting for the host to start a rematch or return to the lobby… ' : '') + `You earned ${pts(me)} match points.`;
+  if (!draw) recordResult(won);
+  const host = S.mode === 'host', guest = S.mode === 'guest';
+  $('endRematch').classList.toggle('hidden', guest);
+  $('endClass').classList.toggle('hidden', guest);
+  $('endClass').textContent = host ? 'Back to Lobby' : 'Change Class';
+  $('endMenu').textContent = offline() ? 'Main Menu' : 'Leave';
+  $('endRematch').disabled = false;
+  showOverlay('matchEnd', true);
+  audio.play(draw ? 'gong' : won ? 'victory' : 'defeat');
+  audio.play('crowd', null, { big: true });
+  setTimeout(() => { if ($('matchEnd').classList.contains('active')) audio.setTrack('menu'); }, 4500);
+}
 $('endRematch').addEventListener('click', () => {
   const roster = S.roster;
   if (S.mode === 'host') { // restart with the same lineup; departed players stay bots
     const humans = new Set(S.cidToFid.values());
     const r2 = roster.map((r, fid) => ({ ...r, bot: fid !== S.myId && !humans.has(fid) }));
-    S.cidToFid.forEach((fid, cid) => S.net.sendTo(cid, { t: 'start', roster: r2, you: fid }));
-    transition(() => startMatch(r2, 'host', S.myId));
+    const bg = S.bg;
+    S.cidToFid.forEach((fid, cid) => S.net.sendTo(cid, { t: 'start', roster: r2, you: fid, bg }));
+    transition(() => startMatch(r2, 'host', S.myId, bg));
     return;
   }
+  // offline battleground: a fresh roll of bot classes every match
+  if (S.mode === 'bg') { transition(() => startMatch(bgRoster(), 'bg', 0, true)); return; }
   transition(() => startMatch(roster, S.mode, S.myId));
 });
 $('endClass').addEventListener('click', () => {
   if (S.mode === 'host') { backToLobby(); return; }
-  transition(() => { const m = S.mode; endGame(); openClassSelect(m === 'bots2v2' ? 'bots2v2' : 'duel'); audio.setTrack('menu'); });
+  transition(() => { const m = S.mode; endGame(); world.showMenuScene(); openClassSelect(m === 'bots2v2' || m === 'bg' ? m : 'duel'); audio.setTrack('menu'); });
 });
 $('endMenu').addEventListener('click', () => {
   if (offline()) transition(() => { endGame(); world.showMenuScene(); show('menu'); audio.setTrack('menu'); });
@@ -765,7 +872,8 @@ function currentView(raw = false) {
     fighters: P ? sim.fighters.map((f, i) => lerpPos(f, P.f[i], a)) : sim.fighters,
     projectiles: P ? sim.projectiles.map(p => lerpPos(p, P.p.get(p.id), a)) : sim.projectiles,
     minions: P ? sim.minions.map(m => lerpPos(m, P.m.get(m.id), a)) : sim.minions,
-    zones: sim.zones, state: sim.state, stateT: sim.stateT, round: sim.round, score: sim.score, fightT: sim.fightT, damp: sim.damp, lastWinner: S.lastWinner };
+    zones: sim.zones, state: sim.state, stateT: sim.stateT, round: sim.round, score: sim.score, fightT: sim.fightT, damp: sim.damp, lastWinner: S.lastWinner,
+    bg: sim.bgState ? sim.bgState() : null };
 }
 
 function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
@@ -779,7 +887,7 @@ function buildGuestView() {
   const snaps = S.snaps, last = S.lastSnap, L = S.local;
   if (!last) {
     const fighters = S.roster.map((r, i) => i === S.myId ? { ...dummyFighter(r, i), ...L } : dummyFighter(r, i));
-    return { fighters, projectiles: [], zones: [], state: 'countdown', stateT: 3, round: 1, score: [0, 0], fightT: 0, damp: 0, lastWinner: -1 };
+    return { fighters, projectiles: [], zones: [], state: 'countdown', stateT: S.bg ? FLAG_RULES.prep : 3, round: 1, score: [0, 0], fightT: 0, damp: 0, lastWinner: -1, bg: null };
   }
   // interpolate everyone else ~100ms in the past
   const rt = performance.now() - 100;
@@ -795,7 +903,8 @@ function buildGuestView() {
   const pa = new Map(a.s.p.map(p => [p.id, p]));
   const projectiles = b.s.p.map(p => { const q = pa.get(p.id); return q ? { ...p, x: q.x + (p.x - q.x) * u, y: q.y + (p.y - q.y) * u, z: q.z + (p.z - q.z) * u } : p; });
   const zones = last.z.map(z => ({ ...z, t: Math.min(z.dur, z.t + age) }));
-  return { fighters, projectiles, zones, minions: last.m || [], state: last.s, stateT: last.st - age, round: last.r, score: last.sc, fightT: last.ft + (last.s === 'fight' ? age : 0), damp: last.dp, lastWinner: S.lastWinner };
+  const bg = last.bg ? { ...last.bg, tl: Math.max(0, last.bg.tl - (last.s === 'fight' ? age : 0)), rs: last.bg.rs.map(v => (v > 0 ? Math.max(0, v - age) : 0)) } : null;
+  return { fighters, projectiles, zones, minions: last.m || [], state: last.s, stateT: last.st - age, round: last.r, score: last.sc, fightT: last.ft + (last.s === 'fight' ? age : 0), damp: last.dp, lastWinner: S.lastWinner, bg };
 }
 
 // ---- guest prediction. An online guest's ability press used to show nothing until the host's answer came back
@@ -872,8 +981,11 @@ function applyPred(o, age) {
 function onSnapshot(s) {
   if (!S.inGame || S.mode !== 'guest') return;
   const now = performance.now();
+  // a lite snapshot carries no statistics: keep the last ones
+  if (S.lastSnap) s.f.forEach((f, i) => { if (!f.stats) f.stats = S.lastSnap.f[i]?.stats; });
   S.snaps.push({ t: now, s }); if (S.snaps.length > 12) S.snaps.shift();
   S.lastSnap = s; S.lastSnapT = now;
+  if (s.bg) THORNWATER.gatesOpen = !!s.bg.gates; // the guest's own collision: the keep gates are walls until they open
   const me = s.f[S.myId], L = S.local;
   if (!me || !L) return;
   // the host has caught up with a prediction: from here on its state is shown
@@ -913,7 +1025,9 @@ function handleEvents(evs, view) {
         // callout when an enemy pops a big cooldown (30 s+ or its signature ability)
         else if (me && F[ev.id] && F[ev.id].team !== myTeam) {
           const ab = kitOf(F[ev.id]).abilities.find(a => a && a.id === ev.ab);
-          if (ab && (ab.cd >= 30 || ab.signature)) hud.callout(F[ev.id].name, ab.name, ab.color);
+          // battleground: only enemies near you or the one you are fighting (ten champions would flood the line)
+          const near = !S.bg || me.target === ev.id || Math.hypot(F[ev.id].x - me.x, F[ev.id].z - me.z) < 25;
+          if (ab && near && (ab.cd >= 30 || ab.signature)) hud.callout(F[ev.id].name, ab.name, ab.color);
         }
         if (ev.ab === 'glacial_nova' || ev.ab === 'blinding_light' || ev.ab === 'halo_judgment') world.addShake(0.25);
         break; }
@@ -960,12 +1074,18 @@ function handleEvents(evs, view) {
       case 'blink': if (ev.fx === 'arcane_shift' || ev.fx === 'shadow_leap') audio.play('blink', { x: ev.x1, z: ev.z1 }); break;
       case 'dash': world.onDash(ev.id, ev.fx); break;
       case 'death': {
-        audio.play('death', pos(ev.id)); world.addShake(0.5);
+        audio.play('death', pos(ev.id)); world.addShake(ev.id === my ? 0.5 : 0.2);
         const f = F[ev.id], k = F[ev.killer];
+        if (S.bg) { // ten champions: a kill feed instead of a banner for every death
+          if (f && ev.id === my) hud.announce('You have fallen', 'kill red', false, k ? `by ${k.name} · back with the next wave` : 'back with the next wave');
+          else if (f) hud.feed(k ? `${k.name} ⚔ ${f.name}` : `${f.name} died`, f.team === myTeam ? '#ff8a7a' : '#9ad8ff');
+          break;
+        }
         if (f && F.length > 2) hud.announce(f.team === myTeam ? `${f.name} has fallen` : `${f.name} defeated`, f.team === myTeam ? 'kill red' : 'kill', false, k ? `by ${k.name}` : '');
         break; }
       case 'roundStart': hud.announce(`Round ${ev.round}`); S.lastCount = null; S.lastWinner = -1; break;
-      case 'fight': hud.announce('Fight!'); audio.play('gong'); audio.play('crowd', null, { big: true }); world.arena.crowdHype = 1; break;
+      case 'fight': if (S.bg) { hud.announce('The gates are open!', '', false, 'Capture the enemy flag · 3 captures win'); audio.play('gong'); world.arena.crowdHype = 1; break; }
+        hud.announce('Fight!'); audio.play('gong'); audio.play('crowd', null, { big: true }); world.arena.crowdHype = 1; break;
       case 'roundEnd':
         S.lastWinner = ev.winner;
         if (ev.winner === myTeam) { hud.announce('Round Won', '', false, `${ev.score[myTeam]} – ${ev.score[1 - myTeam]}`); audio.play('round_win'); }
@@ -973,9 +1093,18 @@ function handleEvents(evs, view) {
         else { hud.announce('Round Lost', 'red', false, `${ev.score[myTeam]} – ${ev.score[1 - myTeam]}`); audio.play('round_lose'); }
         audio.play('crowd', null, { big: true }); world.arena.crowdHype = 1;
         break;
+      case 'bgStart': hud.announce('Thornwater Gorge', '', false, `The gates open in ${ev.prep} seconds`); S.lastCount = null; break;
+      case 'flag': bgFlagEvent(ev, F, myTeam); break;
+      case 'powerup': {
+        const P = POWERUPS[ev.type];
+        if (P) { audio.play('blink', { x: ev.x, z: ev.z }); if (ev.id === my) { hud.announce(P.name, '', false, P.desc); audio.play('round_win'); } else if (F[ev.id]?.team === myTeam) hud.feed(`${F[ev.id].name} took ${P.icon} ${P.name}`, P.color); }
+        break; }
+      case 'powerups': hud.feed('Power-ups have appeared', '#ffe6a0'); break;
+      case 'respawn': if (ev.id === my) { hud.clearAnnounce(); audio.play('immune', pos(ev.id)); input.yaw = F[my]?.yaw ?? input.yaw; } break;
       case 'matchEnd': {
         const won = ev.winner === myTeam;
-        hud.announce(won ? 'Victory' : 'Defeat', won ? '' : 'red', true);
+        if (ev.bg && ev.winner < 0) hud.announce('Draw', '', true, `${ev.score[myTeam]} – ${ev.score[1 - myTeam]}`);
+        else hud.announce(won ? 'Victory' : 'Defeat', won ? '' : 'red', true, ev.bg ? `${ev.score[myTeam]} – ${ev.score[1 - myTeam]} captures` : '');
         if (won) world.celebrate(F.filter(f => f.team === myTeam));
         clearTimeout(S.endTimer);
         S.endTimer = setTimeout(() => { hud.clearAnnounce(); showMatchEnd(ev.winner); }, 2800);
@@ -985,8 +1114,32 @@ function handleEvents(evs, view) {
         else if (ev.fx === 'death_mark_pop') { audio.play('mark_pop', { x: ev.x, z: ev.z }); world.addShake(0.3); }
         else if (ev.fx === 'spirit_cast') audio.play('spirit_bolt', pos(ev.id));
         else if (ev.fx === 'bull_rush_hit') { audio.play('melee_heavy', { x: ev.x, z: ev.z }); world.addShake(0.3); }
+        else if (ev.fx === 'shockwave') { audio.play('quake', { x: ev.x, z: ev.z }); world.addShake(0.35); }
         break;
     }
+  }
+}
+
+// battleground flag news: who took, dropped, returned or captured which flag (from my side's point of view)
+const TEAM_NAME = ['Gold', 'Crimson'];
+function bgFlagEvent(ev, F, myTeam) {
+  const who = F[ev.id]?.name || 'Someone', ours = ev.team === myTeam, flag = ours ? 'our flag' : `the ${TEAM_NAME[ev.team]} flag`;
+  const good = '#9aff9a', bad = '#ff7a6a', pos = ev.x !== undefined ? { x: ev.x, z: ev.z } : null;
+  switch (ev.act) {
+    case 'pick':
+      if (ours) { hud.announce(`${who} has taken our flag!`, 'red small'); audio.play('round_lose'); }
+      else { hud.announce(ev.id === S.myId ? 'You have the enemy flag!' : `${who} has the ${TEAM_NAME[ev.team]} flag!`, 'small', false, ev.id === S.myId ? 'Bring it to your own flag stand · G drops it' : ''); audio.play('round_win'); }
+      break;
+    case 'drop': hud.feed(`${who} dropped ${flag}`, ours ? good : bad); audio.play('interrupt', pos); break;
+    case 'return': hud.feed(ours ? `${who} returned our flag` : `The ${TEAM_NAME[ev.team]} flag was returned`, ours ? good : bad); audio.play('immune', null); break;
+    case 'autoreturn': hud.feed(`The ${TEAM_NAME[ev.team]} flag went back to its keep`, '#ffe6a0'); break;
+    case 'capture': {
+      const mine = !ours;
+      hud.announce(mine ? `${who} captured the ${TEAM_NAME[ev.team]} flag!` : `${who} captured our flag`, mine ? '' : 'red', false, `${ev.score[myTeam]} – ${ev.score[1 - myTeam]}`);
+      audio.play('gong'); audio.play(mine ? 'round_win' : 'round_lose'); audio.play('crowd', null, { big: true });
+      if (mine) world.arena.crowdHype = 1;
+      break; }
+    case 'exposed': if (ev.team !== myTeam) hud.feed(`Both carriers are Exposed: +${ev.stacks * 10} % damage taken`, '#ffb04a'); break;
   }
 }
 
@@ -1006,9 +1159,9 @@ function tickSim(dt, inp, maxSteps = 5) {
   // them, so frames without a fixed step (high refresh rates) never drop a key press
   const P = S.pend || (S.pend = { abilities: [] });
   P.abilities.push(...(inp.abilities || []));
-  if (inp.jump) P.jump = true; if (inp.targetReq) P.targetReq = true; if (inp.attack) P.attack = true;
+  if (inp.jump) P.jump = true; if (inp.targetReq) P.targetReq = true; if (inp.attack) P.attack = true; if (inp.dropFlag) P.dropFlag = true;
   if (inp.setTarget !== undefined) P.setTarget = inp.setTarget; if (inp.setFriend !== undefined) P.setFriend = inp.setFriend;
-  const localInp = { ...inp, abilities: P.abilities, jump: !!P.jump, targetReq: !!P.targetReq, attack: !!P.attack, setTarget: P.setTarget, setFriend: P.setFriend };
+  const localInp = { ...inp, abilities: P.abilities, jump: !!P.jump, targetReq: !!P.targetReq, attack: !!P.attack, dropFlag: !!P.dropFlag, setTarget: P.setTarget, setFriend: P.setFriend };
   if (S.acc >= STEP) S.pend = null;
   let first = true, steps = 0;
   while (S.acc >= STEP && steps < maxSteps) {
@@ -1016,13 +1169,13 @@ function tickSim(dt, inp, maxSteps = 5) {
     for (const f of sim.fighters) {
       const id = f.id;
       if (id === S.myId) {
-        inputs[id] = first ? localInp : { ...localInp, abilities: [], jump: false, targetReq: false, attack: false, setTarget: undefined, setFriend: undefined };
+        inputs[id] = first ? localInp : { ...localInp, abilities: [], jump: false, targetReq: false, attack: false, dropFlag: false, setTarget: undefined, setFriend: undefined };
       } else if (S.ais.has(id)) inputs[id] = S.ais.get(id).getInput(STEP);
       else {
         const r = S.remotes.get(id);
         if (r && r.remote) {
           inputs[id] = { remote: r.remote };
-          if (first) { Object.assign(inputs[id], { abilities: r.abs.splice(0), targetReq: r.targetReq, attack: r.attack, setTarget: r.setTarget, setFriend: r.setFriend }); r.targetReq = false; r.attack = false; r.setTarget = undefined; r.setFriend = undefined; }
+          if (first) { Object.assign(inputs[id], { abilities: r.abs.splice(0), targetReq: r.targetReq, attack: r.attack, dropFlag: !!r.drop, setTarget: r.setTarget, setFriend: r.setFriend }); r.targetReq = false; r.attack = false; r.drop = false; r.setTarget = undefined; r.setFriend = undefined; }
         } else inputs[id] = { mx: 0, mz: 0, yaw: f.yaw, abilities: [] };
       }
     }
@@ -1035,7 +1188,8 @@ function tickSim(dt, inp, maxSteps = 5) {
   if (S.mode === 'host' && S.net) {
     if (evs.length) S.net.send({ t: 'ev', l: evs });
     S.snapT -= dt;
-    if (S.snapT <= 0) { S.snapT = 0.05; S.net.send({ t: 'snap', s: sim.snapshot() }); }
+    // 20 snapshots a second; the 10-player battleground sends 15 and its statistics only in every 8th (upload)
+    if (S.snapT <= 0) { S.snapT = S.bg ? 1 / 15 : 0.05; S.snapN = (S.snapN || 0) + 1; S.net.send({ t: 'snap', s: sim.snapshot(S.bg && S.snapN % 8 !== 0) }); }
   }
   return evs;
 }
@@ -1081,22 +1235,25 @@ function gameFrame(dt) {
   if (raw.friendKey === 1) setFriend = S.myId;
   if (raw.friendKey === 2) {
     const allies = pre.fighters.filter(f => f.team === meV.team && f.id !== S.myId);
-    setFriend = allies.length ? (meV.friend === allies[0].id && allies[1] ? allies[1].id : allies[0].id) : S.myId;
+    // F2 again: the next ally (cycles through a 5v5 team)
+    const k = allies.findIndex(f => f.id === meV.friend);
+    setFriend = allies.length ? allies[(k + 1) % allies.length].id : S.myId;
   }
   // mouseover healing: an ally under the crosshair (or cursor) takes your ally spells without changing your friendly target
   const mo = settings.mouseover && meV && canControl ? world.pickAlly(pre, S.myId, raw.aimPos.x, raw.aimPos.y) : -1;
   hud.mouseover = mo;
   const myKit = meV ? kitOf(meV) : null;
   const abInput = i => (mo >= 0 && myKit?.abilities[i]?.ally ? { i, dir, tid: mo } : { i, dir });
-  const local = { mx: raw.mx, mz: raw.mz, yaw: input.yaw, jump: raw.jump, sprint: raw.sprint, abilities: raw.abilities.map(abInput), targetReq: raw.targetReq, attack: raw.attack, atkHold, aim, setTarget, setFriend };
+  const local = { mx: raw.mx, mz: raw.mz, yaw: input.yaw, jump: raw.jump, sprint: raw.sprint, abilities: raw.abilities.map(abInput), targetReq: raw.targetReq, attack: raw.attack, atkHold, aim, setTarget, setFriend, dropFlag: !!(S.bg && raw.dropFlag) };
 
   let view;
   if (S.mode === 'guest') {
     const L = S.local, last = S.lastSnap;
     const state = last ? last.s : 'countdown';
     if (L && L.alive !== false) {
-      moveFighter(L, local, dt, pre.fighters, state === 'fight');
-      if (state === 'countdown' && last) { L.x = last.f[S.myId].x; L.z = last.f[S.myId].z; }
+      // the battleground's preparation lets you walk around your keep; an arena countdown holds you in place
+      moveFighter(L, local, dt, pre.fighters, state === 'fight' || (S.bg && state === 'countdown'));
+      if (state === 'countdown' && last && !S.bg) { L.x = last.f[S.myId].x; L.z = last.f[S.myId].z; }
     }
     S.sendT -= dt;
     if (local.abilities.length || local.attack || atkHold !== !!S.sentHold) S.sendT = 0; // an ability press or attack click must reach the host with our latest movement and aim
@@ -1106,6 +1263,7 @@ function gameFrame(dt) {
       if (setTarget !== undefined || setFriend !== undefined) net.send({ t: 'sel', tid: setTarget, fid: setFriend });
       for (const a of local.abilities) { net.send({ t: 'ab', i: a.i, dir: a.dir, tid: a.tid }); guestPredict(pre, a.i, a.tid); }
       if (local.targetReq) net.send({ t: 'tg' });
+      if (local.dropFlag) net.send({ t: 'drop' });
       if (local.attack) net.send({ t: 'atk', tid: setTarget ?? -1 });
     }
     view = buildGuestView();
@@ -1124,9 +1282,10 @@ function gameFrame(dt) {
     if (n !== S.lastCount && n >= 1 && n <= 3) { S.lastCount = n; hud.announce(String(n)); audio.play('tick'); }
   }
   const me = view.fighters[S.myId];
-  // when dead in 2v2, follow a living teammate
-  const ally = !me.alive ? view.fighters.find(f => f.team === me.team && f.alive && f.id !== me.id) : null;
+  // when dead in 2v2, follow a living teammate; on the battleground you wait for the next wave at your corpse
+  const ally = !me.alive && !S.bg ? view.fighters.find(f => f.team === me.team && f.alive && f.id !== me.id) : null;
   $('spectate').classList.toggle('hidden', !(ally && view.state === 'fight'));
+  hud.boardHeld = !!(S.bg && raw.scoreHeld && canControl);
   audio.listener = { x: me.x, z: me.z, yaw: input.yaw };
   world.updateGame(dt, view, S.myId, input, ally ? ally.id : S.myId);
   hud.update(dt, view, world.camera, S.myId);

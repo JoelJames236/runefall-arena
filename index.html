@@ -47,7 +47,8 @@
   <nav class="menu-buttons">
     <button class="btn big" data-act="duel"><span class="btn-ic">⚔</span>Duel vs. AI <small>1v1</small></button>
     <button class="btn big" data-act="bots2v2"><span class="btn-ic">⛨</span>2v2 vs. Bots <small>you + ally vs Zigi &amp; Jöggu</small></button>
-    <button class="btn big" data-act="create"><span class="btn-ic">✦</span>Play with Friends <small>party · 1v1 · 2v2 · matchmaking</small></button>
+    <button class="btn big" data-act="bg"><span class="btn-ic">⚑</span>5v5 Battleground <small>Thornwater Gorge · capture the flag vs. bots</small></button>
+    <button class="btn big" data-act="create"><span class="btn-ic">✦</span>Play with Friends <small>party · 1v1 · 2v2 · 5v5 battleground · matchmaking</small></button>
     <button class="btn big" data-act="join"><span class="btn-ic">➤</span>Join Match <small>room code</small></button>
     <div class="menu-row">
       <button class="btn" data-act="browse">Champions</button>
@@ -93,6 +94,7 @@
     <div class="room-format" id="roomFormat">
       <button class="chip" data-format="1v1">1 v 1</button>
       <button class="chip" data-format="2v2">2 v 2</button>
+      <button class="chip" data-format="5v5" title="Thornwater Gorge: capture the flag, 5 against 5">5 v 5 ⚑</button>
     </div>
     <div class="teams">
       <div class="team panel team-a"><h3>Gold Team</h3><div class="slots" id="slotsA"></div></div>
@@ -167,6 +169,7 @@
       <div><kbd>F1</kbd> / <kbd>F2</kbd> Friendly target: self / ally</div>
       <div><kbd>Space</kbd> Jump · <kbd>Shift</kbd> Sprint</div>
       <div><kbd>Wheel</kbd> Zoom · <kbd>Esc</kbd> Menu</div>
+      <div><kbd>G</kbd> Battleground: drop the flag · hold <kbd>B</kbd> scoreboard</div>
     </div>
     <ul class="tips">
       <li><b>Basic attacks are aimed.</b> Every left click swings (or shoots) where the dot in the middle of the screen points — it hits whichever enemy hitbox is under the dot, or nothing. The dot turns <b>red</b> while an enemy your attack can reach is under it. Melee reaches 4.5 yd in front of you; ranged shots fly straight and break on pillars. Every champion has the same hitbox, however big the model — and pets / summons such as the necromancer's ghoul can be hit on their own. Hold the button to keep swinging; the swing timer sets the pace. The enemy you click on also becomes your target for abilities.</li>
@@ -174,6 +177,7 @@
       <li>Casting requires standing still — moving or jumping cancels it. Break line of sight behind the rune pillars.</li>
       <li>Stuns, disorients and <b>Shield Slam</b> interrupt casts. Crowd control has diminishing returns (100% → 50% → 25% → immune).</li>
       <li>In 2v2, heals and shields go to your friendly target: <kbd>F2</kbd> selects your ally, <kbd>F1</kbd> yourself.</li>
+      <li><b>5v5 Battleground — Thornwater Gorge.</b> Run into the enemy keep, touch their flag in the upper flag room and carry it home to your own flag stand — it only counts while your own flag is at home. Three captures win; after 15 minutes the leader wins. The dead return in waves every 20 s at their graveyard. A dropped flag is returned by touching it (or goes home after 10 s). If both flags are out for over a minute, both carriers become <b>Exposed</b> and take more damage. Glowing power-ups appear every minute in mirrored pairs.</li>
       <li>After 60 seconds, <b>Dampening</b> steadily reduces healing and shields so every round ends.</li>
     </ul>
     <button class="btn primary" id="howtoBack">Back</button>
@@ -188,6 +192,7 @@
       <div id="roundLabel">Round 1</div>
       <div id="roundTimer">0:00</div>
       <div id="dampLabel" class="damp hidden">Dampening 0%</div>
+      <div id="bgBar" class="bg-bar hidden"><span class="bgf" id="bgFlagA"></span><span class="bgf" id="bgFlagB"></span></div>
     </div>
     <div class="score side-b"><div class="pips" id="pipsB"></div><span class="pname" id="scoreNameB">Enemy Team</span></div>
   </div>
@@ -231,6 +236,10 @@
   <div id="controlsHint" class="controls-hint">Left click: attack where the dot points · 1–6 abilities · Tab target · F1/F2 friendly target · WASD move · Esc menu</div>
   <div id="lockHint" class="lock-hint hidden">Click to control your champion</div>
   <div id="spectate" class="spectate hidden">You have fallen — watching your ally</div>
+  <div id="bgRespawn" class="bg-respawn hidden"></div>
+  <div id="bgArrows" class="bg-arrows"></div>
+  <div id="bgBoard" class="bg-board hidden"></div>
+  <div id="bgHint" class="bg-hint hidden">G drop the flag · hold B scoreboard</div>
 </section>
 
 <!-- Pause -->

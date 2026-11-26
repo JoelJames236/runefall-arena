@@ -3,7 +3,7 @@
 // Works for 1v1 and 2v2: picks a focus target, kites the nearest threat, interrupts
 // casters, peels for and heals its teammate.
 import { CLASSES, kitOf } from '../data/classes.js';
-import { PILLARS, ARENA_R, BRIDGE, ARCH_OPEN, hasBuff, isStunned, angleTo, segBlocked, floorAt, solidAt, airborne } from './sim.js';
+import { PILLARS, ARENA_R, BRIDGE, ARCH_OPEN, hasBuff, isStunned, angleTo, segBlocked, floorAt, solidAt, airborne, currentMap } from './sim.js';
 
 const DIFF = {
   easy: { react: 0.65, interrupt: 0.15, defensive: 0.5, kite: 0.3, dodge: 0.2, focus: 0.3, aim: 0.9, lead: 0.3 },
@@ -197,7 +197,7 @@ export class AI {
           const r = Math.hypot(me.x, me.z) || 1;
           let tX = -me.z / r, tZ = me.x / r;
           if (tX * -thX + tZ * -thZ < 0) { tX = -tX; tZ = -tZ; }
-          const wall = Math.max(0, Math.min(1, (r - (ARENA_R - 12)) / 10));
+          const wall = currentMap() ? 0 : Math.max(0, Math.min(1, (r - (ARENA_R - 12)) / 10)); // battlegrounds: no ring to bend around
           wantX = -thX * (1 - wall * 0.7) + tX * (0.4 + wall) - me.x / r * wall * 0.6;
           wantZ = -thZ * (1 - wall * 0.7) + tZ * (0.4 + wall) - me.z / r * wall * 0.6;
           this.kiting = true;
@@ -217,9 +217,9 @@ export class AI {
       }
       // avoid hugging the outer wall
       const r = Math.hypot(me.x, me.z);
-      if (r > ARENA_R - 5) { wantX -= me.x / r * 1.2; wantZ -= me.z / r * 1.2; }
+      if (!currentMap() && r > ARENA_R - 5) { wantX -= me.x / r * 1.2; wantZ -= me.z / r * 1.2; }
       // steer around pillars
-      for (const p of PILLARS) {
+      if (!currentMap()) for (const p of PILLARS) {
         const dx = me.x - p.x, dz = me.z - p.z, d = Math.hypot(dx, dz);
         if (d < p.r + 2.5) {
           // chasing: slide around the side that keeps us heading to the goal (no dead-lock); kiting keeps its strafe side

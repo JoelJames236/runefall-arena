@@ -59,7 +59,8 @@ burst) is not the kit that wins team fights (team defense, cleave, peels). After
 61 % in one format and 37 % in the other (Elemental), or 44 % and 65 % (Feral).
 
 So every spec now has **one power factor per format** on all damage and healing it deals (`js/data/tuning.js`;
-`duel` in 1v1, `team` when both teams have two or more champions; shown on the champion screen). The factors were
+`duel` in 1v1, `team` when both teams have two or more champions; shown on the champion screen). The 5v5
+battleground has its own format, `bg5`, which starts as a copy of `team` until a 5v5 auto-tune is run. The factors were
 found by the lab's **Auto-tune** mode: measure the format with hard bots, multiply each factor by
 `1 − gain × (win % − 50)`, repeat with a shrinking gain (8 passes), then validate with a larger sample.
 

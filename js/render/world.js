@@ -36,7 +36,7 @@ import { Character as HeroCharacter, heroesReady } from './heroes.js';
 const makeChar = (cls, spec) => heroesReady() ? new HeroCharacter(cls, spec) : new ProcCharacter(cls);
 // undead summons (ghoul, abomination) are rigged champions with a minion look; null until assets load
 const makeHumanoidMinion = kind => { if (!heroesReady()) return null; try { const c = new HeroCharacter(kind); let prev = false; return { root: c.root, char: c, update: (dt, m) => { if (m.atk && !prev) c.play('attack', 0.6); prev = m.atk; c.update(dt, { speed: m.moving ? (kind === 'gorilla' ? 1.0 : 0.7) : 0 }); } }; } catch (e) { console.warn('minion model', e); return null; } };
-import { PILLARS, BRIDGE, archY, floorAt, hasBuff, angleDiff } from '../sim/sim.js';
+import { PILLARS, BRIDGE, archY, floorAt, hasBuff, angleDiff, currentMap, pointBlocked } from '../sim/sim.js';
 // height for ground rings: on a sloped ramp lift them so the flat ring isn't half buried
 const PREVIEW_Z = 10; // class-screen model stands here (the arena centre is under the bridge)
 const ringY = (x, z, y, off) => { const fl = floorAt(x, z, y); return fl + (fl > 0.01 && fl < BRIDGE.H - 0.01 ? 0.42 : off); };
@@ -133,6 +133,8 @@ export class World {
     old.group.traverse(o => { o.geometry?.dispose(); });
     this.arenaId = id;
     this.arena = createArena(id, this.scene, this.quality || 'high');
+    // a wide map moves the sun's shadow box with the player (updateGame); an arena puts it back over the middle
+    if (!this.arena.wide) { this.sun.position.set(-40, 32, 34); this.sun.target.position.set(0, 0, 0); }
     return this.arena.ready;
   }
 
@@ -363,6 +365,7 @@ export class World {
     this.vfx.syncProjectiles(view.projectiles, dt, this.chars);
     this.vfx.syncZones(view.zones, dt, myTeam, F);
     this.syncMinions(view.minions || [], dt, myTeam);
+    if (this.arena.sync) this.arena.sync(view, this.chars, dt, myTeam); // battleground: flags, gates, power-ups
     // stealth: never reveal an invisible enemy through their buff effects
     this.vfx.syncCasts(F, this.chars, f => kitOf(f).abilities[f.cast.idx]?.school, dt, this.time);
     this.vfx.syncBuffs(F.map(f => (f.team !== myTeam && hasBuff(f, 'stealth')) ? { ...f, buffs: [] } : f), this.chars, dt, this.time);
@@ -453,7 +456,7 @@ export class World {
     const target = new THREE.Vector3(p.x, p.y + 1.9, p.z);
     const dir = new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
     // camera collision with pillars (2D ray vs circles)
-    for (const pl of PILLARS) {
+    if (!currentMap()) for (const pl of PILLARS) {
       const ox = target.x - pl.x, oz = target.z - pl.z, dx = dir.x, dz = dir.z;
       const a = dx * dx + dz * dz; if (a < 1e-6) continue;
       const b = 2 * (ox * dx + oz * dz), c = ox * ox + oz * oz - (pl.r + 0.35) ** 2;
@@ -469,6 +472,10 @@ export class World {
         const inRamp = ax > B.hx && y < B.H * Math.max(0, Math.min(1, (end - ax) / B.ramp)) + 0.2;
         if (inDeck || inRamp) { dist = Math.max(1.2, t - 0.3); break; }
       } }
+    // battleground maps: keep walls, floors and cliffs (marched along the ray)
+    if (currentMap()) for (let t = 0.6; t < dist; t += 0.3) { if (pointBlocked(target.x + dir.x * t, target.y + dir.y * t, target.z + dir.z * t)) { dist = Math.max(1.2, t - 0.35); break; } }
+    // a big map: the sun's shadow box follows the camera's subject
+    if (this.arena.wide) { this.sun.target.position.set(p.x, 0, p.z); this.sun.position.set(p.x - 40, 32, p.z + 34); }
     const want = target.clone().addScaledVector(dir, dist);
     if (want.y < 0.4) want.y = 0.4;
     const k = 1 - Math.exp(-dt * 18);

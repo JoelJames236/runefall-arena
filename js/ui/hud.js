@@ -1,6 +1,7 @@
 // In-game interface: unit frames (player / target / party / arena enemies), action bar with
 // cooldown sweeps and a basic-attack swing timer, cast bars, round score, nameplates,
-// floating combat text (with crits) and announcements. DOM writes are cached so the HUD
+// floating combat text (with crits) and announcements. On the 5v5 battleground also: the flag bar, the clock,
+// arrows to the flag carriers, the respawn countdown, a kill feed and the scoreboard (hold B). DOM writes are cached so the HUD
 // costs almost nothing per frame.
 import * as THREE from 'three';
 import { CLASSES, BUFF_ICONS, kitOf } from '../data/classes.js';
@@ -72,18 +73,106 @@ export class HUD {
       <div><div class="mname"><span>${f.name}</span><i>${kitOf(f).specIcon || ''} ${kitOf(f).name}</i></div><div class="bar hp"><div class="fill"></div><span></span></div><div class="bar res"><div class="fill res-${f.resType}"></div></div><div class="mcast"><div></div></div><div class="mbuffs"></div></div></div>`;
     const allies = fighters.filter(f => f.team === me.team && f.id !== myId);
     $('partyFrames').innerHTML = allies.map(f => mini(f, 'ally', 'F2')).join('');
-    $('arenaFrames').innerHTML = two ? foes.map((f, i) => mini(f, 'foe', 'Arena ' + (i + 1))).join('') : '';
+    $('arenaFrames').innerHTML = two && !this.bg ? foes.map((f, i) => mini(f, 'foe', 'Arena ' + (i + 1))).join('') : '';
     this.minis = [...document.querySelectorAll('#partyFrames .mini, #arenaFrames .mini')].map(el => ({
       el, id: +el.dataset.id, hp: el.querySelector('.bar.hp .fill'), hpt: el.querySelector('.bar.hp span'), res: el.querySelector('.bar.res .fill'), cast: el.querySelector('.mcast div'), buffs: el.querySelector('.mbuffs'),
     }));
     this.buildBar(me);
-    const pips = () => Array.from({ length: RULES.winsNeeded }, () => '<div class="pip"></div>').join('');
+    const pips = () => Array.from({ length: this.bg ? this.bg.caps : RULES.winsNeeded }, () => '<div class="pip"></div>').join('');
     $('pipsA').innerHTML = pips(); $('pipsB').innerHTML = pips();
     $('cpA').style.display = me.cls === 'rogue' || me.cls === 'berserker' || me.cls === 'paladin' || (me.cls === 'druid' && me.spec === 'feral') ? '' : 'none';
     $('cpA').classList.toggle('holy', me.cls === 'paladin'); // Paladin Holy Power: 3 golden pips
     $('cpA').innerHTML = me.cls === 'berserker' ? '<span class="bloodrage"></span>' : '<i></i>'.repeat(me.cls === 'paladin' ? 3 : 5);
     this.lastBuffKey = {};
     this.hintT = 14; $('controlsHint').style.opacity = 1;
+    this.names = fighters.map(f => f.name);
+    $('bgArrows').innerHTML = ''; this.arrows = []; this.boardT = 0;
+  }
+
+  // ------------------------------------------------------------ battleground
+  // cfg = { caps } for the 5v5 flag battleground, null for the arena; call before setup()
+  setBg(cfg) {
+    this.bg = cfg;
+    this.root.classList.toggle('bgmode', !!cfg);
+    $('bgBar').classList.toggle('hidden', !cfg);
+    if (!cfg) { $('bgArrows').innerHTML = ''; $('bgBoard').classList.add('hidden'); $('bgRespawn').classList.add('hidden'); const fd = $('bgFeed'); if (fd) fd.innerHTML = ''; }
+  }
+  // the kill feed / flag news, top right; at most 6 lines
+  feed(text, color) {
+    let box = $('bgFeed');
+    if (!box) { box = document.createElement('div'); box.id = 'bgFeed'; box.className = 'bg-feed'; this.root.appendChild(box); }
+    const el = document.createElement('div'); el.className = 'fl'; el.textContent = text; if (color) el.style.color = color;
+    box.prepend(el);
+    while (box.children.length > 6) box.lastChild.remove();
+    setTimeout(() => el.classList.add('out'), 6000); setTimeout(() => el.remove(), 6600);
+  }
+  updateBg(view, camera, me) {
+    const bg = view.bg, F = view.fighters, myTeam = me.team;
+    // the clock: preparation, then the time left
+    if (view.state === 'countdown') { setText($('roundLabel'), 'Gates open in'); setText($('roundTimer'), String(Math.max(0, Math.ceil(view.stateT)))); }
+    else { const tl = Math.ceil(bg.tl); setText($('roundLabel'), 'Time left'); setText($('roundTimer'), `${Math.floor(tl / 60)}:${String(tl % 60).padStart(2, '0')}`); }
+    // the flag bar: where each flag is (ours first)
+    const flagText = (Fl, ours) => {
+      const label = ours ? 'Our flag' : 'Their flag';
+      if (Fl.state === 'home') return `⚑ ${label}: safe`;
+      if (Fl.state === 'dropped') return `⚑ ${label}: dropped (${Math.ceil(Fl.t)})`;
+      const c = F[Fl.carrier], ex = c && c.buffs.find(b => b.type === 'exposed');
+      return `⚑ ${label}: ${c?.id === me.id ? 'YOU' : c?.name || '?'}${c ? ` ${Math.round(Math.max(0, c.hp) / c.maxHp * 100)}%` : ''}${ex ? ` · Exposed +${Math.round(ex.value * 100)}%` : ''}`;
+    };
+    const ours = bg.flags[myTeam], theirs = bg.flags[1 - myTeam];
+    const A = $('bgFlagA'), B = $('bgFlagB');
+    setText(A, flagText(ours, true)); setCls(A, 'alert', ours.state !== 'home'); setCls(A, 'team1', myTeam === 1);
+    setText(B, flagText(theirs, false)); setCls(B, 'good', theirs.state === 'carried'); setCls(B, 'team1', myTeam === 0);
+    // respawn countdown
+    const rs = bg.rs[me.id] || 0, rEl = $('bgRespawn');
+    setCls(rEl, 'hidden', me.alive || view.state !== 'fight');
+    if (!me.alive) setText(rEl, rs > 0 ? `Back at the graveyard in ${Math.ceil(rs)} s` : 'Rising…');
+    this.updateArrows(bg, F, me, camera);
+    // scoreboard (hold B)
+    const board = $('bgBoard');
+    setCls(board, 'hidden', !this.boardHeld);
+    if (this.boardHeld && (this.boardT -= 1 / 60) <= 0) { this.boardT = 0.25; board.innerHTML = this.boardHTML(view, me); }
+  }
+  // arrows to the flags that are out: over the carrier's head on screen, at the screen edge when off screen
+  updateArrows(bg, F, me, camera) {
+    const box = $('bgArrows'), list = [];
+    for (const Fl of bg.flags) {
+      if (Fl.state === 'home') continue;
+      const c = Fl.state === 'carried' ? F[Fl.carrier] : null;
+      if (c && c.id === me.id) continue;
+      const enemyHasOurs = Fl.team === me.team; // our flag is out: an enemy has it (or it lies on the ground)
+      list.push({ x: c ? c.x : Fl.x, y: (c ? c.y : Fl.y) + (c ? 3.3 : 1.6), z: c ? c.z : Fl.z, cls: enemyHasOurs ? 'foe' : 'ally', label: c ? c.name : 'Flag', dropped: !c });
+    }
+    while (this.arrows.length < list.length) { const el = document.createElement('div'); el.className = 'bg-arrow'; el.innerHTML = '<b>⚑</b><span></span><i></i>'; box.appendChild(el); this.arrows.push({ el, lab: el.querySelector('span'), tip: el.querySelector('i') }); }
+    this.arrows.forEach((a, i) => {
+      const t = list[i];
+      if (!t) { setStyle(a.el, 'display', 'none'); return; }
+      setStyle(a.el, 'display', '');
+      setCls(a.el, 'foe', t.cls === 'foe'); setCls(a.el, 'ally', t.cls === 'ally'); setCls(a.el, 'dropped', t.dropped);
+      setText(a.lab, t.label + ' ' + Math.round(Math.hypot(t.x - me.x, t.z - me.z)) + ' yd');
+      this.v.set(t.x, t.y, t.z).project(camera);
+      let x = this.v.x, y = this.v.y; const behind = this.v.z > 1;
+      const off = behind || Math.abs(x) > 0.9 || y > 0.8 || y < -0.6;
+      if (off) {
+        // the direction in camera space: left / right / up / down even when it is behind you; the edge box stays
+        // clear of the top bar and the action bar
+        const c = (this.v3 || (this.v3 = new THREE.Vector3())).set(t.x, t.y, t.z).applyMatrix4(camera.matrixWorldInverse);
+        let dx = c.x, dy = behind ? Math.min(c.y, 0) : c.y;
+        if (Math.abs(dx) < 1e-3) dx = 1e-3;
+        const k = Math.max(Math.abs(dx) / 0.9, dy > 0 ? dy / 0.8 : -dy / 0.6);
+        x = dx / k; y = dy / k;
+      }
+      setCls(a.el, 'edge', off);
+      setStyle(a.tip, 'transform', off ? `rotate(${Math.atan2(-y, x).toFixed(2)}rad)` : 'rotate(1.5708rad)');
+      a.el.style.transform = `translate(${((x * 0.5 + 0.5) * innerWidth).toFixed(1)}px, ${((-y * 0.5 + 0.5) * innerHeight).toFixed(1)}px) translate(-50%,-50%)`;
+    });
+  }
+  boardHTML(view, me) {
+    const F = view.fighters, rs = view.bg.rs;
+    const row = f => { const s = f.stats || {}, C = kitOf(f);
+      return `<tr class="${f.team === me.team ? 'ally' : 'foe'}${f.id === me.id ? ' me' : ''}${f.alive ? '' : ' dead'}"><td>${f.name.replace(/[<>&]/g, '')}${f.buffs.some(b => b.type === 'flagcarrier') ? ' ⚑' : ''}</td><td style="color:${C.color}">${C.specIcon || ''} ${C.name}</td><td>${s.kills || 0}</td><td>${s.deaths || 0}</td><td>${s.caps || 0}</td><td>${s.returns || 0}</td><td>${s.dmg || 0}</td><td>${s.heal || 0}</td><td>${f.alive ? '' : Math.ceil(rs[f.id] || 0) + ' s'}</td></tr>`; };
+    const team = t => F.filter(f => f.team === t).sort((a, b) => (b.stats?.dmg || 0) + (b.stats?.heal || 0) - (a.stats?.dmg || 0) - (a.stats?.heal || 0)).map(row).join('');
+    return `<table><tr><th>Champion</th><th>Class</th><th>Kills</th><th>Deaths</th><th>Captures</th><th>Returns</th><th>Damage</th><th>Healing</th><th></th></tr>${team(me.team)}<tr class="gap"><td colspan="9"></td></tr>${team(1 - me.team)}</table><div class="bb-foot">Captures ${view.score[me.team]} – ${view.score[1 - me.team]} · next power-ups in ${Math.ceil(view.bg.puIn)} s</div>`;
   }
 
   // key shown on an action-bar slot: the first key bound to it (set from the settings)
@@ -200,9 +289,12 @@ export class HUD {
     const sA = view.score[me.team], sB = view.score[1 - me.team];
     [...$('pipsA').children].forEach((p, i) => setCls(p, 'won', i < sA));
     [...$('pipsB').children].forEach((p, i) => setCls(p, 'won', i < sB));
-    setText($('roundLabel'), `Round ${view.round}`);
-    const tt = Math.floor(view.fightT || 0);
-    setText($('roundTimer'), `${Math.floor(tt / 60)}:${String(tt % 60).padStart(2, '0')}`);
+    if (this.bg && view.bg) this.updateBg(view, camera, me);
+    else {
+      setText($('roundLabel'), `Round ${view.round}`);
+      const tt = Math.floor(view.fightT || 0);
+      setText($('roundTimer'), `${Math.floor(tt / 60)}:${String(tt % 60).padStart(2, '0')}`);
+    }
     const dl = $('dampLabel');
     if (view.damp > 0) { setCls(dl, 'hidden', false); setText(dl, `Dampening ${Math.round(view.damp)}%`); } else setCls(dl, 'hidden', true);
     if (this.errT > 0) { this.errT -= dt; if (this.errT <= 0) $('errorText').classList.remove('show'); }
@@ -252,7 +344,9 @@ export class HUD {
       const hostile = f.team !== me.team;
       const stealthed = hostile && f.buffs.some(b => b.type === 'stealth');
       this.v.set(f.x, f.y + 2.75, f.z).project(camera);
-      if (this.v.z > 1 || stealthed || !f.alive) { setStyle(p.el, 'display', 'none'); continue; }
+      // battleground: far champions and enemies behind walls get no nameplate (the arena is small and open)
+      const far = this.bg && (Math.hypot(f.x - me.x, f.z - me.z) > (hostile ? 50 : 70) || (hostile && me.target !== f.id && segBlocked(me.x, me.z, f.x, f.z, me.y + 1.6, f.y + 1.6)));
+      if (this.v.z > 1 || stealthed || !f.alive || far) { setStyle(p.el, 'display', 'none'); continue; }
       setStyle(p.el, 'display', '');
       const x = (this.v.x * 0.5 + 0.5) * innerWidth - 60, y = (-this.v.y * 0.5 + 0.5) * innerHeight - 30;
       p.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
@@ -260,6 +354,7 @@ export class HUD {
       setStyle(p.cast, 'visibility', f.cast ? 'visible' : 'hidden');
       if (f.cast) setStyle(p.castFill, 'width', (f.cast.t / f.cast.dur * 100) + '%');
       setCls(p.el, 'targeted', hostile ? me.target === f.id : me.friend === f.id);
+      setCls(p.el, 'carrier', f.buffs.some(b => b.type === 'flagcarrier'));
     }
   }
 
