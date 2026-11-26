@@ -168,11 +168,12 @@ export class HUD {
       const frac = Math.min(1, (me.autoT || 0) / A.speed);
       setStyle(this.atkSlot.cd, 'background', frac > 0.02 ? `conic-gradient(transparent ${(1 - frac) * 360}deg, rgba(0,0,0,0.6) 0)` : 'none');
       setCls(this.atkSlot.el, 'active', !!me.autoOn);
-      setCls(this.atkSlot.el, 'oor', !t || (A.ranged ? dist > A.range + 0.3 || !los : dist > MELEE_AUTO_RANGE + bonus));
-      setCls(this.atkSlot.el, 'face', !!t && !A.ranged && !facing);
+      // basic attacks are aimed: the slot (and the crosshair) light up while an enemy hitbox it can reach is under the dot
+      setCls(this.atkSlot.el, 'oor', !this.aimOn);
     }
-    const crossFace = !!t && !facing && (!A.ranged || this.slots?.some(s => s.ab.melee && s.ab.target));
-    setCls($('crosshair'), 'noface', crossFace && dist < MELEE_AUTO_RANGE + bonus + 2);
+    setCls($('crosshair'), 'aimon', !!this.aimOn);
+    const crossFace = !!t && !facing && !!this.slots?.some(s => s.ab.melee && s.ab.target);
+    setCls($('crosshair'), 'noface', !this.aimOn && crossFace && dist < MELEE_AUTO_RANGE + bonus + 2);
     this.slots && this.slots.forEach((s, i) => {
       const ab = s.ab;
       // charges (e.g. 2 blinks): usable while any charge is left; the badge shows how many

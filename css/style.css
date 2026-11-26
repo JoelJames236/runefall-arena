@@ -417,3 +417,6 @@ kbd { display: inline-block; min-width: 26px; padding: 2px 7px; margin-right: 3p
 .callout .who { color: #ff8a7a; } .callout.ally .who { color: #9ad4ff; }
 .callout.out { opacity: 0; }
 @keyframes calloutIn { from { transform: scale(1.25); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* aimed basic attacks: the dot turns red while an enemy hitbox your basic attack can reach is under it */
+#crosshair.aimon { background: #ff3a2a; box-shadow: 0 0 7px #ff2a10, 0 0 2px #000; width: 8px; height: 8px; margin: -4px; }

@@ -79,6 +79,33 @@ What was wrong with how combat felt, what was changed, and where the knobs are.
 Also: bots can be set to 🎲 Random in the duel (new opponent panel), 2v2 vs bots and the party lobby (new lobby bots
 start random; class and spec are rolled at every match start, avoiding a class already on that team).
 
+## Third pass: aimed basic attacks
+
+Basic attacks used to be tab-target: a click swung at the selected target, a started melee swing always landed and
+ranged autos homed in. Now they are aimed.
+
+- **The dot in the middle of the screen is the aim.** Each frame the client casts a ray from the camera through the
+  crosshair (`World.aimRay`) and sends it with the input (`aim`, guests as `a` in their `in` message; the host
+  ignores rays that don't start near the player). Every click / held swing goes off whether or not anything is
+  under the dot.
+- **One hitbox for everyone** (`HITBOX` in `js/sim/sim.js`): a vertical capsule, radius 0.55, 0.1–1.95 above the feet,
+  independent of the model (dwarf or bull-folk, the sim never looks at the mesh). `aimPick` / `hitboxDist` do the
+  ray / segment tests.
+- **Melee**: at the moment the blow lands (`meleeHitT`) the aim ray is tested; it hits the first enemy hitbox
+  under it that is within 4.5 yd (+ leeway) and inside the 200° frontal arc, widened by `MELEE_AIM_WIDTH` (0.25) for
+  the sweep of the weapon. Nothing there: a `miss` event ("Miss" for the attacker) and the swing is spent.
+- **Ranged**: a straight bolt from the weapon towards the point under the dot (the first hitbox on the ray, else
+  where the ray reaches the weapon's range or the ground) — `shootAuto` / `stepStraight`. It hits the first enemy
+  hitbox it passes through and breaks on pillars, the bridge and the ground. Abilities are unchanged (they still
+  use the target and home in).
+- **Feedback**: the dot turns red (`#crosshair.aimon`) and the basic-attack slot lights up while an enemy the attack
+  can reach is under it. Clicking an enemy also makes it your target; the first enemy you hit becomes your target
+  when you have none (`claimTarget`). The body no longer snaps towards the selected target when it attacks.
+- **Bots** aim with the same rules (`AI.aimAt`): eyes → chest, ranged shots led by the target's movement, an aim
+  error that drifts (Squire 0.9 / Knight 0.45 / Champion 0.2 yd), and they only swing when a hit is possible
+  (`autoBlock`). Champion bots land 70–100 % of their basic attacks (melee ~95 %, ranged less against movement).
+- Balance after the change (hard bots): 1v1 40–59 %, 2v2 38–62 % — no numbers had to change.
+
 ## Not done / next steps
 
 - Online guests still see *other* players ~100 ms in the past. Their own presses are predicted (see above), but

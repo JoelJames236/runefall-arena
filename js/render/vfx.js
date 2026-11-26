@@ -762,7 +762,7 @@ export class VFX {
       const p = handPos(ev.id);
       const c = { mage: 0xb98cff, priest: 0xffe680, shaman: 0x7ae0ff, hunter: 0xd8c890, necromancer: 0x9aff7a, druid: 0xb8ff6a }[src.cls] || 0xffffff;
       this.burst(p.x, p.y, p.z, [c, 0xffffff], 16, 3, 0.35, 0.3, { drag: 3 }); this.sphereFlash(p.x, p.y, p.z, c, 0.1, 0.55, 0.16, 0.45);
-      if (src.cls === 'shaman') { const T = at(ev.tid); this.beam(p.clone(), new THREE.Vector3(p.x + (T.x - p.x) * 0.15, p.y, p.z + (T.z - p.z) * 0.15), 0x7ae0ff, 0.12, 0.03, 0.4); }
+      if (src.cls === 'shaman') { const dx = ev.dx ?? Math.sin(src.yaw), dz = ev.dz ?? Math.cos(src.yaw); this.beam(p.clone(), new THREE.Vector3(p.x + dx * 1.6, p.y, p.z + dz * 1.6), 0x7ae0ff, 0.12, 0.03, 0.4); } // a crackle along the aim
     } else {
       // weapon trail sparks for melee swings
       const ch = ctx.chars[ev.id];

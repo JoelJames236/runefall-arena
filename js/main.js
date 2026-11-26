@@ -9,7 +9,7 @@ import { loadHeroAssets, preloadChampions } from './render/heroes.js';
 import { HUD, iconHTML, emblemStyle } from './ui/hud.js';
 import { Input, DEFAULT_BINDS, RESERVED_KEYS, keyLabel } from './input.js';
 import { Audio, AB_SOUND, HIT_SOUND, CAST_SOUND } from './audio.js';
-import { Sim, moveFighter, RULES, rangeDist, segBlocked, angleTo, angleDiff, FACE_ARC, meleeBonus, airborne, MOVE_ABS } from './sim/sim.js';
+import { Sim, moveFighter, RULES, rangeDist, segBlocked, angleTo, angleDiff, FACE_ARC, meleeBonus, airborne, MOVE_ABS, aimPick, MELEE_AIM_WIDTH, MELEE_AUTO_RANGE } from './sim/sim.js';
 import { AI } from './sim/ai.js';
 import { Net } from './net.js';
 import { ARENAS } from './render/arenas.js';
@@ -945,6 +945,7 @@ function handleEvents(evs, view) {
         if (ev.type === 'stun' || ev.type === 'disorient') audio.play('stun', pos(ev.id));
         break;
       case 'interrupted': if (ev.id === my || ev.id === me?.target) hud.castInterrupted(ev.id === my); hud.combatText(ev, F, my); audio.play('interrupt', pos(ev.id)); break;
+      case 'miss': if (ev.id === my) hud.floatText({ x: ev.x, y: ev.y, z: ev.z }, 'Miss', '#b8b8b8', 'small'); break; // a melee swing that found no hitbox
       case 'err': if (ev.id === my) { hud.error(ev.msg); audio.play('error'); if (S.mode === 'guest') { if (S.pred?.cast) $('castA')._had = false; S.pred = newPred(); } } break; // the host refused: drop what we predicted
       case 'blink': if (ev.fx === 'arcane_shift' || ev.fx === 'shadow_leap') audio.play('blink', { x: ev.x1, z: ev.z1 }); break;
       case 'dash': world.onDash(ev.id, ev.fx); break;
@@ -1046,17 +1047,22 @@ function gameFrame(dt) {
   const dir = worldDir(raw);
   const pre = currentView(true);
   const meV = pre.fighters[S.myId];
-  // Left click = basic attack on the current target. A click on a DIFFERENT enemy only selects it
-  // (selecting never attacks), and that press does not start a held attack until the button is released.
+  // Left click = a basic attack where the crosshair dot points (aimed: it hits whichever hitbox the dot is on,
+  // or nothing). An enemy under the dot when you click also becomes your target, for your abilities.
   let setTarget, setFriend;
-  S.selPend = S.selPend && S.selPend.t > 0 ? { ...S.selPend, t: S.selPend.t - dt } : null; // guest: our selection before the host confirms it
-  if (raw.attack) {
-    const pick = world.pickEnemy(pre, S.myId, raw.clickPos.x, raw.clickPos.y);
-    const cur = S.selPend ? S.selPend.id : meV.target;
-    if (pick >= 0 && pick !== cur) { setTarget = pick; raw.attack = false; S.holdBlock = true; S.selPend = { id: pick, t: 0.6 }; }
+  const aim = world.aimRay();
+  const myA = meV ? kitOf(meV).auto : null;
+  if (raw.attack && meV) {
+    const pick = aimPick(pre.fighters, meV, aim, 80);
+    if (pick && pick.f.id !== meV.target) setTarget = pick.f.id;
   }
-  if (!raw.atkHeld) S.holdBlock = false;
-  const atkHold = !!raw.atkHeld && !S.holdBlock;
+  // crosshair feedback: is an enemy hitbox under the dot that this basic attack can reach right now?
+  if (meV && myA) {
+    const reachOk = myA.ranged ? (t => rangeDist(meV, t) <= myA.range + 1)
+      : (t => rangeDist(meV, t) <= MELEE_AUTO_RANGE + meleeBonus(meV, t) && Math.abs(angleDiff(meV.yaw, angleTo(meV, t))) <= FACE_ARC);
+    hud.aimOn = !!aimPick(pre.fighters, meV, aim, 80, myA.ranged ? 0 : MELEE_AIM_WIDTH, reachOk);
+  }
+  const atkHold = !!raw.atkHeld;
   if (raw.friendKey === 1) setFriend = S.myId;
   if (raw.friendKey === 2) {
     const allies = pre.fighters.filter(f => f.team === meV.team && f.id !== S.myId);
@@ -1067,7 +1073,7 @@ function gameFrame(dt) {
   hud.mouseover = mo;
   const myKit = meV ? kitOf(meV) : null;
   const abInput = i => (mo >= 0 && myKit?.abilities[i]?.ally ? { i, dir, tid: mo } : { i, dir });
-  const local = { mx: raw.mx, mz: raw.mz, yaw: input.yaw, jump: raw.jump, sprint: raw.sprint, abilities: raw.abilities.map(abInput), targetReq: raw.targetReq, attack: raw.attack, atkHold, setTarget, setFriend };
+  const local = { mx: raw.mx, mz: raw.mz, yaw: input.yaw, jump: raw.jump, sprint: raw.sprint, abilities: raw.abilities.map(abInput), targetReq: raw.targetReq, attack: raw.attack, atkHold, aim, setTarget, setFriend };
 
   let view;
   if (S.mode === 'guest') {
@@ -1078,9 +1084,9 @@ function gameFrame(dt) {
       if (state === 'countdown' && last) { L.x = last.f[S.myId].x; L.z = last.f[S.myId].z; }
     }
     S.sendT -= dt;
-    if (local.abilities.length || atkHold !== !!S.sentHold) S.sendT = 0; // an ability press or attack-button change must reach the host with our latest movement
+    if (local.abilities.length || local.attack || atkHold !== !!S.sentHold) S.sendT = 0; // an ability press or attack click must reach the host with our latest movement and aim
     const net = S.net;
-    if (net && S.sendT <= 0) { S.sendT = 1 / 30; net.send({ t: 'in', x: +L.x.toFixed(3), y: +L.y.toFixed(3), z: +L.z.toFixed(3), yaw: +L.yaw.toFixed(3), moving: L.moving, sprinting: L.sprinting, stamina: Math.round(L.stamina), h: atkHold ? 1 : 0, ack: S.ack }); S.sentHold = atkHold; }
+    if (net && S.sendT <= 0) { S.sendT = 1 / 30; net.send({ t: 'in', x: +L.x.toFixed(3), y: +L.y.toFixed(3), z: +L.z.toFixed(3), yaw: +L.yaw.toFixed(3), moving: L.moving, sprinting: L.sprinting, stamina: Math.round(L.stamina), h: atkHold ? 1 : 0, a: aim.map(v => +v.toFixed(3)), ack: S.ack }); S.sentHold = atkHold; }
     if (net) {
       if (setTarget !== undefined || setFriend !== undefined) net.send({ t: 'sel', tid: setTarget, fid: setFriend });
       for (const a of local.abilities) { net.send({ t: 'ab', i: a.i, dir: a.dir, tid: a.tid }); guestPredict(pre, a.i, a.tid); }

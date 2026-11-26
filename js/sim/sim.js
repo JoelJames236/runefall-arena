@@ -32,6 +32,45 @@ const MOVE_QUEUE = 0.45;          // s a cast pressed while still moving waits f
 // The renderer lines the swing animation up with this, so the blow, the number and the sound coincide.
 export const meleeHitT = A => Math.max(0.13, Math.min(0.24, 0.06 + A.speed * 0.065));
 
+// ---------------------------------------------------------------- aimed basic attacks
+// Basic attacks go where the player aims — the dot in the middle of the screen — not to the selected target.
+// A melee blow lands if, at the moment of impact, the aim ray passes through an enemy's hitbox within reach in
+// front of you; a ranged shot flies straight at the aim point and hits whichever hitbox it passes through.
+// Every champion has the same hitbox, a vertical capsule, whatever the size of its model.
+export const HITBOX = { r: 0.55, y0: 0.1, y1: 1.95 };
+export const MELEE_AIM_WIDTH = 0.25; // a weapon swing sweeps a little: for melee the aim ray counts this much wider
+const PROJ_R = 0.12;                 // radius of an aimed bolt / arrow
+// Closest approach between the segment p + s·u (s in 0..1) and the axis of t's hitbox: { d, s }
+export function hitboxDist(px, py, pz, ux, uy, uz, t) {
+  const qx = t.x, qy = t.y + HITBOX.y0, qz = t.z, vy = HITBOX.y1 - HITBOX.y0; // axis: q + w·(0, vy, 0), w in 0..1
+  const rx = px - qx, ry = py - qy, rz = pz - qz;
+  const a = ux * ux + uy * uy + uz * uz, e = vy * vy, b = uy * vy, c = ux * rx + uy * ry + uz * rz, f = vy * ry;
+  const den = a * e - b * b, cl = v => Math.max(0, Math.min(1, v));
+  let s = den > 1e-9 ? cl((b * f - c * e) / den) : 0, w = (b * s + f) / e;
+  if (w < 0) { w = 0; s = cl(-c / a); } else if (w > 1) { w = 1; s = cl((b - c) / a); }
+  const dx = px + ux * s - qx, dy = py + uy * s - (qy + vy * w), dz = pz + uz * s - qz;
+  return { d: Math.sqrt(dx * dx + dy * dy + dz * dz), s };
+}
+// aim = [ox, oy, oz, dx, dy, dz] (a ray, unit direction). The first enemy of `me` whose hitbox the ray passes
+// through within `len` metres (ray widened by `thick`) and that passes `ok`: { f, dist } or null.
+export function aimPick(fighters, me, aim, len, thick = 0, ok = null) {
+  let best = null;
+  for (const t of fighters) {
+    if (t.team === me.team || !t.alive || t.buffs.some(b => b.type === 'stealth')) continue;
+    const r = hitboxDist(aim[0], aim[1], aim[2], aim[3] * len, aim[4] * len, aim[5] * len, t);
+    if (r.d > HITBOX.r + thick || r.s * len < 0.3 || (ok && !ok(t))) continue;
+    if (!best || r.s * len < best.dist) best = { f: t, dist: r.s * len };
+  }
+  return best;
+}
+// a ray from the input, or null: finite numbers, unit direction, origin near the fighter (the camera can't be further)
+function readAim(a, f) {
+  if (!Array.isArray(a) || a.length !== 6 || !a.every(Number.isFinite)) return null;
+  const l = Math.hypot(a[3], a[4], a[5]); if (l < 1e-6) return null;
+  if (Math.hypot(a[0] - f.x, a[1] - f.y, a[2] - f.z) > 22) return null;
+  return [a[0], a[1], a[2], a[3] / l, a[4] / l, a[5] / l];
+}
+
 // ---------------------------------------------------------------- helpers
 export const getBuff = (f, type) => f.buffs.find(b => b.type === type);
 export const hasBuff = (f, type) => f.buffs.some(b => b.type === type);
@@ -339,6 +378,7 @@ export class Sim {
       this.applyTargeting(f, inp);
       if (f.alive && inp.abilities) for (const a of inp.abilities) this.tryAbility(f, a.i, a);
       f.atkHold = f.alive && !!(inp.atkHold || (inp.remote && inp.remote.h));
+      f.aim = readAim(inp.aim || (inp.remote && inp.remote.a), f); // where the player aims (null: straight ahead)
       if (f.alive && inp.attack) this.startAttack(f, true);
     }
     for (const f of this.fighters) this.updateFighter(f, dt);
@@ -530,25 +570,44 @@ export class Sim {
 
   // ------------------------------------------------------------ basic attacks
   // Basic attacks only happen on player input: a left click requests ONE swing (buffered for
-  // ATTACK_BUFFER s, so a click just before the swing timer is ready still lands), and holding the
-  // button keeps requesting swings. The swing timer (autoT) is the only rate limit, so clicking
-  // faster or holding never attacks faster than the weapon speed. Selecting a target never attacks.
-  startAttack(f, explicit) {
+  // ATTACK_BUFFER s, so a click just before the swing timer is ready still goes off), and holding the
+  // button keeps swinging. The swing timer (autoT) is the only rate limit. A swing always goes off —
+  // whether it hits is up to the aim (see aimPick): no target is needed and none is chosen for you.
+  startAttack(f) {
     if (!f.alive || this.state !== 'fight') return;
-    const t = this.hostileFor(f);
-    if (!t) { if (explicit) this.event({ e: 'err', id: f.id, msg: 'No target' }); return; }
-    if (f.target !== t.id) f.target = t.id;
-    // The click is buffered: if the swing can't start right now (a step out of range, target not quite in
-    // front, swing timer almost ready) it still goes off the moment it can within the buffer window.
-    // Only a click that never became a swing reports why (see updateAuto).
-    f.atkReq = ATTACK_BUFFER; f.atkWarn = !!explicit;
-    if (explicit) {
-      const A = kitOf(f).auto, d = this.dist(f, t);
-      if (d > (A.ranged ? A.range + 0.3 : MELEE_AUTO_RANGE) + 4) { this.event({ e: 'err', id: f.id, msg: 'Out of range' }); f.atkWarn = false; } // far away: say so at once
-    }
+    f.atkReq = ATTACK_BUFFER;
   }
 
-  // why a basic attack on t can't start right now (null = it can)
+  // the fighter's aim ray this tick; without one (bots that don't aim, old clients) straight ahead at chest height
+  aimOf(f) { return f.aim || [f.x, f.y + 1.3, f.z, Math.sin(f.yaw), 0, Math.cos(f.yaw)]; }
+  // what you hit becomes your target when you have none (so abilities follow your basic attacks)
+  claimTarget(f, t) { const c = this.fighters[f.target]; if (!c || !c.alive || c.team === f.team || !this.visibleTo(c, f)) f.target = t.id; }
+
+  // a ranged basic attack: a straight bolt from the weapon towards the aim point (the first hitbox under the
+  // aim ray, or where the ray ends at the weapon's range / meets the ground). Returns the fighter aimed at.
+  shootAuto(f, A) {
+    const aim = this.aimOf(f), fw = this.forward(f);
+    const M = [f.x + fw.x * 0.8, f.y + 1.6, f.z + fw.z * 0.8];
+    const reach = A.range + 1;
+    const L = Math.hypot(aim[0] - f.x, aim[1] - f.y - 1.5, aim[2] - f.z) + reach; // camera → beyond the weapon's range
+    const pick = aimPick(this.fighters, f, aim, L, 0, t => this.dist(f, t) <= reach);
+    let s = pick ? pick.dist : L;
+    if (!pick && aim[4] < -1e-3) s = Math.min(s, (aim[1] - floorAt(f.x, f.z, f.y) - 0.05) / -aim[4]); // into the ground
+    let dx = aim[0] + aim[3] * s - M[0], dy = aim[1] + aim[4] * s - M[1], dz = aim[2] + aim[5] * s - M[2];
+    let l = Math.hypot(dx, dy, dz);
+    if (l < 1.5) { dx = aim[3]; dy = aim[4]; dz = aim[5]; l = 1; } // aim point right at the muzzle: fly along the aim
+    const t0 = pick ? pick.f : null;
+    this.projectiles.push({ id: NEXT_ID++, kind: A.proj, owner: f.id, team: f.team, target: -1, straight: true, x: M[0], y: M[1], z: M[2], dx: dx / l, dy: dy / l, dz: dz / l, speed: A.projSpeed, left: reach + 2,
+      onHit: t => {
+        this.claimTarget(f, t);
+        this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
+        if (A.burn) this.kindle(f, t); // Fire Mage: Kindling
+        if (A.hex) { const b = this.addBuff(t, 'hexed', 4, { src: f.id, name: 'Hex', icon: '☠' }); if (b) b.data.curse = true; } // Curser: Hex
+      } });
+    return t0;
+  }
+
+  // why a basic attack on t couldn't land right now (null = it could) — what bots use to decide when to swing
   autoBlock(f, t, A) {
     const d = this.dist(f, t);
     if (A.ranged) return d > A.range + 0.3 ? 'Out of range' : !this.los(f, t) ? 'Target not in line of sight' : null;
@@ -563,36 +622,32 @@ export class Sim {
     const had = f.atkReq > 0;
     f.atkReq = Math.max(0, f.atkReq - dt);
     if (!A || !(f.atkHold || had)) return;
-    const expired = had && f.atkReq <= 0;
-    let t = this.fighters[f.target];
-    if (!t || t.team === f.team || !t.alive || !this.visibleTo(t, f)) {
-      // holding the attack button with no (living, visible) target: pick up the best enemy in front
-      t = f.atkHold ? this.hostileFor(f) : null;
-      if (!t) { f.atkReq = 0; return; }
-      f.target = t.id;
-    }
-    const why = this.autoBlock(f, t, A);
-    if (why || f.autoT > 0 || f.swing || isStunned(f) || f.cast || f.dash || hasBuff(f, 'tempest')) {
-      if (why && expired && f.atkWarn) { f.atkWarn = false; this.event({ e: 'err', id: f.id, msg: why }); }
-      return;
-    }
-    f.autoT = A.speed / (hasBuff(f, 'berserk') ? 1.3 : 1); f.atkReq = 0; f.atkWarn = false;
+    if (f.autoT > 0 || f.swing || isStunned(f) || f.cast || f.dash || hasBuff(f, 'tempest')) return;
+    f.autoT = A.speed / (hasBuff(f, 'berserk') ? 1.3 : 1); f.atkReq = 0;
     this.removeBuff(f, 'stealth');
-    const hit = A.ranged ? 0 : meleeHitT(A);
-    this.event({ e: 'auto', id: f.id, tid: t.id, ranged: !!A.ranged, hit });
-    if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => {
-      this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
-      if (A.burn) this.kindle(f, t); // Fire Mage: Kindling
-      if (A.hex) { const b = this.addBuff(t, 'hexed', 4, { src: f.id, name: 'Hex', icon: '☠' }); if (b) b.data.curse = true; } // Curser: Hex
-    });
-    else f.swing = { t: hit, tid: t.id };
+    if (A.ranged) {
+      const aimed = this.shootAuto(f, A), aim = this.aimOf(f);
+      this.event({ e: 'auto', id: f.id, tid: aimed ? aimed.id : -1, ranged: true, hit: 0, dx: aim[3], dz: aim[5] });
+    } else {
+      const hit = meleeHitT(A);
+      f.swing = { t: hit };
+      this.event({ e: 'auto', id: f.id, tid: -1, ranged: false, hit });
+    }
   }
 
-  // The blow of a melee swing: once a swing has started it always connects (the target can't sidestep a
-  // committed swing), unless the target died or became untouchable in the meantime.
+  // The blow of a melee swing, a moment after it started: it hits the first enemy under the aim ray that is
+  // within reach and in front of you — or nothing (a miss: the swing is spent all the same).
   landSwing(f, s, A) {
-    const t = this.fighters[s.tid];
-    if (!f.alive || !t || !t.alive || !A || A.ranged) return;
+    if (!f.alive || !A || A.ranged) return;
+    const aim = this.aimOf(f);
+    const pick = aimPick(this.fighters, f, aim, 40, MELEE_AIM_WIDTH, t => this.dist(f, t) <= MELEE_AUTO_RANGE + meleeBonus(f, t) && Math.abs(angleDiff(f.yaw, angleTo(f, t))) <= FACE_ARC);
+    if (!pick) {
+      const fw = this.forward(f);
+      this.event({ e: 'miss', id: f.id, x: f.x + fw.x * 2.2, y: f.y + 1.4, z: f.z + fw.z * 2.2, melee: true });
+      return;
+    }
+    const t = pick.f;
+    this.claimTarget(f, t);
     this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true, melee: true });
     if (A.poison) this.poison(f, t); // Assassination: Venom Mastery
     if (A.zap && Math.random() < A.zap) this.damage(f, t, 24, { school: 'nature', ab: 'maelstrom' }); // Enhancement: Maelstrom
@@ -917,9 +972,33 @@ export class Sim {
     this.projectiles.push({ id: NEXT_ID++, kind, owner: src.id, target: tgt.id, x: src.x + fw.x * 0.8, y: src.y + 1.7 + yOff, z: src.z + fw.z * 0.8, speed, onHit, life: 4, block: !!o.block });
   }
 
+  // an aimed basic-attack bolt: flies straight, hits the first enemy hitbox on its way, breaks on cover / the ground
+  stepStraight(p, i, dt) {
+    const step = Math.min(p.speed * dt, p.left); p.left -= step;
+    const ux = p.dx * step, uy = p.dy * step, uz = p.dz * step;
+    let hit = null, hs = 2;
+    for (const t of this.fighters) {
+      if (t.team === p.team || !t.alive || hasBuff(t, 'stealth')) continue;
+      const r = hitboxDist(p.x, p.y, p.z, ux, uy, uz, t);
+      if (r.d <= HITBOX.r + PROJ_R && r.s < hs) { hs = r.s; hit = t; }
+    }
+    const ex = p.x + ux * (hit ? hs : 1), ey = p.y + uy * (hit ? hs : 1), ez = p.z + uz * (hit ? hs : 1);
+    const end = () => { this.projectiles.splice(i, 1); this.event({ e: 'fizzle', kind: p.kind, x: p.x, y: p.y, z: p.z }); };
+    if (segBlocked(p.x, p.z, ex, ez, p.y, ey) || ey < floorAt(ex, ez, ey) + 0.02) { end(); return; }
+    if (hit) {
+      this.projectiles.splice(i, 1);
+      this.event({ e: 'hit', kind: p.kind, id: hit.id, src: p.owner, x: ex, y: ey, z: ez });
+      if (this.fighters[p.owner]) p.onHit(hit);
+      return;
+    }
+    p.x = ex; p.y = ey; p.z = ez;
+    if (p.left <= 0) end();
+  }
+
   updateProjectiles(dt) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
+      if (p.straight) { this.stepStraight(p, i, dt); continue; }
       const t = this.fighters[p.target];
       p.life -= dt;
       if (!t.alive || (hasBuff(t, 'stealth')) || p.life <= 0) {

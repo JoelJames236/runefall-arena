@@ -6,9 +6,9 @@ import { CLASSES, kitOf } from '../data/classes.js';
 import { PILLARS, ARENA_R, BRIDGE, ARCH_OPEN, hasBuff, isStunned, angleTo, segBlocked, floorAt, solidAt, airborne } from './sim.js';
 
 const DIFF = {
-  easy: { react: 0.65, interrupt: 0.15, defensive: 0.5, kite: 0.3, dodge: 0.2, focus: 0.3 },
-  normal: { react: 0.35, interrupt: 0.55, defensive: 0.85, kite: 0.7, dodge: 0.6, focus: 0.7 },
-  hard: { react: 0.15, interrupt: 0.9, defensive: 1.0, kite: 1.0, dodge: 0.95, focus: 1.0 },
+  easy: { react: 0.65, interrupt: 0.15, defensive: 0.5, kite: 0.3, dodge: 0.2, focus: 0.3, aim: 0.9, lead: 0.3 },
+  normal: { react: 0.35, interrupt: 0.55, defensive: 0.85, kite: 0.7, dodge: 0.6, focus: 0.7, aim: 0.45, lead: 0.75 },
+  hard: { react: 0.15, interrupt: 0.9, defensive: 1.0, kite: 1.0, dodge: 0.95, focus: 1.0, aim: 0.2, lead: 1.0 },
 };
 
 // debuff an ability leaves on its target when it isn't named after the ability (see AI.filler)
@@ -29,6 +29,24 @@ export class AI {
 
   idx(f, id) { return kitOf(f).abilities.findIndex(a => a.id === id); }
   ok(f, id, tid) { const i = this.idx(f, id); return i >= 0 && !this.sim.check(f, i, true, tid !== undefined ? { tid } : {}) ? i : -1; }
+
+  // The bot's aim ray (basic attacks are aimed): from its eyes at the foe's chest, leading a ranged shot by the
+  // foe's movement (how well depends on difficulty), plus an aim error that drifts every ~0.7 s.
+  aimAt(me, foe, A, dt, dist) {
+    const pv = this.foePrev;
+    if (pv && pv.id === foe.id && dt > 0) {
+      const k = Math.min(1, dt * 8);
+      this.foeV = [(this.foeV?.[0] || 0) * (1 - k) + (foe.x - pv.x) / dt * k, (this.foeV?.[1] || 0) * (1 - k) + (foe.z - pv.z) / dt * k];
+    } else this.foeV = [0, 0];
+    this.foePrev = { id: foe.id, x: foe.x, z: foe.z };
+    this.aimErrT = (this.aimErrT || 0) - dt;
+    if (this.aimErrT <= 0) { const e = this.d.aim; this.aimErrT = 0.5 + Math.random() * 0.4; this.aimErr = [(Math.random() * 2 - 1) * e, (Math.random() * 2 - 1) * e * 0.5, (Math.random() * 2 - 1) * e]; }
+    const lead = A && A.ranged ? dist / A.projSpeed * this.d.lead : 0;
+    const ex = me.x, ey = me.y + 1.5, ez = me.z;
+    const tx = foe.x + this.foeV[0] * lead + this.aimErr[0], ty = foe.y + 1.05 + this.aimErr[1], tz = foe.z + this.foeV[1] * lead + this.aimErr[2];
+    const dx = tx - ex, dy = ty - ey, dz = tz - ez, l = Math.hypot(dx, dy, dz) || 1;
+    return [ex, ey, ez, dx / l, dy / l, dz / l];
+  }
 
   // Damage filler: the strongest short-cooldown hostile ability that is ready (never a big cooldown, a
   // signature, a spender or crowd control). Cast-time spells only when no enemy stands within 8 yards.
@@ -125,8 +143,11 @@ export class AI {
     const threatCC = isStunned(threat) || hasBuff(threat, 'root');
     this.closeT = (td < 7 && threatMelee) ? this.closeT + dt : 0;
 
-    // bots "hold the attack button" on their focus: the swing timer limits them exactly like a player
-    inp.atkHold = visible;
+    // bots "hold the attack button" on their focus — but only while a swing could land (in reach, in front, in
+    // sight): a swing always goes off, so swinging at air would waste it. Like a player they aim at the foe.
+    const A = kitOf(me).auto;
+    inp.atkHold = visible && !sim.autoBlock(me, foe, A);
+    inp.aim = this.aimAt(me, foe, A, dt, dist);
 
     // ---- react to enemy casts (interrupts), with human-like reaction time
     for (const e of living) {

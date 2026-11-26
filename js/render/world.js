@@ -393,6 +393,15 @@ export class World {
     return best;
   }
 
+  // The aim ray through a screen point (the crosshair dot sits at 50 % / 45 %): [ox, oy, oz, dx, dy, dz] in world
+  // space — basic attacks are resolved against it (see aimPick in sim.js).
+  aimRay(sx = 0.5, sy = 0.45) {
+    const c = this.camera; c.updateMatrixWorld();
+    const o = c.getWorldPosition(new THREE.Vector3());
+    const d = new THREE.Vector3(sx * 2 - 1, -(sy * 2 - 1), 0.5).unproject(c).sub(o).normalize();
+    return [o.x, o.y, o.z, d.x, d.y, d.z];
+  }
+
   // Mouseover healing: the living ally (not yourself) whose body is under the crosshair / cursor, or -1.
   pickAlly(view, myId, sx = 0.5, sy = 0.45) {
     const F = view.fighters, me = F[myId]; if (!me) return -1;
@@ -421,7 +430,7 @@ export class World {
   onAuto(id, hit) {
     const ch = this.chars[id]; if (!ch) return;
     ch.play('attack', ch.lookKey === 'berserker:executioner' || ch.lookKey === 'paladin' || ch.lookKey === 'warrior:arms' ? 0.85 : { rogue: 0.36, warrior: 0.55, berserker: 0.5, paladin: 0.5, mage: 0.42, priest: 0.42, shaman: 0.45 }[ch.cls] || 0.45, hit > 0 ? hit : undefined);
-    if (this.charState[id]) this.charState[id].faceT = 0.35;
+    // basic attacks are aimed: the body keeps facing where its player aims (no snap towards the selected target)
   }
   onHitFlinch(id, crit) { const ch = this.chars[id]; if (ch && (!ch.act || crit)) ch.hit(crit ? 2 : 1); }
   // A blow connected: the victim flinches and flashes; a weapon blow briefly freezes the attacker's swing on

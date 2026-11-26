@@ -70,7 +70,7 @@ host refused or queued disappears again within half a second.
 | --- | --- |
 | `W A S D` | Move / strafe |
 | Mouse | Turn camera & champion (click to capture the mouse; if capture is blocked, hold the right button and drag) |
-| **Left click** | Basic attack on your target — one swing per click, hold to keep swinging at your attack speed. Clicking a different enemy only selects it |
+| **Left click** | Basic attack where the dot in the middle of the screen points (aimed — it hits the enemy hitbox under the dot, or nothing). One swing per click, hold to keep swinging at your attack speed. The enemy you click on also becomes your target |
 | `1`–`6` | Abilities (`Q` / `E` also trigger 5 / 6). **Rebind them in Settings** → Ability Keys: two keys per slot, any key or the middle / back / forward mouse button |
 | `Tab` | Cycle enemy targets |
 | `F1` / `F2` | Friendly target: yourself / your ally (heals and shields go to the friendly target) |
@@ -82,14 +82,21 @@ host refused or queued disappears again within half a second.
 
 - Every class has a basic attack: Warrior cleaver swings, Rogue twin slashes, Paladin hammer blows (melee); Mage arcane
   bolts, Priest holy sparks, Shaman static bolts (30-yard projectiles, usable while moving).
-- **Basic attacks only happen when you click.** One left click = one swing (a click shortly before the swing timer
-  is ready is buffered); holding the button keeps swinging. The swing timer caps the rate — clicking faster or
-  holding never attacks faster. Selecting a target (Tab, or clicking a different enemy) never attacks, and switching
-  targets drops a buffered click. Bots play by the same rule (they "hold the button" on their focus).
+- **Basic attacks are aimed.** One left click = one swing or shot (a click shortly before the swing timer is ready is
+  buffered); holding the button keeps swinging. The swing timer caps the rate. Every swing goes off, and it hits
+  whatever is under the **dot in the middle of the screen** — the selected target doesn't matter. The dot turns
+  red while an enemy your basic attack can reach is under it; the enemy you click on also becomes your target (for
+  abilities), and so does the first enemy you hit when you have none.
+- **Hitboxes are the same for everyone**: a capsule of 0.55 yd radius from the ankles to just above head height
+  (0.1–1.95 yd), whatever the size of the champion's model — a dwarf is as easy to hit as a bull-folk druid.
 - **Melee swings land on the blow**: a swing starts on your click and its damage lands 0.13–0.24 s later (heavier
-  weapons take longer), exactly when the animation connects. A swing that has started always lands. Melee needs the
-  target within 4.5 yd and inside your frontal 200° arc. A click a step out of range (or not quite facing) is kept
-  for 0.4 s and swings the moment it can; holding the button with no target picks up the nearest enemy in front.
+  weapons take longer), exactly when the animation connects. At that moment the aim counts: the blow hits the first
+  enemy hitbox under the dot that is within 4.5 yd and inside your frontal 200° arc (the swing sweeps a little, so
+  the dot counts 0.25 yd wider). Otherwise it is a **Miss** and the swing is spent.
+- **Ranged basic attacks fly straight** from your weapon to the point under the dot (no homing): a moving target
+  has to be led, and a pillar, the bridge or the ground in the way stops the shot. Abilities still go to your target.
+- Bots aim too: they only swing when a hit is possible, ranged bots lead their shots, and their aim error depends
+  on the difficulty (Squire ±0.9 yd, Knight ±0.45 yd, Champion ±0.2 yd).
 - **Melee leeway**: while you *and* your target are both moving, melee swings and strikes reach 0.8 yd further, so
   chasing a running enemy doesn't drop every other swing. When your target is outside your frontal arc, melee slots
   show a turn arrow (↻) and the crosshair turns orange.

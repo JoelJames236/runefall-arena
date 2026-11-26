@@ -52,6 +52,29 @@ damage); burst specs (Subtlety, Sharpshooter, Elemental, Summoner) have the high
 **Watch list for the next pass** (inside the band, but at its edges): Shadow Priest and Beastmaster in 1v1 (41 %),
 Elemental and Enhancement in 2v2 (41–42 %), Protection Warrior in 2v2 (62 %, Shieldwall), the Priests in 2v2 (59 %).
 
+## Change log — aimed basic attacks
+
+Basic attacks now hit what the crosshair dot is on (uniform hitbox for every champion, straight ranged bolts that
+can miss and break on cover; see `docs/GAMEFEEL.md`, "Third pass"). Bots aim with a difficulty-based error and lead
+ranged shots; on hard they land 70–100 % of their basic attacks. Lab result with no number changes: **1v1 40–59 %**
+(3,800 rounds), **2v2 38–62 %** (2,400 team-ups), first kill after a median 17 s.
+
+| Spec | 1v1 % | 2v2 % | | Spec | 1v1 % | 2v2 % |
+| --- | --- | --- | --- | --- | --- | --- |
+| Mage — Frost | 56 | 38 | | Priest — Discipline | 46 | 47 |
+| Mage — Fire | 56 | 45 | | Priest — Shadow | 40 | 54 |
+| Rogue — Subtlety | 44 | 58 | | Shaman — Elemental | 54 | 38 |
+| Rogue — Assassination | 52 | 56 | | Shaman — Enhancement | 52 | 55 |
+| Warrior — Protection | 49 | 62 | | Hunter — Beastmaster | 49 | 43 |
+| Warrior — Arms | 50 | 47 | | Hunter — Sharpshooter | 48 | 43 |
+| Berserker — Fury | 55 | 51 | | Necromancer — Summoner | 51 | 45 |
+| Berserker — Executioner | 51 | 53 | | Necromancer — Curser | 59 | 50 |
+| Paladin — Crusader | 48 | 51 | | Druid — Feral | 43 | 61 |
+| Paladin — Protection | 51 | 48 | | Druid — Restoration | 44 | 54 |
+
+Human players aim worse or better than the bots, so ranged specs that rely on basic attacks (hunters) now reward
+good aim the most. Watch list unchanged: Protection Warrior and Feral in 2v2 (~61 %), Frost / Elemental in 2v2 (38 %).
+
 ## Change log — gameplay follow-ups (leeway, team vitality, bot filler)
 
 Rule and bot changes in this update (details in `docs/GAMEFEEL.md`, "Second pass") that move balance:
