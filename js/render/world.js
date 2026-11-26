@@ -47,6 +47,8 @@ const AB_ANIM = {
   rending_axes: 'slash', headtaker: 'finisher', axe_throw: 'slam', undying_rage: 'raise', berserk: 'raise',
   skullsplitter: 'finisher', ground_breaker: 'slam', iron_hide: 'raise',
   fireball: 'release', frostbite: 'release', blazing_step: 'dash', meteor: 'raise', flame_ring: 'slam',
+  envenom: 'finisher', crippling_poison: 'stab', plague_cloud: 'release', die_by_the_sword: 'raise', execute: 'finisher', bladestorm: 'charge',
+  shadow_word_pain: 'release', mind_blast: 'release', psychic_scream: 'raise', void_eruption: 'release',
 };
 export { AB_ANIM };
 

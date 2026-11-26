@@ -192,7 +192,7 @@ export class AI {
       for (const z of sim.zones) {
         const owner = sim.fighters[z.owner];
         const dx = me.x - z.x, dz = me.z - z.z, d = Math.hypot(dx, dz);
-        if ((z.type === 'quake' || z.type === 'meteor') && owner.team !== me.team && d < z.r + 1 && Math.random() < this.d.dodge + 0.05) { wantX = dx / (d || 1) * 2; wantZ = dz / (d || 1) * 2; }
+        if ((z.type === 'quake' || z.type === 'meteor' || z.type === 'plague') && owner.team !== me.team && d < z.r + 1 && Math.random() < this.d.dodge + 0.05) { wantX = dx / (d || 1) * 2; wantZ = dz / (d || 1) * 2; }
         if (z.type === 'stoneskin' && owner.team === me.team && !melee && d > z.r - 2 && d < z.r + 6) { wantX -= dx / d * 1.2; wantZ -= dz / d * 1.2; }
       }
     }
@@ -331,6 +331,17 @@ export class AI {
         return null;
       }
       case 'rogue':
+        if (me.spec === 'assassination') {
+          // stack poison, cripple runners, cloud them, then Envenom with full combo points
+          if (!visible) return null;
+          if (dist > 7 && (p = use('shadow_leap'))) return p;
+          if (dist < 5 && (p = use('plague_cloud'))) return p;
+          if (dist < 5 && !hasBuff(foe, 'slow') && (p = use('crippling_poison'))) return p;
+          if (me.cp >= 4 && !foeCC && (p = use('skull_crack'))) return p;
+          if ((me.cp >= 5 || (me.cp >= 3 && foeHp < 0.25)) && (p = use('envenom'))) return p;
+          if ((p = use('viper_strike'))) return p;
+          return null;
+        }
         if (def && hp < 0.35 && (p = use('fade'))) return p;
         if (!visible) return null;
         if (dist > 7 && (p = use('shadow_leap'))) return p;
@@ -341,6 +352,18 @@ export class AI {
         if ((p = use('viper_strike'))) return p;
         return null;
       case 'warrior':
+        if (me.spec === 'arms') {
+          if (def && hp < 0.45 && (p = use('die_by_the_sword'))) return p;
+          if (!visible) return null;
+          if (dist > 6 && (p = use('bull_rush'))) return p;
+          if (dist > 5 && (p = use('bladestorm'))) return p;
+          if (foeHp < 0.3 && (p = use('execute'))) return p;
+          if (near(6) >= 1 && foeHp < 0.55 && (p = use('bladestorm'))) return p;
+          if ((p = use('rending_blow'))) return p;
+          if (!hasBuff(foe, 'slow') && (p = use('crippling_slash'))) return p;
+          if (me.res > 70 && (p = use('execute'))) return p;
+          return null;
+        }
         if (def && hp < 0.45 && (p = use('iron_bulwark'))) return p;
         if (!visible) return null;
         if (dist > 6 && (p = use('bull_rush'))) return p;
@@ -374,6 +397,18 @@ export class AI {
         if (me.res > 55 && (p = use('rending_axes'))) return p;
         return null;
       case 'priest': {
+        if (me.spec === 'shadow') {
+          const hurtS = this.hurtFriend(me, allies, 0.6);
+          if (def && hurtS && !hurtS.buffs.some(b => b.type === 'absorb') && (p = use('divine_aegis', { tid: hurtS.id }))) return p;
+          if (def && !isStunned(me) && hasBuff(me, 'root') && td < 8 && (p = use('seraph_step'))) return p;
+          if (near(7) && !threatCC && threatMelee && (p = use('psychic_scream'))) return p;
+          if (!visible) return null;
+          const dots = foe.buffs.filter(b => b.type === 'dot' && b.src === me.id).length;
+          if (!foe.buffs.some(b => b.name === 'Shadow Word: Pain' && b.src === me.id && b.t > 2) && (p = use('shadow_word_pain'))) return p;
+          if (dots >= 1 && (foeHp < 0.4 || hp < 0.5) && (p = use('void_eruption'))) return p;
+          if (freeCast && (p = use('mind_blast'))) return p;
+          return null;
+        }
         const hurt = this.hurtFriend(me, allies, 0.75);
         if (def && hurt && !hurt.buffs.some(b => b.type === 'absorb') && (p = use('divine_aegis', { tid: hurt.id }))) return p;
         if (def && !isStunned(me) && hasBuff(me, 'root') && td < 8 && (p = use('seraph_step'))) return p;

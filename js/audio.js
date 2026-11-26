@@ -280,8 +280,10 @@ export const AB_SOUND = {
   rending_axes: 'melee_heavy', headtaker: 'mark_pop', axe_throw: 'swing', skull_leap: 'warcry', undying_rage: 'mark', berserk: 'warcry',
   skullsplitter: 'melee_heavy', ground_breaker: 'quake', iron_hide: 'mark',
   fireball: 'flame_burst', frostbite: 'frost_lance', blazing_step: 'gale', meteor: 'arcane_comet', flame_ring: 'magma',
+  envenom: 'melee_heavy', crippling_poison: 'dagger', plague_cloud: 'stealth', die_by_the_sword: 'shield', execute: 'melee_heavy', bladestorm: 'tempest',
+  shadow_word_pain: 'shadow', mind_blast: 'mark', psychic_scream: 'blinding', void_eruption: 'mark_pop',
   sacred_bolt: 'holy_bolt', mend: 'heal', divine_aegis: 'aegis', seraph_step: 'seraph', blinding_light: 'blinding', halo_judgment: 'halo',
   lightning_lash: 'lightning', magma_burst: 'magma', quake_totem: 'totem', gale_dash: 'gale', stoneskin_totem: 'stoneskin', fire_spirit: 'spirit',
 };
-export const HIT_SOUND = { frostbite: 'frost_hit', fireball: 'fire_hit', fire_bolt: 'fire_hit', frost_lance: 'frost_hit', flame_burst: 'fire_hit', arcane_comet: 'arcane_hit', sacred_bolt: 'holy_hit', magma_burst: 'fire_hit', spirit_bolt: 'fire_hit', arcane_bolt: 'spark_hit', holy_spark: 'spark_hit', static_bolt: 'zap_hit' };
+export const HIT_SOUND = { shadow_bolt: 'spark_hit', mind_blast: 'arcane_hit', frostbite: 'frost_hit', fireball: 'fire_hit', fire_bolt: 'fire_hit', frost_lance: 'frost_hit', flame_burst: 'fire_hit', arcane_comet: 'arcane_hit', sacred_bolt: 'holy_hit', magma_burst: 'fire_hit', spirit_bolt: 'fire_hit', arcane_bolt: 'spark_hit', holy_spark: 'spark_hit', static_bolt: 'zap_hit' };
 export const CAST_SOUND = { frost: 'cast_frost', arcane: 'cast_arcane', holy: 'cast_holy', nature: 'cast_nature', fire: 'cast_fire' };

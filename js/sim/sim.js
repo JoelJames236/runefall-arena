@@ -411,7 +411,7 @@ export class Sim {
     if (f.dash) return 'Busy';
     if (f.cast && ab.gcd) return 'Already casting';
     if (isStunned(f) && !ab.allowCC) return "You can't do that while stunned";
-    if (hasBuff(f, 'tempest') && ab.id !== 'steel_tempest') return "Can't do that while spinning";
+    if (hasBuff(f, 'tempest') && ab.id !== 'steel_tempest' && ab.id !== 'bladestorm') return "Can't do that while spinning";
     if (hasBuff(f, 'silence') && ab.school !== 'phys') return 'You are silenced';
     if (hasBuff(f, 'root') && MOVE_ABS.has(ab.id) && !ab.allowRooted) return 'You are rooted';
     if (ab.cast > 0 && airborne(f)) return "You can't cast while jumping";
@@ -522,7 +522,7 @@ export class Sim {
     this.removeBuff(f, 'stealth');
     this.event({ e: 'auto', id: f.id, tid: t.id, ranged: !!A.ranged });
     if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => { this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true }); if (A.burn) this.kindle(f, t); });
-    else this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
+    else { this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true }); if (A.poison) this.poison(f, t); }
   }
 
   // ------------------------------------------------------------ per-tick fighter logic
@@ -582,7 +582,7 @@ export class Sim {
         b.data.tick -= dt;
         if (b.data.tick <= 0) {
           b.data.tick += 0.5;
-          for (const e of this.enemiesOf(f)) if (this.dist(f, e) <= 6) this.damage(f, e, 38, { school: 'phys', ab: 'steel_tempest', tick: true });
+          for (const e of this.enemiesOf(f)) if (this.dist(f, e) <= 6) this.damage(f, e, b.data.dmg || 38, { school: 'phys', ab: b.data.ab || 'steel_tempest', tick: true });
         }
       } else if (b.type === 'spirit') {
         b.data.tick -= dt;
@@ -667,11 +667,16 @@ export class Sim {
     const crit = direct && !o.noCrit && (o.forceCrit || Math.random() < RULES.critChance + (SP.critBonus || 0) + (SP.critVsRooted && hasBuff(tgt, 'root') ? SP.critVsRooted : 0)); // Frost Shatter
     if (crit) { amt *= SP.critMult || RULES.critMult; src.stats.crits++; }
     amt *= bloodrage(src);
+    // spec passives: execute bonus (Arms), poison bonus (Assassination), school bonus / damage taken (Shadowform)
+    if (SP.executeBonus && tgt.hp / tgt.maxHp < SP.executeAt) amt *= 1 + SP.executeBonus;
+    if (SP.poisonBonus) amt *= 1 + SP.poisonBonus * this.stacksOf(src, tgt, 'Deadly Poison');
+    if (SP.schoolBonus) amt *= 1 + (SP.schoolBonus[o.school] || 0);
+    const TP = kitOf(tgt).passive; if (TP && TP.takenMult) amt *= TP.takenMult;
     const bz = getBuff(src, 'berserk'); if (bz) amt *= 1 + bz.value;
     amt *= 1 - kitOf(tgt).defense;
     for (const b of tgt.buffs) if (b.type === 'dr' || b.type === 'stoneskin') amt *= 1 - b.value;
     amt *= this.shieldwall(tgt);
-    if (src.cls === 'warrior' && this.teamSize[src.team] >= 2) amt *= 1 + CLASSES.warrior.passive.dmg; // Shieldwall: team-play damage
+    if (src.cls === 'warrior' && this.teamSize[src.team] >= 2) amt *= 1 + (SP.dmg || 0); // Shieldwall: team-play damage
     // Berserker Bloodrage, team play only: up to 25% less damage taken as health drops
     if (tgt.cls === 'berserker' && this.teamSize[tgt.team] >= 2) amt *= 1 - 0.25 * (1 - Math.max(0, tgt.hp) / tgt.maxHp);
     amt = Math.max(1, Math.round(amt));
@@ -689,7 +694,7 @@ export class Sim {
     if (src.resType === 'rage') src.res = Math.min(src.maxRes, src.res + (amt + absorbed) * 0.075);
     if (tgt.resType === 'rage') tgt.res = Math.min(tgt.maxRes, tgt.res + (amt + absorbed) * 0.07);
     // Shieldwall, team play: a warrior near a hurt ally gains rage from the blows the ally takes
-    if (this.teamSize[tgt.team] >= 2) for (const w of this.fighters) if (w.cls === 'warrior' && w.alive && w !== tgt && w.team === tgt.team && this.dist(w, tgt) <= CLASSES.warrior.passive.radius) w.res = Math.min(w.maxRes, w.res + (amt + absorbed) * CLASSES.warrior.passive.rageShare);
+    if (this.teamSize[tgt.team] >= 2) for (const w of this.fighters) if (w.cls === 'warrior' && w.alive && w !== tgt && w.team === tgt.team && kitOf(w).passive.rageShare && this.dist(w, tgt) <= kitOf(w).passive.radius) w.res = Math.min(w.maxRes, w.res + (amt + absorbed) * kitOf(w).passive.rageShare);
     if (!o.noMark) {
       const m = tgt.buffs.find(b => b.type === 'mark' && b.src === src.id);
       if (m) m.data.stored = Math.round(m.data.stored + (amt + absorbed) * 0.3);
@@ -709,9 +714,9 @@ export class Sim {
   // takes `self` less (he is the frontline); allies within `radius` of a living warrior take `ally` less.
   shieldwall(t) {
     if (this.teamSize[t.team] < 2) return 1;
-    const P = CLASSES.warrior.passive;
-    if (t.cls === 'warrior') return 1 - P.self;
-    for (const w of this.fighters) if (w.cls === 'warrior' && w.alive && w.team === t.team && w !== t && this.dist(w, t) <= P.radius) return 1 - P.ally;
+    const P = kitOf(t).passive || {};
+    if (t.cls === 'warrior') return 1 - (P.self || 0); // only Protection has Shieldwall
+    for (const w of this.fighters) { const WP = kitOf(w).passive; if (w.cls === 'warrior' && WP.ally && w.alive && w.team === t.team && w !== t && this.dist(w, t) <= WP.radius) return 1 - WP.ally; }
     return 1;
   }
 
@@ -753,15 +758,21 @@ export class Sim {
     this.event({ e: 'buff', id: f.id, type, name: b.name, src: b.src, fx: b.fx, dur });
     return b;
   }
-
   // Fire Mage passive Kindling: a stacking Burning DoT (max 3 stacks, 25 damage over 4 sec per stack)
-  kindle(src, tgt) {
-    if (!tgt.alive) return;
-    const find = () => tgt.buffs.find(x => x.type === 'dot' && x.name === 'Burning' && x.src === src.id);
-    const n = Math.min(3, (find()?.data.stacks || 0) + 1);
-    this.addDot(src, tgt, 'Burning', 25 * n, 4, 'fire', '🔥');
+  // stacking DoT: each application adds a stack (up to max) and refreshes the duration
+  stackDot(src, tgt, name, perStack, dur, max, school, icon) {
+    if (!tgt.alive) return 0;
+    const find = () => tgt.buffs.find(x => x.type === 'dot' && x.name === name && x.src === src.id);
+    const n = Math.min(max, (find()?.data.stacks || 0) + 1);
+    this.addDot(src, tgt, name, perStack * n, dur, school, icon);
     const b = find(); if (b) b.data.stacks = n;
+    return n;
   }
+  stacksOf(src, tgt, name) { return tgt.buffs.find(x => x.type === 'dot' && x.name === name && x.src === src.id)?.data.stacks || 0; }
+  // Fire Mage passive Kindling: Burning stacks up to 3 (25 damage over 4 sec per stack)
+  kindle(src, tgt) { return this.stackDot(src, tgt, 'Burning', 25, 4, 3, 'fire', '🔥'); }
+  // Assassination passive Venom Mastery: Deadly Poison stacks up to 5 (14 damage over 4 sec per stack)
+  poison(src, tgt) { return this.stackDot(src, tgt, 'Deadly Poison', 14, 4, 5, 'nature', '☠'); }
 
   addDot(src, tgt, name, total, dur, school, icon) {
     const ticks = Math.round(dur);
@@ -840,6 +851,10 @@ export class Sim {
           this.addBuff(f, 'stun', 1, { src: owner.id, cc: 'cc', name: 'Meteor Strike', icon: '☄' });
           if (z.data.burn) this.kindle(owner, f);
         }
+      } else if (z.type === 'plague') {
+        // Assassination signature: every second, enemies inside take damage and gain a Deadly Poison stack
+        z.data.acc = (z.data.acc || 0) + dt;
+        if (z.data.acc >= 1) { z.data.acc -= 1; for (const e of this.enemiesOf(owner)) if (this.inZone(e, z)) { this.damage(owner, e, 16, { school: 'nature', ab: 'plague_cloud', tick: true }); this.poison(owner, e); } }
       } else if (z.type === 'stoneskin') {
         z.data.acc = (z.data.acc || 0) + dt;
         const tick = z.data.acc >= 1; if (tick) z.data.acc -= 1;

@@ -91,10 +91,10 @@ The spec shows on unit frames, nameplates and in the lobby.
 | Class | Spec 1 (original kit) | Spec 2 |
 | --- | --- | --- |
 | Mage | ❄ **Frost**: turret caster, *Shatter* (+20% crit vs rooted, crits +60%), Frostbite, Arcane Shift with 2 charges | 🔥 **Fire**: Fireball and Meteor cast on the move (at 65% speed), *Kindling* Burning stacks, Flame Ring, Blazing Step, Meteor (delayed AoE knockdown) |
-| Rogue | 🗡 Subtlety | 🐍 Assassination *(coming soon)* |
-| Warrior | 🛡 Protection | ⚔ Arms *(coming soon)* |
+| Rogue | 🗡 Subtlety | 🐍 **Assassination**: *Venom Mastery* (slashes stack Deadly Poison, +3% damage per stack), Envenom, Crippling Poison, Plague Cloud |
+| Warrior | 🛡 Protection | ⚔ **Arms**: two-handed greatsword, *Battle Trance* (+35% vs targets below 30%), Execute, Die by the Sword, Bladestorm leap |
 | Berserker | 🪓 Fury: two axes, fast flurries | 💀 **Executioner**: one great axe, slow swings, big crits (*Heavy Hands*: +12% crit chance, crits +80%); Skullsplitter, Ground Breaker, Iron Hide, Headtaker |
-| Priest | ✦ Discipline | 🌑 Shadow *(coming soon)* |
+| Priest | ✦ Discipline | 🌑 **Shadow**: *Shadowform* (+15% shadow damage, 15% less taken), Shadow Word: Pain, Mind Blast (self-heal), Psychic Scream, Void Eruption |
 | Shaman | ⚡ Elemental | 🐺 Enhancement *(coming soon)* |
 
 Design of all specs and the planned new classes: [`docs/CLASSES_AND_SPECS.md`](docs/CLASSES_AND_SPECS.md).

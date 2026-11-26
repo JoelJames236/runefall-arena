@@ -220,6 +220,17 @@ export function makeClassWeapon(kind, M, look) {
       g.add(head);
       const pom = spike(0.028, 0.09, M.darksteel); pom.rotation.z = PI; pom.position.y = -0.4; g.add(pom);
       tip.position.set(0.46, 1.06, 0); break; }
+    case 'greatsword': {
+      // Arms: a two-handed rune greatsword — long wrapped grip (both hands), wide crossguard, broad fullered blade
+      const blade = mesh(extrude([[-0.055, 0], [0.055, 0], [0.05, 1.18], [0, 1.34], [-0.05, 1.18]], 0.016, 0.005), M.silver); blade.position.y = 0.2; g.add(blade);
+      const fuller = mesh(box(0.02, 1.0, 0.036), M.darksteel, false); fuller.position.y = 0.76; g.add(fuller);
+      for (let i = 0; i < 4; i++) { const r = mesh(box(0.034, 0.05, 0.04), M.rune(0xff5a3a, 2.2), false); r.position.y = 0.38 + i * 0.13; g.add(r); }
+      const guard = mesh(tube([V(-0.24, 0.12, 0), V(-0.12, 0.17, 0), V(0, 0.18, 0), V(0.12, 0.17, 0), V(0.24, 0.12, 0)], 0.022, 12, 6), M.darksteel); g.add(guard);
+      for (const s of [-1, 1]) { const k2 = spike(0.022, 0.07, M.gold); k2.rotation.z = -s * PI / 2; k2.position.set(s * 0.27, 0.11, 0); g.add(k2); }
+      const grip = mesh(cyl(0.024, 0.026, 0.46, 10), M.darkleather); grip.position.y = -0.06; g.add(grip);
+      for (let i = 0; i < 6; i++) { const w = mesh(tor(0.026, 0.005, 4, 12), M.leather, false); w.rotation.x = PI / 2; w.position.y = -0.24 + i * 0.07; g.add(w); }
+      const pom = mesh(sph(0.04, 12, 8), M.gold); pom.position.y = -0.31; g.add(pom);
+      tip.position.set(0, 1.5, 0); break; }
     case 'fang': case 'fangL': {
       // rogue curved, serrated fang dagger with poison channel
       const pts = []; for (let i = 0; i <= 8; i++) { const u = i / 8; pts.push([0.026 * (1 - u) + Math.sin(u * 2.2) * 0.04, u * 0.34]); }
@@ -259,7 +270,7 @@ export function makeClassWeapon(kind, M, look) {
       for (let i = 0; i < 8; i++) { const a = i / 8 * PI * 2; const fl = mesh(extrude([[0, -0.1], [0.07, -0.06], [0.09, 0.02], [0.05, 0.1], [0, 0.12]], 0.012, 0.003), M.gold); fl.position.set(Math.sin(a) * 0.06, 0, Math.cos(a) * 0.06); fl.rotation.y = a - PI / 2; head.add(fl); }
       for (const s of [-1, 1]) { const w = mesh(extrude([[0, 0], [0.08, 0.03], [0.16, 0.12], [0.07, 0.06], [0.02, 0.04]], 0.008, 0.002), M.silver); w.position.set(s * 0.05, 0.08, 0); w.scale.x = s; head.add(w); }
       const core = mesh(sph(0.04, 12, 10), M.rune(0xfff0b0, 4)); core.position.y = 0.06; head.add(core);
-      const halo = mesh(sph(0.2, 12, 10), M.glow(0xffd98a, 0.16), false); head.add(halo);
+      const halo = mesh(sph(0.2, 12, 10), M.glow(look.glow || 0xffd98a, 0.16), false); head.add(halo);
       const top = spike(0.02, 0.09, M.gold); top.position.y = 0.14; head.add(top);
       g.add(head); g.userData.pulse = halo;
       tip.position.y = 0.7; break; }
@@ -529,17 +540,18 @@ export function equipArmor(ch, cls, M, spec) {
       cape(robe, 0.44, 1.05, { trim: M.gold });
       break; }
     case 'priest': {
+const shadowP = spec === 'shadow', ivoryM = shadowP ? M.shadowcloth : M.ivory, silverM = shadowP ? M.blacksteel : M.silver; // Shadow: void-dark vestments
       // radiant battle-cleric: gilded winged pauldrons, white-gold breastplate, long vestment skirt
-      shoulders({ r: 0.14, plates: 2, mat: M.silver, trim: M.gold, spikes: 0, wing: M.gold });
-      breastplate(M.silver, M.gold, M.rune(0xffe08a, 1.8));
-      const skirt = mesh(new THREE.LatheGeometry([V(0.17 * k, 0), V(0.22 * k, -0.25 * k), V(0.29 * k, -0.6 * k), V(0.32 * k, -0.84 * k)], 22), M.ivory);
+      shoulders({ r: 0.14, plates: 2, mat: silverM, trim: M.gold, spikes: 0, wing: M.gold });
+      breastplate(silverM, M.gold, M.rune(0xffe08a, 1.8));
+      const skirt = mesh(new THREE.LatheGeometry([V(0.17 * k, 0), V(0.22 * k, -0.25 * k), V(0.29 * k, -0.6 * k), V(0.32 * k, -0.84 * k)], 22), ivoryM);
       skirt.scale.z = 0.9; put('pelvis', skirt, L.pelvis.clone().add(V(0, 0.04 * k, 0)));
-      tabard(M.ivory, 0.18, 0.62, M.gold);
+      tabard(ivoryM, 0.18, 0.62, M.gold);
       belt(M.leather, M.gold, 0.18);
-      gauntlets(M.silver, M.gold, 1.15);
-      const book = new THREE.Group(); book.add(mesh(box(0.1 * k, 0.13 * k, 0.04 * k), M.ivory)); const cross = mesh(box(0.012, 0.07 * k, 0.045 * k), M.gold); book.add(cross); const cr2 = mesh(box(0.045 * k, 0.012, 0.045 * k), M.gold); cr2.position.y = 0.012; book.add(cr2);
+      gauntlets(silverM, M.gold, 1.15);
+      const book = new THREE.Group(); book.add(mesh(box(0.1 * k, 0.13 * k, 0.04 * k), ivoryM)); const cross = mesh(box(0.012, 0.07 * k, 0.045 * k), M.gold); book.add(cross); const cr2 = mesh(box(0.045 * k, 0.012, 0.045 * k), M.gold); cr2.position.y = 0.012; book.add(cr2);
       put('pelvis', book, L.pelvis.clone().add(V(-0.2 * k, -0.04, 0.02)), { yaw: -PI / 2 });
-      cape(M.ivory, 0.44, 1.0, { trim: M.gold });
+      cape(ivoryM, 0.44, 1.0, { trim: M.gold });
       // circlet
       const circ = mesh(tor(0.12 * k, 0.01, 6, 32), M.gold); circ.rotation.x = PI / 2 - 0.15; const gem = mesh(sph(0.016, 8, 6), M.gem(0x6ab0ff)); gem.position.set(0, 0.02, 0.12 * k);
       const cg = new THREE.Group(); cg.add(circ, gem); put('Head', cg, headPos(0.12));
