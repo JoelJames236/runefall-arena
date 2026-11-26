@@ -491,6 +491,12 @@ export class World {
   render(dt) {
     this.time += dt;
     this.arena.update(dt, this.vfx);
+    // the main menu's sidebar covers the left of the screen: centre the scene in what is left of it
+    const off = this.mode === 'menu' ? (this.menuShift || 0) : 0;
+    if (off !== this._viewOff || innerWidth !== this._viewW || innerHeight !== this._viewH) {
+      this._viewOff = off; this._viewW = innerWidth; this._viewH = innerHeight;
+      if (off) this.camera.setViewOffset(innerWidth, innerHeight, -off / 2, 0, innerWidth, innerHeight); else this.camera.clearViewOffset();
+    }
     if (this.mode === 'menu') {
       this.menuT = (this.menuT || 0) + dt;
       const t = this.menuT * 0.05;

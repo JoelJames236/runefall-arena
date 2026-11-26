@@ -90,7 +90,11 @@ applySettings();
 function show(id) {
   S.screen = id;
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  menuShift();
 }
+// the main menu's sidebar: the 3D scene is centred in the space beside it
+function menuShift() { const side = $('menu').querySelector('.side'); world.menuShift = S.screen === 'menu' && innerWidth > 800 && side ? side.offsetWidth : 0; }
+addEventListener('resize', menuShift);
 function showOverlay(id, v) { $(id).classList.toggle('active', v); }
 function toast(msg, ms = 2600) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms); }
 // fade to black, run fn, fade back in
@@ -109,8 +113,7 @@ $('playerName').addEventListener('input', e => { S.playerName = e.target.value.t
 // win/loss record (kept locally)
 const REC = JSON.parse(localStorage.getItem('runefall-record') || '{"w":0,"l":0,"streak":0,"best":0}');
 function renderRecord() {
-  const tile = (v, l, cls = '') => `<div class="rt ${cls}"><b>${v}</b><span>${l}</span></div>`;
-  $('record').innerHTML = tile(REC.w, 'Wins', 'w') + tile(REC.l, 'Losses', 'l') + tile(REC.streak, 'Streak', REC.streak > 1 ? 'hot' : '') + tile(REC.best, 'Best');
+  $('record').innerHTML = `<span class="w"><b>${REC.w}</b> W</span><span class="l"><b>${REC.l}</b> L</span>${REC.streak > 1 ? `<span class="hot"><b>${REC.streak}</b> in a row</span>` : ''}${REC.best > Math.max(1, REC.streak) ? `<span><b>${REC.best}</b> best</span>` : ''}`;
 }
 function recordResult(won) {
   if (won) { REC.w++; REC.streak++; REC.best = Math.max(REC.best, REC.streak); } else { REC.l++; REC.streak = 0; }
@@ -155,6 +158,21 @@ $('menu').addEventListener('click', e => {
   else if (act === 'settings') openSettings('menu');
   else if (act === 'howto') { S.howtoBack = 'menu'; show('howto'); }
 });
+
+// the corner panel describes the highlighted menu entry (mouse or keyboard focus)
+function showModeInfo(b) {
+  if (!b || !b.dataset.title) return;
+  $('menu').querySelectorAll('.mi').forEach(x => x.classList.toggle('hl', x === b));
+  const box = $('modeInfo');
+  box.querySelector('.mf-t').innerHTML = b.dataset.title + (b.dataset.new ? ' <i>New</i>' : '');
+  box.querySelector('.mf-d').innerHTML = b.dataset.desc;
+  box.querySelector('.mf-f').innerHTML = (b.dataset.facts || '').split('|').filter(Boolean).map(f => `<span>${f}</span>`).join('');
+  box.style.setProperty('--hide', b.dataset.facts === '' ? 'none' : 'flex');
+  box.classList.remove('in'); void box.offsetWidth; box.classList.add('in');
+}
+$('menu').addEventListener('mouseover', e => { const b = e.target.closest('.mi'); if (b && !b.classList.contains('hl')) showModeInfo(b); });
+$('menu').addEventListener('focusin', e => showModeInfo(e.target.closest('.mi')));
+showModeInfo($('menu').querySelector('.mi'));
 
 // settings
 function openSettings(back) {

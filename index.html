@@ -6,7 +6,7 @@
 <title>Runefall Arena — Fantasy Arena PvP</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=20261127b">
 <script type="importmap">
 {
   "imports": {
@@ -34,70 +34,37 @@
   <div id="loadmsg" class="loadmsg"></div>
 </section>
 
-<!-- Main menu -->
+<!-- Main menu: a classic game menu — a sidebar on the left, the arena scene on the right, a description of the
+     highlighted mode in the corner -->
 <section id="menu" class="screen">
-  <nav class="menu-nav">
-    <button class="nav-btn" data-act="browse"><span>⚜</span>Champions</button>
-    <button class="nav-btn" data-act="howto"><span>?</span>How to Play</button>
-    <button class="nav-btn" data-act="settings"><span>⚙</span>Settings</button>
-  </nav>
-
-  <header class="menu-head">
-    <div class="title-block small">
-      <div class="sub">Arena of Blade and Spell</div>
-      <h1>Runefall Arena</h1>
-      <div class="rule"></div>
+  <aside class="side">
+    <div class="side-title">
+      <div class="st-sub">Arena of Blade and Spell</div>
+      <h1>Runefall<span>Arena</span></h1>
+      <div class="st-rule"></div>
     </div>
-    <div class="profile panel">
-      <div class="pf-name"><label for="playerName">Champion</label><input id="playerName" maxlength="16" spellcheck="false" autocomplete="off"></div>
-      <div class="pf-record" id="record"></div>
+    <nav class="side-menu">
+      <div class="sm-h">Play</div>
+      <button class="mi" data-act="duel" data-title="Duel" data-desc="Your champion against one bot. Pick its class and spec, or leave it to chance." data-facts="Best of 7 · first to 4 rounds|3 bot difficulties"><span class="mi-ic">⚔</span><span class="mi-n">Duel</span><span class="mi-tag">1v1</span></button>
+      <button class="mi" data-act="bots2v2" data-title="Team Fight" data-desc="You and Aldor against Zigi &amp; Jöggu. Heal, peel and focus together." data-facts="Best of 7 · first to 4 rounds|Pick every bot or roll them"><span class="mi-ic">⛨</span><span class="mi-n">Team Fight</span><span class="mi-tag">2v2</span></button>
+      <button class="mi" data-new="1" data-act="bg" data-title="Thornwater Gorge" data-desc="Two keeps across a river gorge. Steal the enemy flag from their upper room and carry it home while your own flag is safe." data-facts="3 captures win · 15 minutes|Respawn every 20 s · power-ups"><span class="mi-ic">⚑</span><span class="mi-n">Battleground</span><span class="mi-tag">5v5</span></button>
+      <div class="sm-h">Online</div>
+      <button class="mi" data-act="create" data-title="Play with Friends" data-desc="Open a lobby and share the invite link. Choose 1v1, 2v2 or the 5v5 battleground; bots fill empty slots." data-facts="Up to 10 players|2v2 matchmaking"><span class="mi-ic">✦</span><span class="mi-n">Play with Friends</span></button>
+      <button class="mi" data-act="join" data-title="Join Match" data-desc="Enter the room code a friend sent you, or open their invite link." data-facts="6-letter room code"><span class="mi-ic">➤</span><span class="mi-n">Join Match</span></button>
+      <div class="sm-sep"></div>
+      <div class="sm-small">
+        <button class="mi small" data-act="browse" data-title="Champions" data-desc="Ten classes, twenty specs: abilities, stats, gear and a preview of every champion." data-facts="Click an ability to preview it"><span class="mi-ic">⚜</span><span class="mi-n">Champions</span></button>
+        <button class="mi small" data-act="howto" data-title="How to Play" data-desc="Controls, aimed basic attacks, crowd control and the battleground rules." data-facts="Keys can be rebound in Settings"><span class="mi-ic">?</span><span class="mi-n">How to Play</span></button>
+        <button class="mi small" data-act="settings" data-title="Settings" data-desc="Sound, mouse, graphics quality and your ability keys." data-facts=""><span class="mi-ic">⚙</span><span class="mi-n">Settings</span></button>
+      </div>
+    </nav>
+    <div class="side-profile">
+      <div class="pf-row"><label for="playerName">Champion</label><input id="playerName" maxlength="16" spellcheck="false" autocomplete="off"></div>
+      <div class="pf-row"><label>Record</label><div class="pf-record" id="record"></div></div>
+      <div class="pf-row"><label>Arena</label><div class="arena-row" id="arenaPick"></div></div>
     </div>
-    <div class="arena-row" id="arenaPick"><span>Arena</span></div>
-  </header>
-
-  <div class="modes">
-    <section class="mode-group">
-      <h3 class="mg-h">Against Bots</h3>
-      <div class="cards">
-        <button class="mode-card" data-act="duel" style="--acc:#e8c37a">
-          <span class="mc-ic">⚔</span><span class="mc-fmt">1 v 1</span>
-          <span class="mc-t">Duel</span>
-          <span class="mc-d">One champion against one bot. Pick its class or leave it to chance.</span>
-          <span class="mc-b">Best of 7</span>
-        </button>
-        <button class="mode-card" data-act="bots2v2" style="--acc:#7ab8ff">
-          <span class="mc-ic">⛨</span><span class="mc-fmt">2 v 2</span>
-          <span class="mc-t">Team Fight</span>
-          <span class="mc-d">You and Aldor against Zigi &amp; Jöggu.</span>
-          <span class="mc-b">Best of 7</span>
-        </button>
-        <button class="mode-card feature" data-act="bg" style="--acc:#ff7a4a">
-          <span class="mc-new">New</span>
-          <span class="mc-ic">⚑</span><span class="mc-fmt">5 v 5</span>
-          <span class="mc-t">Battleground</span>
-          <span class="mc-d">Thornwater Gorge: steal the enemy flag and bring it home.</span>
-          <span class="mc-b">Capture the flag</span>
-        </button>
-      </div>
-    </section>
-    <section class="mode-group">
-      <h3 class="mg-h">Online</h3>
-      <div class="cards">
-        <button class="mode-card" data-act="create" style="--acc:#8ae08a">
-          <span class="mc-ic">✦</span><span class="mc-fmt">Party</span>
-          <span class="mc-t">Play with Friends</span>
-          <span class="mc-d">Open a lobby and share the link. 1v1, 2v2 or 5v5; bots fill empty slots.</span>
-          <span class="mc-b">Up to 10 players</span>
-        </button>
-        <button class="mode-card" data-act="join" style="--acc:#c8a0ff">
-          <span class="mc-ic">➤</span><span class="mc-fmt">Code</span>
-          <span class="mc-t">Join Match</span>
-          <span class="mc-d">Got a room code or an invite link from a friend? Jump in here.</span>
-          <span class="mc-b">Room code</span>
-        </button>
-      </div>
-    </section>
-  </div>
+  </aside>
+  <div class="mode-info" id="modeInfo"><div class="mf-t"></div><div class="mf-d"></div><div class="mf-f"></div></div>
 </section>
 
 <!-- Class select -->
@@ -311,6 +278,6 @@
 </section>
 
 <div id="toast" class="toast"></div>
-<script type="module" src="js/main.js"></script>
+<script type="module" src="js/main.js?v=20261127b"></script>
 </body>
 </html>
