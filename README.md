@@ -28,6 +28,27 @@ powershell -ExecutionPolicy Bypass -File serve.ps1
 
 Then open <http://localhost:8080>. Any static server works too.
 
+## Host it from your PC (private, password-protected)
+
+`host-arena.ps1` serves the game from your PC behind a password. The game only exists while the script
+runs: close it or turn the PC off and nobody can get in.
+
+```powershell
+winget install --id Cloudflare.cloudflared      # once: gives you a public HTTPS link, no router setup
+powershell -ExecutionPolicy Bypass -File host-arena.ps1
+```
+
+- The first run asks for a password and keeps it in `.arena-password` (git-ignored). `-ResetPassword` picks a new one,
+  which also logs everyone out.
+- The script prints a `https://….trycloudflare.com` link and copies it to the clipboard. Send it to friends with the
+  password. The link is new every time you start the script.
+- Every login and failed attempt shows in the window. 5 wrong passwords lock that IP out for 5 minutes.
+- `-NoTunnel` serves only on this PC (<http://localhost:8090>). `-Port 8091` if 8090 is busy.
+
+The script only serves the game files (`index.html`, `balance.html`, `css/`, `js/`, `assets/`), never the scripts,
+the password file or `.git`. As long as GitHub Pages is on and this repository is public, anyone can still play the
+copy there or download the code, so turn Pages off and make the repository private if the game should only exist on your PC.
+
 ## Online play
 
 Online play is peer-to-peer over WebRTC. The free PeerJS cloud broker is only used to introduce browsers
