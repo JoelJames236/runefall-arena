@@ -7,7 +7,7 @@
 //   melee: needs to face the target      gcd: triggers / respects the global cooldown
 //   cast: cast time in seconds (moving cancels)
 
-export const CLASS_ORDER = ['mage', 'rogue', 'warrior', 'berserker', 'priest', 'shaman'];
+export const CLASS_ORDER = ['mage', 'rogue', 'warrior', 'berserker', 'priest', 'shaman', 'hunter', 'necromancer', 'druid'];
 
 const MELEE = 4.2;
 
@@ -22,8 +22,8 @@ export const CLASSES = {
     rating: { health: 2, damage: 5, mobility: 3, defense: 1 },
     abilities: [
       { id: 'frost_lance', name: 'Frost Lance', glyph: '❄', color: '#8fd8ff', school: 'frost', cost: 50, cd: 0, gcd: true, cast: 1.3, range: 30, target: true,
-        desc: 'Hurl a lance of ice dealing 120 frost damage and slowing the target by 50% for 4 sec.',
-        exec(sim, c, t) { sim.spawnProjectile(c, t, 'frost_lance', 34, () => { sim.damage(c, t, 120, { school: 'frost', ab: 'frost_lance' }); sim.addBuff(t, 'slow', 4, { value: 0.5, src: c.id, name: 'Chilled', icon: '❄' }); }); } },
+        desc: 'Hurl a lance of ice dealing 110 frost damage and slowing the target by 50% for 4 sec.',
+        exec(sim, c, t) { sim.spawnProjectile(c, t, 'frost_lance', 34, () => { sim.damage(c, t, 110, { school: 'frost', ab: 'frost_lance' }); sim.addBuff(t, 'slow', 4, { value: 0.5, src: c.id, name: 'Chilled', icon: '❄' }); }); } },
       { id: 'flame_burst', name: 'Flame Burst', glyph: '🔥', color: '#ff8a3a', school: 'fire', cost: 70, cd: 6, gcd: true, cast: 0, range: 30, target: true,
         desc: 'Instantly ignite the target for 100 fire damage plus 45 burn damage over 3 sec.',
         exec(sim, c, t) { sim.spawnProjectile(c, t, 'flame_burst', 55, () => { sim.damage(c, t, 100, { school: 'fire', ab: 'flame_burst' }); sim.addDot(c, t, 'Ignite', 45, 3, 'fire', '🔥'); }); } },
@@ -78,8 +78,8 @@ export const CLASSES = {
     desc: 'A towering wall of steel who wins in close quarters. Generates rage from dealing and taking damage, and closes the gap with charges and crippling blows. Passive — Shieldwall (team play): you take 15% less damage, allies within 15 yards of you take 10% less, and you gain rage when a nearby ally is hit.',
     weapon: 'Steel longsword and iron-rimmed round shield', armor: 'Weathered leather and iron pauldron',
     hp: 1380, defense: 0.15, speed: 6.8, resType: 'rage', res: 100, resStart: 20, regen: 1,
-    auto: { name: 'Sword Swing', dmg: 43, speed: 2.0, range: 4.5, ranged: false, school: 'phys', glyph: '🗡', color: '#e0604a',
-      desc: 'Basic attack: heavy alternating sword swings (43 damage every 2.0 sec). Melee range, generates rage.' },
+    auto: { name: 'Sword Swing', dmg: 47, speed: 2.0, range: 4.5, ranged: false, school: 'phys', glyph: '🗡', color: '#e0604a',
+      desc: 'Basic attack: heavy alternating sword swings (47 damage every 2.0 sec). Melee range, generates rage.' },
     rating: { health: 5, damage: 3, mobility: 2, defense: 5 },
     passive: { name: 'Shieldwall', self: 0.15, ally: 0.1, radius: 15, rageShare: 0.03, dmg: 0 }, // team play only
     abilities: [
@@ -183,8 +183,8 @@ export const CLASSES = {
     rating: { health: 3, damage: 4, mobility: 3, defense: 3 },
     abilities: [
       { id: 'lightning_lash', name: 'Lightning Lash', glyph: '⚡', color: '#7ae0ff', school: 'nature', cost: 50, cd: 0, gcd: true, cast: 1.3, range: 30, target: true,
-        desc: 'Strike the target with a bolt of lightning for 96 nature damage.',
-        exec(sim, c, t) { sim.event({ e: 'fx', fx: 'lightning_lash', id: c.id, tid: t.id }); sim.damage(c, t, 96, { school: 'nature', ab: 'lightning_lash' }); } },
+        desc: 'Strike the target with a bolt of lightning for 88 nature damage.',
+        exec(sim, c, t) { sim.event({ e: 'fx', fx: 'lightning_lash', id: c.id, tid: t.id }); sim.damage(c, t, 88, { school: 'nature', ab: 'lightning_lash' }); } },
       { id: 'magma_burst', name: 'Magma Burst', glyph: '♨', color: '#ff7a2a', school: 'fire', cost: 70, cd: 7, gcd: true, cast: 0, range: 30, target: true,
         desc: 'Launch molten rock that deals 78 fire damage and burns for 60 more over 6 sec.',
         exec(sim, c, t) { sim.spawnProjectile(c, t, 'magma_burst', 40, () => { sim.damage(c, t, 78, { school: 'fire', ab: 'magma_burst' }); sim.addDot(c, t, 'Magma Burn', 60, 6, 'fire', '♨'); }); } },
@@ -200,6 +200,104 @@ export const CLASSES = {
       { id: 'fire_spirit', name: 'Fire Spirit', glyph: '♆', color: '#ffb03a', school: 'fire', cost: 150, cd: 45, gcd: true, cast: 0, range: 0, target: false, signature: true,
         desc: 'SIGNATURE — Summon a blazing elemental spirit for 10 sec that hurls firebolts at your target every 1.2 sec for 40 damage.',
         exec(sim, c) { sim.addBuff(c, 'spirit', 10, { src: c.id, name: 'Fire Spirit', icon: '♆', data: { tick: 0.6 } }); } },
+    ],
+  },
+
+  // ---------------------------------------------------------------- new classes (each with a fixed race)
+  hunter: {
+    id: 'hunter', name: 'Hunter', role: 'Jungle-Troll Huntsman', race: 'Jungle Troll', emblem: '🏹', color: '#a8d84a', accent: '#e8a040',
+    desc: 'A tall, tusked jungle troll who hunts with a bow and a great striped cat at his side. Keeps foes at range, slows them with stings and lets the pet do the chasing. Passive — Pack Leader: your jungle cat fights at your side (it comes back 18 sec after it falls); your own shots hit a bit softer.',
+    weapon: 'Recurve bow of jungle hardwood', armor: 'Leather and mail hung with bone trophies',
+    hp: 1100, defense: 0.06, speed: 7.4, resType: 'focus', res: 100, resStart: 100, regen: 12,
+    auto: { name: 'Quick Shot', dmg: 20, speed: 1.4, range: 32, ranged: true, school: 'phys', proj: 'arrow', projSpeed: 62, glyph: '➵', color: '#d8c890',
+      desc: 'Basic attack: a quick arrow (20 damage, 32 yd, every 1.4 sec). Usable while moving.' },
+    rating: { health: 3, damage: 4, mobility: 4, defense: 2 },
+    passive: { name: 'Pack Leader', pet: { kind: 'cat', hp: 450, dmg: 17, atkSpeed: 1.3, speed: 9.5, respawn: 18, range: 2.4 } },
+    abilities: [
+      { id: 'kill_command', name: 'Kill Command', glyph: '🐾', color: '#ffc060', school: 'phys', cost: 30, cd: 6, gcd: true, cast: 0, range: 40, target: true, needsPet: true,
+        desc: 'Order your cat to maul the target for 70 damage (needs your pet).',
+        exec(sim, c, t) { const m = sim.minionOf(c); if (m) { m.atkFlash = 0.5; sim.event({ e: 'minionAtk', id: m.id, tid: t.id }); } sim.damage(c, t, 70, { school: 'phys', ab: 'kill_command' }); } },
+      { id: 'serpent_sting', name: 'Serpent Sting', glyph: '🐍', color: '#9be36a', school: 'nature', cost: 20, cd: 0, gcd: true, cast: 0, range: 32, target: true,
+        desc: 'A venomous arrow: 20 damage plus 100 nature damage over 10 sec.',
+        exec(sim, c, t) { sim.spawnProjectile(c, t, 'arrow', 62, () => { sim.damage(c, t, 20, { school: 'nature', ab: 'serpent_sting' }); sim.addDot(c, t, 'Serpent Sting', 100, 10, 'nature', '🐍'); }); } },
+      { id: 'disengage', name: 'Disengage', glyph: '⤶', color: '#d8f4ff', school: 'phys', cost: 10, cd: 16, gcd: false, cast: 0, range: 0, target: false,
+        desc: 'Leap 12 yards backwards, away from where you face.',
+        exec(sim, c) { const f = sim.forward(c); sim.dashDir(c, -f.x, -f.z, 12, 0.3, 'disengage'); } },
+      { id: 'intimidation', name: 'Intimidation', glyph: '✸', color: '#ffd27a', school: 'phys', cost: 25, cd: 30, gcd: true, cast: 0, range: 40, target: true, needsPet: true,
+        desc: 'Your cat pounces on the target, stunning it for 1.5 sec (needs your pet).',
+        exec(sim, c, t) { sim.damage(c, t, 20, { school: 'phys', ab: 'intimidation' }); sim.interrupt(t, c); sim.addBuff(t, 'stun', 1.5, { src: c.id, cc: 'cc', name: 'Intimidated', icon: '✸' }); } },
+      { id: 'bestial_bond', name: 'Bestial Bond', glyph: '✚', color: '#8aff9a', school: 'nature', cost: 30, cd: 30, gcd: true, cast: 0, range: 0, target: false,
+        desc: 'Heal yourself for 120 and your cat to full health — or call a new cat at once if it has fallen.',
+        exec(sim, c) { const m = sim.minionOf(c); if (m) m.hp = m.maxHp; else sim.summon(c, 'cat', kitOf(c).passive.pet || {}); sim.heal(c, c, 120, 'bestial_bond'); } },
+      { id: 'bestial_wrath', name: 'Bestial Wrath', glyph: '🔥', color: '#ff7a3a', school: 'phys', cost: 40, cd: 45, gcd: false, cast: 0, range: 0, target: false, signature: true, needsPet: true,
+        desc: 'SIGNATURE — You and your cat go into a fury for 10 sec: you deal 20% more damage, the cat deals double damage and ignores area damage.',
+        exec(sim, c) { const m = sim.minionOf(c); if (m) m.rageT = 10; sim.addBuff(c, 'wrath', 10, { value: 0.2, src: c.id, name: 'Bestial Wrath', icon: '🔥', fx: 'berserk' }); } },
+    ],
+  },
+
+  necromancer: {
+    id: 'necromancer', name: 'Necromancer', role: 'Undead Death-Caller', race: 'Undead', emblem: '💀', color: '#7aff6a', accent: '#5a2a7a',
+    desc: 'A risen sorcerer who fights only at range: a ghoul servant keeps the enemy busy while bone spears and rot do the killing. As fragile as any caster in melee. Passive — Bound Servant: a ghoul fights for you (its claws slow) and rises again 8 sec after it falls; it takes 50% more damage from area attacks.',
+    weapon: 'Bone staff crowned with a floating skull', armor: 'Torn grave-robes over a bone cage',
+    hp: 1000, defense: 0.0, speed: 7.0, resType: 'mana', res: 1000, regen: 16,
+    auto: { name: 'Bone Bolt', dmg: 24, speed: 1.8, range: 30, ranged: true, school: 'shadow', proj: 'bone_bolt', projSpeed: 42, glyph: '☠', color: '#c8ffb0',
+      desc: 'Basic attack: a shard of bone and shadow (24 damage, 30 yd, every 1.8 sec). Usable while moving.' },
+    rating: { health: 2, damage: 4, mobility: 3, defense: 1 },
+    passive: { name: 'Bound Servant', pet: { kind: 'ghoul', hp: 520, dmg: 30, atkSpeed: 1.2, speed: 11, respawn: 8, aoeTaken: 1.5, onHit: (s, m, t) => s.addBuff(t, 'slow', 1.5, { value: 0.25, src: m.owner, name: 'Ghoul Claws', icon: '☠' }) } },
+    abilities: [
+      { id: 'soul_rot', name: 'Soul Rot', glyph: '☣', color: '#7aff6a', school: 'shadow', cost: 50, cd: 0, gcd: true, cast: 1.3, range: 30, target: true,
+        desc: 'Rot the target\'s soul for 90 shadow damage plus 70 over 6 sec.',
+        exec(sim, c, t) { sim.spawnProjectile(c, t, 'soul_rot', 34, () => { sim.damage(c, t, 90, { school: 'shadow', ab: 'soul_rot' }); sim.addDot(c, t, 'Soul Rot', 70, 6, 'shadow', '☣'); }); } },
+      { id: 'corpse_explosion', name: 'Corpse Explosion', glyph: '✹', color: '#9aff7a', school: 'shadow', cost: 40, cd: 15, gcd: true, cast: 0, range: 0, target: false, needsPet: true,
+        desc: 'Detonate your servant: enemies within 6 yards of it take 95 damage plus 40 over 4 sec. It rises again later.',
+        exec(sim, c) { const m = sim.minionOf(c); if (!m) return; sim.event({ e: 'fx', fx: 'corpse_explosion', id: c.id, x: m.x, z: m.z });
+          for (const e of sim.enemiesOf(c)) if (Math.hypot(e.x - m.x, e.z - m.z) <= 6) { sim.damage(c, e, 95, { school: 'shadow', ab: 'corpse_explosion' }); sim.addDot(c, e, 'Corpse Gas', 40, 4, 'shadow', '✹'); }
+          sim.killMinion(m); } },
+      { id: 'bone_spear', name: 'Bone Spear', glyph: '➶', color: '#e8f0d0', school: 'shadow', cost: 45, cd: 6, gcd: true, cast: 0, range: 30, target: true,
+        desc: 'Hurl a spear of bone: 72 damage, 40 more over 4 sec and a 40% slow for 4 sec.',
+        exec(sim, c, t) { sim.spawnProjectile(c, t, 'bone_spear', 50, () => { sim.damage(c, t, 72, { school: 'shadow', ab: 'bone_spear' }); sim.addDot(c, t, 'Bone Splinters', 40, 4, 'shadow', '➶'); sim.addBuff(t, 'slow', 4, { value: 0.4, src: c.id, name: 'Impaled', icon: '➶' }); }); } },
+      { id: 'grave_step', name: 'Grave Step', glyph: '⤶', color: '#9aff7a', school: 'shadow', cost: 30, cd: 15, gcd: false, cast: 0, range: 0, target: false, allowRooted: true,
+        desc: 'Sink into the ground and rise 10 yards behind you, breaking roots and slows.',
+        exec(sim, c) { sim.cleanse(c, ['root', 'slow']); const f = sim.forward(c); sim.blink(c, -f.x, -f.z, 10, 'grave_step'); } },
+      { id: 'bone_shield', name: 'Bone Shield', glyph: '⛨', color: '#e8f0d0', school: 'shadow', cost: 50, cd: 30, gcd: false, cast: 0, range: 0, target: false, allowCC: true,
+        desc: 'Wrap yourself in orbiting bones: take 30% less damage for 6 sec. Usable while stunned.',
+        exec(sim, c) { sim.addBuff(c, 'dr', 6, { value: 0.3, src: c.id, name: 'Bone Shield', icon: '⛨', fx: 'iron_bulwark' }); } },
+      { id: 'abomination', name: 'Abomination', glyph: '☗', color: '#7aff6a', school: 'shadow', cost: 140, cd: 45, gcd: true, cast: 0, range: 0, target: false, signature: true,
+        desc: 'SIGNATURE — Your servant swells into a hulking abomination for 15 sec: 800 health, 40 damage per blow, each blow slowing by 30%.',
+        exec(sim, c) { sim.summon(c, 'abomination', { hp: 800, dmg: 40, atkSpeed: 1.4, speed: 7.5, life: 15, range: 2.8, aoeTaken: 1,
+          onHit: (s, m, t) => s.addBuff(t, 'slow', 2, { value: 0.3, src: c.id, name: 'Crushed', icon: '☗' }) }); } },
+    ],
+  },
+
+  druid: {
+    id: 'druid', name: 'Druid', role: 'Bull-folk Wildwarden', race: 'Bull-folk', emblem: '🌿', color: '#e8a05a', accent: '#8ad86a',
+    desc: 'A towering, horned bull-folk keeper of the wilds. Heals with growing magic, roots enemies in place and moves freely across the arena. Passive — Wild Growth: Rejuvenation stacks up to 3 times on the same target.',
+    weapon: 'Living-wood staff sprouting leaves', armor: 'Bark plates, leaf charms and wooden totems',
+    hp: 1200, defense: 0.06, speed: 7.2, resType: 'mana', res: 1000, regen: 17,
+    auto: { name: 'Wrath', dmg: 22, speed: 1.8, range: 30, ranged: true, school: 'nature', proj: 'wrath', projSpeed: 40, glyph: '✦', color: '#b8ff6a',
+      desc: 'Basic attack: a spark of nature\'s wrath (22 damage, 30 yd, every 1.8 sec). Usable while moving.' },
+    rating: { health: 3, damage: 2, mobility: 4, defense: 2 },
+    passive: { name: 'Wild Growth' },
+    abilities: [
+      { id: 'rejuvenation', name: 'Rejuvenation', glyph: '✿', color: '#8aff9a', school: 'nature', cost: 60, cd: 0, gcd: true, cast: 0, range: 30, ally: true,
+        desc: 'Heal a friendly target for 95 over 12 sec. Stacks up to 3 times.',
+        exec(sim, c, t) { sim.addHot(c, t, 'Rejuvenation', 95, 12, 'rejuvenation', 3); sim.event({ e: 'fx', fx: 'nature_heal', id: c.id, tid: t.id }); } },
+      { id: 'regrowth', name: 'Regrowth', glyph: '❀', color: '#5aff7a', school: 'nature', cost: 90, cd: 0, gcd: true, cast: 1.4, range: 30, ally: true,
+        desc: 'Heal a friendly target for 95 at once and 50 more over 6 sec.',
+        exec(sim, c, t) { sim.heal(c, t, 95, 'regrowth'); sim.addHot(c, t, 'Regrowth', 50, 6, 'regrowth'); } },
+      { id: 'moonfire', name: 'Moonfire', glyph: '☽', color: '#c8b0ff', school: 'arcane', cost: 35, cd: 0, gcd: true, cast: 0, range: 30, target: true,
+        desc: 'Burn the target with moonlight: 35 damage plus 90 over 12 sec.',
+        exec(sim, c, t) { sim.event({ e: 'fx', fx: 'moonfire', id: c.id, x: t.x, z: t.z, tid: t.id }); sim.damage(c, t, 35, { school: 'arcane', ab: 'moonfire' }); sim.addDot(c, t, 'Moonfire', 90, 12, 'arcane', '☽'); } },
+      { id: 'wild_charge', name: 'Wild Charge', glyph: '≫', color: '#b8ff6a', school: 'nature', cost: 30, cd: 12, gcd: false, cast: 0, range: 0, target: false, allowRooted: true,
+        desc: 'Bound 13 yards in your movement direction in a rush of leaves, breaking roots and slows.',
+        exec(sim, c, t, o) { sim.cleanse(c, ['root', 'slow']); const d = o.dir || sim.forward(c); sim.dashDir(c, d.x, d.z, 13, 0.3, 'wild_charge'); } },
+      { id: 'entangling_roots', name: 'Entangling Roots', glyph: '❦', color: '#8ad86a', school: 'nature', cost: 60, cd: 20, gcd: true, cast: 0, range: 30, target: true,
+        desc: 'Roots burst from the ground: the target is rooted for 3 sec and takes 20 damage.',
+        exec(sim, c, t) { sim.event({ e: 'fx', fx: 'roots', id: c.id, x: t.x, z: t.z }); sim.damage(c, t, 20, { school: 'nature', ab: 'entangling_roots' }); sim.addBuff(t, 'root', 3, { src: c.id, cc: 'root', name: 'Entangled', icon: '❦' }); } },
+      { id: 'tree_of_life', name: 'Tree of Life', glyph: '🌳', color: '#5aff7a', school: 'nature', cost: 150, cd: 45, gcd: true, cast: 0, range: 0, target: false, signature: true,
+        desc: 'SIGNATURE — Become a living tree for 10 sec: +40% healing done, immune to slows, and you and allies within 30 yards regenerate 250 health over 10 sec.',
+        exec(sim, c) { sim.cleanse(c, ['slow', 'root']); sim.addBuff(c, 'treeform', 10, { src: c.id, name: 'Tree of Life', icon: '🌳', fx: 'treeform' });
+          sim.addHot(c, c, 'Tree of Life', 250, 10, 'tree_of_life'); for (const a of sim.alliesOf(c)) if (sim.dist(c, a) <= 30) sim.addHot(c, a, 'Tree of Life', 250, 10, 'tree_of_life'); } },
     ],
   },
 };
@@ -236,8 +334,8 @@ export const SPECS = {
         desc: 'Basic attack: a quick bolt of fire (22 damage, 30 yd, every 1.6 sec) that adds a stack of Burning. Usable while moving.' },
       abilities: {
         0: { id: 'fireball', name: 'Fireball', glyph: '☀', color: '#ff7a2a', school: 'fire', cost: 50, cd: 0, gcd: true, cast: 1.5, moveCast: true, range: 30, target: true,
-          desc: 'Hurl a fireball for 100 fire damage and a stack of Burning. Can be cast while moving (you move 35% slower while casting).',
-          exec(sim, c, t) { sim.spawnProjectile(c, t, 'fireball', 34, () => { sim.damage(c, t, 100, { school: 'fire', ab: 'fireball' }); sim.kindle(c, t); }); } },
+          desc: 'Hurl a fireball for 92 fire damage and a stack of Burning. Can be cast while moving (you move 35% slower while casting).',
+          exec(sim, c, t) { sim.spawnProjectile(c, t, 'fireball', 34, () => { sim.damage(c, t, 92, { school: 'fire', ab: 'fireball' }); sim.kindle(c, t); }); } },
         2: { id: 'flame_ring', name: 'Flame Ring', glyph: '◎', color: '#ff8a3a', school: 'fire', cost: 70, cd: 16, gcd: true, cast: 0, range: 0, target: false,
           desc: 'Erupt in a ring of fire: 45 damage to all enemies within 8 yards, slowing them by 60% for 3 sec and adding a stack of Burning.',
           exec(sim, c) { sim.event({ e: 'fx', fx: 'flame_ring', id: c.id, x: c.x, z: c.z }); sim.aoeMinions(c, c.x, c.z, 8, 45); for (const f of sim.enemiesOf(c)) if (sim.dist(c, f) <= 8) { sim.damage(c, f, 45, { school: 'fire', ab: 'flame_ring' }); sim.addBuff(f, 'slow', 3, { value: 0.6, src: c.id, name: 'Scorched', icon: '◎' }); sim.kindle(c, f); } } },
@@ -382,8 +480,8 @@ export const SPECS = {
           desc: 'Lash the target with a molten axe for 70 fire damage plus 48 over 4 sec.',
           exec(sim, c, t) { sim.damage(c, t, 70, { school: 'fire', ab: 'lava_lash' }); sim.addDot(c, t, 'Lava Burn', 48, 4, 'fire', '♨'); } },
         2: { id: 'healing_surge', name: 'Healing Surge', glyph: '✚', color: '#8aff9a', school: 'nature', cost: 90, cd: 2, gcd: true, cast: 1.2, range: 30, ally: true,
-          desc: 'A surge of healing water: heals a friendly target for 145 (yourself if you have no friendly target).',
-          exec(sim, c, t) { sim.heal(c, t, 145, 'healing_surge'); } },
+          desc: 'A surge of healing water: heals a friendly target for 165 (yourself if you have no friendly target).',
+          exec(sim, c, t) { sim.heal(c, t, 165, 'healing_surge'); } },
         4: { id: 'earthbind_totem', name: 'Earthbind Totem', glyph: '⛓', color: '#b0a070', school: 'nature', cost: 60, cd: 24, gcd: true, cast: 0, range: 0, target: false,
           desc: 'Plant a totem for 8 sec: enemies within 9 yards are slowed by 50%.',
           exec(sim, c) { sim.spawnZone({ type: 'earthbind', owner: c.id, x: c.x, z: c.z, r: 9, dur: 8 }); } },
@@ -394,7 +492,125 @@ export const SPECS = {
       },
     },
   ],
+  hunter: [
+    { id: 'beastmaster', name: 'Beastmaster', icon: '🐾', color: '#ffc060', tag: 'Bow + jungle cat · pet does the chasing' },
+    {
+      id: 'sharpshooter', name: 'Sharpshooter', icon: '🎯', color: '#d8c890', tag: 'Heavy crossbow · no pet, huge shots',
+      role: 'Jungle-Troll Sharpshooter',
+      desc: 'No pet — just a heavy crossbow and patience. Shots hit far harder, especially from a steady stance. Passive — Steady Aim: after standing still for 1 sec your attacks deal 30% more damage and have +15% critical strike chance.',
+      weapon: 'Heavy jungle crossbow with a bone stock', armor: 'Leather coat with a bolt bandolier',
+      rating: { health: 3, damage: 5, mobility: 3, defense: 2 },
+      passive: { name: 'Steady Aim', pet: null, steadyAim: 0.3, steadyCrit: 0.15 },
+      auto: { name: 'Crossbow Bolt', dmg: 40, speed: 2.2, range: 34, ranged: true, school: 'phys', proj: 'crossbow_bolt', projSpeed: 70, glyph: '➵', color: '#d8c890',
+        desc: 'Basic attack: a heavy crossbow bolt (40 damage, 34 yd, every 2.2 sec). Usable while moving (Steady Aim needs you to stand still).' },
+      abilities: {
+        0: { id: 'aimed_shot', name: 'Aimed Shot', glyph: '◎', color: '#ffe0a0', school: 'phys', cost: 35, cd: 0, gcd: true, cast: 2.0, range: 34, target: true,
+          desc: 'Take careful aim (2 sec, stand still) and loose a bolt for 160 damage.',
+          exec(sim, c, t) { sim.spawnProjectile(c, t, 'crossbow_bolt', 80, () => sim.damage(c, t, 160, { school: 'phys', ab: 'aimed_shot', big: true })); } },
+        3: { id: 'concussive_bolt', name: 'Concussive Bolt', glyph: '⛓', color: '#bfefff', school: 'phys', cost: 20, cd: 10, gcd: true, cast: 0, range: 34, target: true,
+          desc: 'A blunt bolt: 40 damage and a 50% slow for 4 sec.',
+          exec(sim, c, t) { sim.spawnProjectile(c, t, 'crossbow_bolt', 70, () => { sim.damage(c, t, 40, { school: 'phys', ab: 'concussive_bolt' }); sim.addBuff(t, 'slow', 4, { value: 0.5, src: c.id, name: 'Concussed', icon: '⛓' }); }); } },
+        4: { id: 'freezing_trap', name: 'Freezing Trap', glyph: '❄', color: '#8fd8ff', school: 'frost', cost: 30, cd: 25, gcd: true, cast: 0, range: 30, target: true,
+          desc: 'Toss a trap at the target\'s feet. After 1 sec it arms; the first enemy to step in is frozen solid for 4 sec (broken by damage).',
+          exec(sim, c, t) { sim.spawnZone({ type: 'trap', owner: c.id, x: t.x, z: t.z, yRef: t.id, r: 2.5, dur: 20 }); } },
+        5: { id: 'piercing_volley', name: 'Piercing Volley', glyph: '⇶', color: '#ffd27a', school: 'phys', cost: 40, cd: 30, gcd: true, cast: 0, range: 34, target: true, signature: true,
+          desc: 'SIGNATURE — A volley that punches through shields: 190 damage to the target and 90 to every other enemy within 3 yards of it. Ignores absorb shields.',
+          exec(sim, c, t) { sim.event({ e: 'fx', fx: 'volley', id: c.id, x: t.x, z: t.z, tid: t.id }); sim.damage(c, t, 190, { school: 'phys', ab: 'piercing_volley', big: true, pierce: true });
+            for (const e of sim.enemiesOf(c)) if (e !== t && Math.hypot(e.x - t.x, e.z - t.z) <= 3) sim.damage(c, e, 90, { school: 'phys', ab: 'piercing_volley', pierce: true }); sim.aoeMinions(c, t.x, t.z, 3, 90); } },
+      },
+    },
+  ],
+  necromancer: [
+    { id: 'summoner', name: 'Summoner', icon: '💀', color: '#7aff6a', tag: 'Ghoul servant · bones and rot', hp: 1100 },
+    {
+      id: 'curser', name: 'Curser', icon: '☠', color: '#b070ff', tag: 'Stacking curses · martyr scaling',
+      role: 'Undead Curse-Weaver',
+      desc: 'Piles curse upon curse: the more curses an enemy carries, the more damage they take — but the Curser pays too. Passive — Martyr\'s Curse: every curse on a target makes it take 6% more damage (max 5), and you take 3% more damage for every curse you keep on enemies. Your Hex Bolts add a short curse.',
+      weapon: 'A chained grimoire and a black bone staff', armor: 'Black rags bound in chains, floating sigils',
+      rating: { health: 2, damage: 5, mobility: 3, defense: 1 },
+      passive: { name: 'Martyr\'s Curse', pet: null, martyr: true },
+      auto: { name: 'Hex Bolt', dmg: 20, speed: 1.8, range: 30, ranged: true, school: 'shadow', proj: 'hex_bolt', projSpeed: 40, glyph: '☠', color: '#b070ff', hex: true,
+        desc: 'Basic attack: a cursed bolt (20 damage, 30 yd, every 1.8 sec) that leaves a 4 sec Hex curse. Usable while moving.' },
+      abilities: {
+        0: { id: 'curse_of_agony', name: 'Curse of Agony', glyph: '☣', color: '#b070ff', school: 'shadow', cost: 40, cd: 0, gcd: true, cast: 0, range: 30, target: true,
+          desc: 'Curse: 160 shadow damage over 12 sec.',
+          exec(sim, c, t) { sim.curseDot(c, t, 'Curse of Agony', 160, 12, '☣'); sim.event({ e: 'fx', fx: 'shadow_touch', id: c.id, x: t.x, z: t.z, tid: t.id }); } },
+        1: { id: 'curse_of_weakness', name: 'Curse of Weakness', glyph: '⇣', color: '#9a7aff', school: 'shadow', cost: 50, cd: 12, gcd: true, cast: 0, range: 30, target: true,
+          desc: 'Curse: the target deals 15% less damage for 10 sec.',
+          exec(sim, c, t) { const b = sim.addBuff(t, 'weaken', 10, { value: 0.15, src: c.id, name: 'Curse of Weakness', icon: '⇣' }); if (b) b.data.curse = true; sim.event({ e: 'fx', fx: 'shadow_touch', id: c.id, x: t.x, z: t.z, tid: t.id }); } },
+        4: { id: 'soul_siphon', name: 'Soul Siphon', glyph: '♆', color: '#c08aff', school: 'shadow', cost: 60, cd: 10, gcd: true, cast: 0, range: 0, target: false,
+          desc: 'Siphon every cursed enemy within 30 yards: 35 damage per curse they carry, healing you for 60% of it.',
+          exec(sim, c) { let tot = 0; for (const e of sim.enemiesOf(c)) { if (sim.dist(c, e) > 30 || !sim.los(c, e)) continue; const n = sim.curses(c, e); if (!n) continue; sim.event({ e: 'fx', fx: 'siphon', id: c.id, tid: e.id }); tot += sim.damage(c, e, 35 * n, { school: 'shadow', ab: 'soul_siphon' }); } if (tot > 0) sim.heal(c, c, Math.round(tot * 0.6), 'soul_siphon'); } },
+        5: { id: 'doom', name: 'Doom', glyph: '☄', color: '#7a3aff', school: 'shadow', cost: 120, cd: 35, gcd: true, cast: 0, range: 30, target: true, signature: true,
+          desc: 'SIGNATURE — Doom the target: after 8 sec it takes 90 shadow damage plus 55 for every curse you have on it at that moment (Doom counts too).',
+          exec(sim, c, t) { const b = sim.addBuff(t, 'doom', 8, { src: c.id, name: 'Doom', icon: '☄', data: { curse: true, dmg: 90, per: 55 } }); if (b) b.data = { curse: true, dmg: 90, per: 55 }; sim.event({ e: 'fx', fx: 'shadow_touch', id: c.id, x: t.x, z: t.z, tid: t.id }); } },
+      },
+    },
+  ],
+  druid: [
+    {
+      id: 'feral', name: 'Feral', icon: '🐾', color: '#e8a05a', tag: 'Shapeshifter · cat (damage) / bear (tank)',
+      role: 'Bull-folk Shapeshifter', melee: true, look: 'feral',
+      desc: 'Fights as a beast: a sleek panther that bleeds foes and finishes them with combo points, or a huge armored bear that soaks the blows. Switch any time with the form key. Passive — Primal Instinct: changing form breaks roots and slows.',
+      weapon: 'Claws and fangs', armor: 'Fur, hide and the bull-folk\'s own bulk',
+      hp: 1250, resType: 'energy', res: 100, regen: 18,
+      passive: { name: 'Primal Instinct' },
+      defaultForm: 'cat',
+      forms: {
+        cat: {
+          speed: 7.8, defense: 0.05,
+          rating: { health: 3, damage: 5, mobility: 5, defense: 2 },
+          auto: { name: 'Claws', dmg: 28, speed: 1.2, range: 4.5, ranged: false, school: 'phys', glyph: '🐾', color: '#e8a05a', desc: 'Cat form basic attack: raking claws (28 damage every 1.2 sec).' },
+          abilities: [
+            { id: 'rake', name: 'Rake', glyph: '🩸', color: '#ff6a4a', school: 'phys', cost: 35, cd: 0, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
+              desc: 'Cat: rake the target for 35 damage plus a 45 damage bleed over 6 sec. Awards 1 combo point.',
+              exec(sim, c, t) { sim.damage(c, t, 35, { school: 'phys', ab: 'rake' }); sim.addDot(c, t, 'Rake', 45, 6, 'phys', '🩸'); c.cp = Math.min(5, c.cp + 1); } },
+            { id: 'shred', name: 'Shred', glyph: '⚔', color: '#ffcf4a', school: 'phys', cost: 45, cd: 0, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
+              desc: 'Cat: shred the target for 58 damage (+40% from behind). Awards 1 combo point.',
+              exec(sim, c, t) { sim.damage(c, t, isBehindT(c, t) ? 82 : 58, { school: 'phys', ab: 'shred' }); c.cp = Math.min(5, c.cp + 1); } },
+            { id: 'ferocious_bite', name: 'Ferocious Bite', glyph: '☠', color: '#ff4a6a', school: 'phys', cost: 30, cd: 0, gcd: true, cast: 0, range: MELEE, target: true, melee: true, needsCp: true,
+              desc: 'Cat finisher: 45 damage plus 50 per combo point.',
+              exec(sim, c, t) { const n = c.cp; c.cp = 0; sim.damage(c, t, 45 + 50 * n, { school: 'phys', ab: 'ferocious_bite', big: n >= 4 }); } },
+            { id: 'wild_pounce', name: 'Wild Pounce', glyph: '⤴', color: '#ffb070', school: 'phys', cost: 0, cd: 18, gcd: false, cast: 0, range: 25, minRange: 5, target: true,
+              desc: 'Pounce on an enemy 5–25 yards away, stunning it for 1 sec on landing.',
+              exec(sim, c, t) { sim.charge(c, t, () => { sim.addBuff(t, 'stun', 1, { src: c.id, cc: 'cc', name: 'Pounced', icon: '⤴' }); }, { fx: 'skull_leap', arc: 2.5, speed: 34 }); } },
+            { id: 'bear_form', name: 'Bear Form', glyph: '🐻', color: '#c89060', school: 'nature', cost: 0, cd: 1.5, gcd: false, cast: 0, range: 0, target: false, allowRooted: true,
+              desc: 'Shift into a huge armored bear: +25% armor, slower, tank abilities. Breaks roots and slows.',
+              exec(sim, c) { sim.shapeshift(c, 'bear'); } },
+            { id: 'berserk_instinct', name: 'Berserk Instinct', glyph: '☄', color: '#ff7a3a', school: 'phys', cost: 0, cd: 50, gcd: false, cast: 0, range: 0, target: false, signature: true,
+              desc: 'SIGNATURE — 8 sec of primal fury in either form: +30% damage and immunity to crowd control for the first 4 sec.',
+              exec(sim, c) { sim.addBuff(c, 'wrath', 8, { value: 0.3, src: c.id, name: 'Berserk Instinct', icon: '☄', fx: 'berserk' }); sim.addBuff(c, 'ccimmune', 4, { src: c.id, name: 'Berserk Instinct', icon: '✦' }); } },
+          ],
+        },
+        bear: {
+          speed: 6.8, defense: 0.3,
+          rating: { health: 5, damage: 2, mobility: 2, defense: 5 },
+          auto: { name: 'Swipe', dmg: 36, speed: 1.8, range: 4.5, ranged: false, school: 'phys', glyph: '🐾', color: '#c89060', desc: 'Bear form basic attack: heavy swipes (36 damage every 1.8 sec).' },
+          abilities: [
+            { id: 'maul', name: 'Maul', glyph: '✸', color: '#ffb070', school: 'phys', cost: 30, cd: 0, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
+              desc: 'Bear: maul the target for 85 damage.', exec(sim, c, t) { sim.damage(c, t, 85, { school: 'phys', ab: 'maul' }); } },
+            { id: 'thrash', name: 'Thrash', glyph: '✺', color: '#ff6a4a', school: 'phys', cost: 25, cd: 6, gcd: true, cast: 0, range: 0, target: false,
+              desc: 'Bear: thrash all enemies within 6 yards for 45 damage plus a 40 damage bleed over 6 sec.',
+              exec(sim, c) { sim.event({ e: 'fx', fx: 'thrash', id: c.id, x: c.x, z: c.z }); sim.aoeMinions(c, c.x, c.z, 6, 45); for (const e of sim.enemiesOf(c)) if (sim.dist(c, e) <= 6) { sim.damage(c, e, 45, { school: 'phys', ab: 'thrash' }); sim.addDot(c, e, 'Thrash', 40, 6, 'phys', '🩸'); } } },
+            { id: 'frenzied_regen', name: 'Frenzied Regeneration', glyph: '✚', color: '#8aff9a', school: 'nature', cost: 20, cd: 30, gcd: false, cast: 0, range: 0, target: false, allowCC: true,
+              desc: 'Bear: regenerate 25% of your maximum health over 5 sec. Usable while stunned.',
+              exec(sim, c) { sim.addHot(c, c, 'Frenzied Regeneration', c.maxHp * 0.25, 5, 'frenzied_regen'); } },
+            null,
+            { id: 'cat_form', name: 'Cat Form', glyph: '🐆', color: '#e8a05a', school: 'nature', cost: 0, cd: 1.5, gcd: false, cast: 0, range: 0, target: false, allowRooted: true,
+              desc: 'Shift into a sleek panther: fast, high damage, combo points. Breaks roots and slows.',
+              exec(sim, c) { sim.shapeshift(c, 'cat'); } },
+            null,
+          ],
+        },
+      },
+    },
+    { id: 'restoration', name: 'Restoration', icon: '🌳', color: '#5aff7a', tag: 'Healer · heal over time, roots, tree form' },
+  ],
 };
+// bear form shares Wild Pounce and Berserk Instinct with cat form
+{ const F = SPECS.druid[0].forms; F.bear.abilities[3] = F.cat.abilities[3]; F.bear.abilities[5] = F.cat.abilities[5]; }
+// melee behind check usable inside ability code (mirrors sim.isBehind)
+function isBehindT(src, tgt) { let d = (Math.atan2(src.x - tgt.x, src.z - tgt.z) - tgt.yaw) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return Math.abs(d) > 1.92; }
 function angleDiffD(a, b) { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; }
 
 export const specsOf = cls => SPECS[cls] || [];
@@ -405,20 +621,25 @@ export const specInfo = (cls, spec) => specsOf(cls).find(s => s.id === validSpec
 
 // The effective kit of a class + spec: class data with the spec's overrides merged in (cached).
 const KITS = new Map();
-export function kit(cls, spec) {
-  const sid = validSpec(cls, spec), key = cls + ':' + sid;
+export function kit(cls, spec, form) {
+  const sid = validSpec(cls, spec), S = specsOf(cls).find(s => s.id === sid) || {};
+  const fid = S.forms && S.forms[form] ? form : (S.forms ? S.defaultForm : null), key = cls + ':' + sid + ':' + (fid || '');
   let k = KITS.get(key);
   if (k) return k;
-  const C = CLASSES[cls], S = specsOf(cls).find(s => s.id === sid) || {};
-  k = { ...C, spec: sid, specName: S.name, specIcon: S.icon, specColor: S.color, look: S.look || null };
-  for (const f of ['role', 'desc', 'weapon', 'armor', 'hp', 'defense', 'speed', 'res', 'resStart', 'regen', 'rating', 'auto', 'melee', 'resType']) if (S[f] !== undefined) k[f] = S[f];
-  if (S.passive) k.passive = { ...C.passive, ...S.passive };
-  if (S.abilities) k.abilities = C.abilities.map((a, i) => S.abilities[i] || a);
+  const C = CLASSES[cls];
+  k = { ...C, spec: sid, specName: S.name, specIcon: S.icon, specColor: S.color, look: S.look || null, defaultForm: S.defaultForm || null, form: fid };
+  const apply = (O) => {
+    for (const f of ['role', 'desc', 'weapon', 'armor', 'hp', 'defense', 'speed', 'res', 'resStart', 'regen', 'rating', 'auto', 'melee', 'resType']) if (O[f] !== undefined) k[f] = O[f];
+    if (O.passive) k.passive = { ...k.passive, ...O.passive };
+    if (O.abilities) k.abilities = k.abilities.map((a, i) => O.abilities[i] || a);
+  };
+  apply(S);
+  if (fid) apply(S.forms[fid]); // shapeshift form (Druid cat / bear) on top of the spec
   KITS.set(key, k);
   return k;
 }
-// effective kit of a fighter (anything with cls + spec)
-export const kitOf = f => kit(f.cls, f.spec);
+// effective kit of a fighter (anything with cls + spec [+ form])
+export const kitOf = f => kit(f.cls, f.spec, f.form);
 
 export const BUFF_ICONS = {
   stun: { icon: '✸', color: '#ffd27a', debuff: true }, root: { icon: '✳', color: '#bfefff', debuff: true },
@@ -429,6 +650,8 @@ export const BUFF_ICONS = {
   stealth: { icon: '◐', color: '#6b5a8f' }, ambush: { icon: '⚡', color: '#ffcf4a' }, tempest: { icon: '✺', color: '#ffe0a0' },
   spirit: { icon: '♆', color: '#ffb03a' }, stoneskin: { icon: '⬢', color: '#b0d080' }, ccimmune: { icon: '✦', color: '#fff' },
   berserk: { icon: '☄', color: '#ff2a1a' }, lifesteal: { icon: '♥', color: '#b01020' },
+  hot: { icon: '✿', color: '#8aff9a' }, wrath: { icon: '🔥', color: '#ff7a3a' }, weaken: { icon: '⇣', color: '#9a7aff', debuff: true },
+  hexed: { icon: '☠', color: '#b070ff', debuff: true }, doom: { icon: '☄', color: '#7a3aff', debuff: true }, treeform: { icon: '🌳', color: '#5aff7a' },
 };
 
 // Bot names. Enemy bots in 2v2 are always Zigi and Jöggu.

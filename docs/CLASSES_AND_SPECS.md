@@ -251,6 +251,7 @@ Decided:
 - Warrior gets Arms + Protection.
 - Fixed race per class (old classes human; Necromancer undead, Hunter troll, Druid bull-folk).
 - Build order: spec system + second spec for the 6 existing classes first.
+- ✅ **Built: all 18 specs** — Assassination, Arms, Shadow, Enhancement (pet system), Hunter, Necromancer, Druid (forms) with races built from the existing bodies (no new downloads). Max 1 pet per player.
 - ✅ **Built: Mage Frost + Fire** (charges, cast-while-moving, Meteor). Fire got 1 Blazing Step charge and Flame Ring instead of Glacial Nova after balance tests.
 - ✅ **First spec built: Berserker Executioner** (slow two-handed axe, big crits). Final numbers in `js/data/classes.js` (balanced to Fury in the lab).
 - Both specs of a class have equal power; you pick by playstyle.

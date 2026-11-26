@@ -1,7 +1,7 @@
 # Runefall Arena
 
-A browser-based 3D fantasy **arena PvP** game in the spirit of classic MMO arenas: six classes,
-36 abilities plus a basic attack each, **1v1 duels and 2v2 team fights**, bots, parties, matchmaking and
+A browser-based 3D fantasy **arena PvP** game in the spirit of classic MMO arenas: nine classes (three of them with their own race),
+two specs per class (18 playable kits), pets and shapeshifting, **1v1 duels and 2v2 team fights**, bots, parties, matchmaking and
 peer-to-peer online play via a shareable link. No install, no build step.
 
 **▶ Play now: https://joeljames236.github.io/runefall-arena/**
@@ -79,6 +79,9 @@ their champion so the match can finish.
 | Berserker | Rage | Bare-chested dual-axe brute: bleeds, execute, axe throw (root), leap slam, lifesteal; *Bloodrage* passive — up to +50% damage as his health drops (in 2v2 also up to 25% less damage taken) | Berserk (sacrifice health for damage + attack speed) |
 | Priest | Mana | Sustain: heals and shields (self or ally), disorient, purge | Halo of Judgment (damage + group heal + purge) |
 | Shaman | Mana | Lightning & magma, stun totem, team-protecting totem, wind dash | Fire Spirit (summoned elemental) |
+| Hunter *(jungle troll)* | Focus | Ranged bow / crossbow, stings, traps, disengage; Beastmaster fights with a jungle cat | Bestial Wrath / Piercing Volley |
+| Necromancer *(undead)* | Mana | Ranged only: rot, bone spears, a ghoul servant or stacking curses; fragile in melee | Abomination / Doom |
+| Druid *(bull-folk)* | Mana / Energy | Feral shapeshifts between panther (damage) and bear (tank); Restoration heals over time and roots | Berserk Instinct / Tree of Life |
 
 Full numbers live in [`js/data/classes.js`](js/data/classes.js) and are shown in-game on the class screen.
 
@@ -96,6 +99,9 @@ The spec shows on unit frames, nameplates and in the lobby.
 | Berserker | 🪓 Fury: two axes, fast flurries | 💀 **Executioner**: one great axe, slow swings, big crits (*Heavy Hands*: +12% crit chance, crits +80%); Skullsplitter, Ground Breaker, Iron Hide, Headtaker |
 | Priest | ✦ Discipline | 🌑 **Shadow**: *Shadowform* (+15% shadow damage, 15% less taken), Shadow Word: Pain, Mind Blast (self-heal), Psychic Scream, Void Eruption |
 | Shaman | ⚡ Elemental | 🐺 **Enhancement**: melee with two storm axes, *Maelstrom* (lightning procs), Stormstrike, Lava Lash, Healing Surge, Earthbind Totem, Spirit Wolf pet |
+| Hunter | 🐾 **Beastmaster**: jungle cat pet, Kill Command, Serpent Sting, Intimidation, Bestial Wrath | 🎯 **Sharpshooter**: no pet, crossbow, *Steady Aim*, Aimed Shot, Freezing Trap, Piercing Volley |
+| Necromancer | 💀 **Summoner**: ghoul servant that keeps rising, Soul Rot, Corpse Explosion, Abomination | ☠ **Curser**: *Martyr's Curse* (more curses = more damage taken, both ways), Curse of Agony / Weakness, Soul Siphon, Doom |
+| Druid | 🐾 **Feral**: cat form (Rake, Shred, Ferocious Bite) ⇄ bear form (Maul, Thrash, Frenzied Regeneration), Wild Pounce, Berserk Instinct | 🌳 **Restoration**: stacking Rejuvenation, Regrowth, Moonfire, Entangling Roots, Wild Charge, Tree of Life |
 
 Design of all specs and the planned new classes: [`docs/CLASSES_AND_SPECS.md`](docs/CLASSES_AND_SPECS.md).
 
@@ -104,8 +110,8 @@ Design of all specs and the planned new classes: [`docs/CLASSES_AND_SPECS.md`](d
 Open <http://localhost:8080/balance.html> to run headless AI-vs-AI simulations: a 1v1 win-rate matrix, or
 every 2v2 team composition against every other. It measures the AI's play rather than expert human play,
 so use it as a guide. Every playable spec is its own entry (e.g. `berserker:fury`, `berserker:executioner`).
-Latest runs (hard AI, with the bridge): **1v1**: classes and specs between 38% and 67% overall (Frost ~55%, Fire ~51%);
-**2v2**: between 41% (Berserker Executioner) and 58%; Frost and Fire Mage both 48%; strongest composition Rogue + Priest (~77%).
+Latest runs (hard AI, 18 class/spec entries): **1v1**: between 36% (Berserker Executioner) and 66% (Elemental Shaman);
+**2v2** (2,400 random team-ups): between 37% (Executioner) and 64% (Discipline Priest); every new class and spec lands 41–58%.
 
 ## Project layout
 
@@ -113,7 +119,7 @@ Latest runs (hard AI, with the bridge): **1v1**: classes and specs between 38% a
 index.html               UI markup + import map (Three.js, PeerJS from CDN)
 css/style.css            Menus, lobby & HUD styling (responsive)
 js/main.js               App flow: screens, modes, rooms/parties, matchmaking hand-off, game loop, net glue
-js/data/classes.js       Classes, stats, basic attacks and all 36 abilities (gameplay in each ability's exec)
+js/data/classes.js       Classes, specs, forms, stats and all abilities (gameplay in each ability's exec)
 js/sim/sim.js            Authoritative combat simulation for N fighters in two teams (no rendering)
 js/sim/ai.js             Bots (same inputs and rules as players): focus targeting, kiting, interrupts, healing
 js/net.js                PeerJS star network (host + up to 3 guests) and serverless 2v2 matchmaking
@@ -123,7 +129,8 @@ js/render/world.js       Scene, lighting, post-processing, camera, team rings, s
 js/render/arena.js       Procedural arena, sky, terrain, crowd, banners, statues, backdrop
 js/render/bridge.js      The central arch bridge (same dimensions as BRIDGE in sim.js)
 js/render/heroes.js      Rigged champions (outfits, animation mixer, weapon grips)
-js/render/armory.js      Class armor sets + weapons (built in code, merged per bone for few draw calls)
+js/render/armory.js      Class armor sets, race features + weapons (built in code, merged per bone for few draw calls)
+js/render/minions.js     Pets & summons (wolf, jungle cat, ghoul hookup) and Druid forms (panther, bear, treant)
 js/render/characters.js  Procedural fallback champion models
 js/render/vfx.js         Pooled particles (glow + smoke), projectiles, casting circles, spell effects
 js/ui/hud.js             Unit/party/arena frames, action bar, cast bars, nameplates, combat text

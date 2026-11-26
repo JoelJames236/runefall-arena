@@ -15,7 +15,7 @@ const MELEE_CLASSES = new Set(['rogue', 'warrior', 'berserker']);
 // melee or not: a spec can override its class (e.g. Enhancement Shaman fights in melee)
 const isMelee = f => { const k = kitOf(f); return k.melee ?? MELEE_CLASSES.has(f.cls); };
 const HEALERS = new Set(['priest']);
-const INTERRUPTS = { berserker: [], warrior: ['shield_slam'], rogue: ['skull_crack'], priest: ['blinding_light'], mage: [], shaman: ['quake_totem'] };
+const INTERRUPTS = { berserker: [], warrior: ['shield_slam'], rogue: ['skull_crack'], priest: ['blinding_light', 'psychic_scream'], mage: [], shaman: ['quake_totem'], hunter: ['intimidation'], necromancer: [], druid: [] };
 
 export class AI {
   constructor(sim, id, difficulty = 'normal') {
@@ -194,7 +194,7 @@ export class AI {
       for (const z of sim.zones) {
         const owner = sim.fighters[z.owner];
         const dx = me.x - z.x, dz = me.z - z.z, d = Math.hypot(dx, dz);
-        if ((z.type === 'quake' || z.type === 'meteor' || z.type === 'plague') && owner.team !== me.team && d < z.r + 1 && Math.random() < this.d.dodge + 0.05) { wantX = dx / (d || 1) * 2; wantZ = dz / (d || 1) * 2; }
+        if ((z.type === 'quake' || z.type === 'meteor' || z.type === 'plague' || z.type === 'trap') && owner.team !== me.team && d < z.r + 1 && Math.random() < this.d.dodge + 0.05) { wantX = dx / (d || 1) * 2; wantZ = dz / (d || 1) * 2; }
         if (z.type === 'stoneskin' && owner.team === me.team && !melee && d > z.r - 2 && d < z.r + 6) { wantX -= dx / d * 1.2; wantZ -= dz / d * 1.2; }
       }
     }
@@ -442,6 +442,78 @@ export class AI {
         if (visible && (p = use('magma_burst'))) return p;
         if (visible && freeCast && (p = use('lightning_lash'))) return p;
         return null;
+      case 'hunter': {
+        if (me.spec === 'sharpshooter') {
+          if (def && td < 6 && threatMelee && (p = use('disengage'))) return p;
+          if (!visible) return null;
+          if (td < 9 && threatMelee && !threatCC && (p = use('freezing_trap', { tid: threat.id }))) return p;
+          if (foeHp < 0.45 && (p = use('piercing_volley'))) return p;
+          if (!hasBuff(foe, 'slow') && dist < 20 && (p = use('concussive_bolt'))) return p;
+          if (!foe.buffs.some(b => b.name === 'Serpent Sting' && b.src === me.id) && (p = use('serpent_sting'))) return p;
+          if (freeCast && (p = use('aimed_shot'))) return p;
+          return null;
+        }
+        const pet = sim.minionOf(me);
+        if (!pet && (p = use('bestial_bond'))) return p;
+        if (def && (hp < 0.5 || (pet && pet.hp / pet.maxHp < 0.3)) && (p = use('bestial_bond'))) return p;
+        if (def && td < 6 && threatMelee && (p = use('disengage'))) return p;
+        if (!visible) return null;
+        if (pet && (foeHp < 0.6 || hp < 0.6) && (p = use('bestial_wrath'))) return p;
+        if ((foe.cast || (td < 6 && threatMelee)) && (p = use('intimidation', { tid: foe.cast ? foe.id : threat.id }))) return p;
+        if (!foe.buffs.some(b => b.name === 'Serpent Sting' && b.src === me.id) && (p = use('serpent_sting'))) return p;
+        if ((p = use('kill_command'))) return p;
+        return null; }
+      case 'necromancer': {
+        if (def && hp < 0.5 && (p = use('bone_shield'))) return p;
+        if (def && (hasBuff(me, 'root') || (td < 5 && threatMelee && !threatCC)) && (p = use('grave_step'))) return p;
+        if (!visible) return null;
+        if (me.spec === 'curser') {
+          const n = sim.curses(me, foe);
+          if (!foe.buffs.some(b => b.name === 'Curse of Agony' && b.src === me.id && b.t > 2) && (p = use('curse_of_agony'))) return p;
+          if (!foe.buffs.some(b => b.name === 'Curse of Weakness' && b.src === me.id) && (p = use('curse_of_weakness'))) return p;
+          if (n >= 2 && (p = use('doom'))) return p;
+          if (n >= 2 && (p = use('soul_siphon'))) return p;
+          if (!hasBuff(foe, 'slow') && (p = use('bone_spear'))) return p;
+          return null;
+        }
+        const servant = sim.minionOf(me);
+        if (servant && (foeHp < 0.7 || td < 8) && (p = use('abomination'))) return p;
+        if (servant && Math.hypot(servant.x - foe.x, servant.z - foe.z) < 4 && (servant.hp / servant.maxHp < 0.4 || foeHp < 0.3) && (p = use('corpse_explosion'))) return p;
+        if (!hasBuff(foe, 'slow') && (p = use('bone_spear'))) return p;
+        if (freeCast && (p = use('soul_rot'))) return p;
+        if ((p = use('bone_spear'))) return p;
+        return null; }
+      case 'druid': {
+        if (me.spec === 'feral') {
+          if (me.form !== 'bear' && def && hp < 0.35 && (p = use('bear_form'))) return p;
+          if (me.form === 'bear') {
+            if (def && hp < 0.6 && (p = use('frenzied_regen'))) return p;
+            if (hp > 0.7 && (p = use('cat_form'))) return p;
+            if (!visible) return null;
+            if (dist > 7 && (p = use('wild_pounce'))) return p;
+            if (near(6) >= 1 && (p = use('thrash'))) return p;
+            if ((p = use('maul'))) return p;
+            return null;
+          }
+          if (!visible) return null;
+          if (dist > 7 && (p = use('wild_pounce'))) return p;
+          if (dist < 5 && foeHp < 0.6 && (p = use('berserk_instinct'))) return p;
+          if ((me.cp >= 5 || (me.cp >= 3 && foeHp < 0.25)) && (p = use('ferocious_bite'))) return p;
+          if (!foe.buffs.some(b => b.name === 'Rake' && b.src === me.id) && (p = use('rake'))) return p;
+          if ((p = use('shred'))) return p;
+          return null;
+        }
+        // Restoration: keep everyone topped up with stacking heals, root melee, kite
+        const low = this.hurtFriend(me, allies, 0.5);
+        if (low && (p = use('tree_of_life'))) return p;
+        if (def && (hasBuff(me, 'root') || (td < 5 && threatMelee && !threatCC)) && (p = use('wild_charge', { dir: away() }))) return p;
+        if (td < 8 && threatMelee && !threatCC && (p = use('entangling_roots', { tid: threat.id }))) return p;
+        const hurt = this.hurtFriend(me, allies, 0.85);
+        if (hurt && (hurt.buffs.find(b => b.name === 'Rejuvenation' && b.src === me.id)?.data.stacks || 0) < 3 && (p = use('rejuvenation', { tid: hurt.id }))) return p;
+        const heal = this.hurtFriend(me, allies, 0.6);
+        if (heal && freeCast && (p = use('regrowth', { tid: heal.id }))) return p;
+        if (visible && !foe.buffs.some(b => b.name === 'Moonfire' && b.src === me.id) && (p = use('moonfire'))) return p;
+        return null; }
     }
     return null;
   }

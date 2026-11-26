@@ -1,7 +1,7 @@
 // Authoritative combat simulation. Runs on the host (or locally vs. AI).
 // Pure logic — no rendering — so it can be serialized and driven over the network.
 // Supports any number of fighters split into two teams (1v1 and 2v2).
-import { CLASSES, kitOf, validSpec } from '../data/classes.js';
+import { CLASSES, kit, kitOf, validSpec } from '../data/classes.js';
 
 export const ARENA_R = 29;
 export const PILLARS = [0, 1, 2, 3].map(i => {
@@ -15,7 +15,7 @@ const MOVE_ABS = new Set(['arcane_shift', 'shadow_leap', 'bull_rush', 'gale_dash
 // Berserker passive: up to +60% damage as health drops (linear with missing health)
 export const bloodrage = f => f.cls === 'berserker' ? 1 + (CLASSES.berserker.passive.maxBonus) * (1 - Math.max(0, f.hp) / f.maxHp) : 1;
 const STUNLIKE = ['stun', 'disorient'];
-const RES_NAME = { mana: 'mana', energy: 'energy', rage: 'rage' };
+const RES_NAME = { mana: 'mana', energy: 'energy', rage: 'rage', focus: 'focus' };
 const MELEE_AUTO_RANGE = 4.5;
 
 // ---------------------------------------------------------------- helpers
@@ -207,7 +207,7 @@ const freshStats = () => ({ dmg: 0, heal: 0, absorbed: 0, ccs: 0, interrupts: 0,
 function makeFighter(id, spec) {
   const sid = validSpec(spec.cls, spec.spec), C = kitOf({ cls: spec.cls, spec: sid });
   return {
-    id, cls: spec.cls, spec: sid, team: spec.team, name: spec.name || C.name, bot: !!spec.bot,
+    id, cls: spec.cls, spec: sid, form: C.defaultForm || null, team: spec.team, name: spec.name || C.name, bot: !!spec.bot,
     x: 0, y: 0, z: 0, vy: 0, yaw: 0, hp: C.hp, maxHp: C.hp,
     res: C.resStart ?? C.res, maxRes: C.res, resType: C.resType,
     cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [], cp: 0, stamina: 100, alive: true,
@@ -255,7 +255,7 @@ export class Sim {
       const C = kitOf(f);
       Object.assign(f, {
         hp: C.hp, maxHp: C.hp, res: C.resStart ?? C.res, maxRes: C.res, cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [],
-        cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, autoOn: false,
+        cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, autoOn: false, form: kit(f.cls, f.spec).defaultForm || null, petT: 0,
         target: this.defaultTarget(f), friend: -1,
       });
       const s = this.spawnOf(f);
@@ -294,7 +294,7 @@ export class Sim {
         if (inp.remote) { f.yaw = inp.remote.yaw; } else if (inp.yaw !== undefined) f.yaw = inp.yaw;
         this.applyTargeting(f, inp);
       }
-      if (this.stateT <= 0) { this.state = 'fight'; this.fightT = 0; this.event({ e: 'fight' }); }
+      if (this.stateT <= 0) { this.state = 'fight'; this.fightT = 0; for (const f of this.fighters) f.petT = 0; this.event({ e: 'fight' }); } // pets appear when the gates open
       return;
     }
     if (this.state === 'roundEnd') {
@@ -421,6 +421,7 @@ export class Sim {
     if (ab.gcd && f.gcd > 0 && !ignoreGcd) return 'GCD';
     if (ab.cost > f.res) return `Not enough ${RES_NAME[f.resType]}`;
     if (ab.needsCp && f.cp < 1) return 'No combo points';
+    if (ab.needsPet && !this.minionOf(f)) return 'Your pet is not here';
     if (ab.target) {
       const t = this.hostileFor(f, opts.tid);
       if (!t) return 'No target';
@@ -523,7 +524,11 @@ export class Sim {
     f.autoT = A.speed / (hasBuff(f, 'berserk') ? 1.3 : 1);
     this.removeBuff(f, 'stealth');
     this.event({ e: 'auto', id: f.id, tid: t.id, ranged: !!A.ranged });
-    if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => { this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true }); if (A.burn) this.kindle(f, t); });
+    if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => {
+      this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
+      if (A.burn) this.kindle(f, t); // Fire Mage: Kindling
+      if (A.hex) { const b = this.addBuff(t, 'hexed', 4, { src: f.id, name: 'Hex', icon: '☠' }); if (b) b.data.curse = true; } // Curser: Hex
+    });
     else {
       this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
       if (A.poison) this.poison(f, t); // Assassination: Venom Mastery
@@ -542,6 +547,10 @@ export class Sim {
       if (mx && f.cds[i] <= 0 && f.ch[i] < mx) { f.ch[i]++; if (f.ch[i] < mx) f.cds[i] = C.abilities[i].cd; }
     }
     f.res = Math.min(f.maxRes, f.res + C.regen * dt);
+    f.stillT = f.moving ? 0 : (f.stillT || 0) + dt; // Sharpshooter Steady Aim
+    // permanent pets (Hunter Beastmaster, Necromancer Summoner): appear at the fight start, rise again after dying
+    const PET = C.passive && C.passive.pet;
+    if (PET && this.state === 'fight' && !this.minionOf(f)) { f.petT = (f.petT ?? 0) - dt; if (f.petT <= 0) { this.summon(f, PET.kind, PET); f.petT = PET.respawn; } }
     // queued ability
     if (f.queued) {
       f.queued.t -= dt;
@@ -584,6 +593,9 @@ export class Sim {
           b.data.acc -= 1; b.data.ticks--;
           this.damage(this.fighters[b.src], f, b.data.per, { school: b.data.school, ab: 'dot', dot: true });
         }
+      } else if (b.type === 'hot') { // heal over time (Druid)
+        b.data.acc += dt;
+        while (b.data.acc >= 1 && b.data.ticks > 0) { b.data.acc -= 1; b.data.ticks--; this.heal(this.fighters[b.src], f, b.data.per, b.data.ab || 'hot'); }
       } else if (b.type === 'tempest') {
         b.data.tick -= dt;
         if (b.data.tick <= 0) {
@@ -604,6 +616,11 @@ export class Sim {
       }
       if (b.t <= 0) {
         f.buffs.splice(i, 1);
+        if (b.type === 'doom' && f.alive) { // Necromancer Curser signature: detonates when it runs out
+          const src = this.fighters[b.src], n = f.buffs.filter(x => x.src === b.src && x.data?.curse).length;
+          this.event({ e: 'fx', fx: 'doom_pop', id: f.id, x: f.x, z: f.z });
+          this.damage(src, f, b.data.dmg + b.data.per * n, { school: 'shadow', ab: 'doom', big: true });
+        }
         if (b.type === 'mark') {
           const src = this.fighters[b.src];
           this.event({ e: 'fx', fx: 'death_mark_pop', id: f.id, x: f.x, z: f.z });
@@ -671,7 +688,7 @@ export class Sim {
     const back = src !== tgt && !o.dot && isBehind(src, tgt);
     if (back) amt *= RULES.backMult;
     const SP = kitOf(src).passive || {}; // e.g. Executioner "Heavy Hands": more and bigger crits
-    const crit = direct && !o.noCrit && (o.forceCrit || Math.random() < RULES.critChance + (SP.critBonus || 0) + (SP.critVsRooted && hasBuff(tgt, 'root') ? SP.critVsRooted : 0)); // Frost Shatter
+    const crit = direct && !o.noCrit && (o.forceCrit || Math.random() < RULES.critChance + (SP.critBonus || 0) + (SP.critVsRooted && hasBuff(tgt, 'root') ? SP.critVsRooted : 0) + (SP.steadyCrit && (src.stillT || 0) >= 1 ? SP.steadyCrit : 0)); // Frost Shatter, Steady Aim
     if (crit) { amt *= SP.critMult || RULES.critMult; src.stats.crits++; }
     amt *= bloodrage(src);
     // spec passives: execute bonus (Arms), poison bonus (Assassination), school bonus / damage taken (Shadowform)
@@ -679,6 +696,13 @@ export class Sim {
     if (SP.poisonBonus) amt *= 1 + SP.poisonBonus * this.stacksOf(src, tgt, 'Deadly Poison');
     if (SP.schoolBonus) amt *= 1 + (SP.schoolBonus[o.school] || 0);
     const TP = kitOf(tgt).passive; if (TP && TP.takenMult) amt *= TP.takenMult;
+    const wk = src.buffs.find(b => b.type === 'weaken'); if (wk) amt *= 1 - wk.value; // Curse of Weakness
+    // Martyr's Curse (Necromancer Curser): every curse on the target = +6% damage taken (max 5);
+    // the curser itself takes +3% per curse it keeps on enemies
+    const cursed = tgt.buffs.filter(b => b.data && b.data.curse && kitOf(this.fighters[b.src] || src).passive?.martyr).length; if (cursed) amt *= 1 + 0.06 * Math.min(5, cursed);
+    const wr = getBuff(src, 'wrath'); if (wr) amt *= 1 + wr.value; // Bestial Wrath / Berserk Instinct
+    if (TP && TP.martyr) { let mine = 0; for (const e of this.fighters) if (e.team !== tgt.team) mine += e.buffs.filter(b => b.src === tgt.id && b.data && b.data.curse).length; amt *= 1 + 0.03 * Math.min(5, mine); }
+    if (SP.steadyAim && (src.stillT || 0) >= 1 && !o.dot) amt *= 1 + SP.steadyAim; // Sharpshooter: standing still
     const bz = getBuff(src, 'berserk'); if (bz) amt *= 1 + bz.value;
     amt *= 1 - kitOf(tgt).defense;
     for (const b of tgt.buffs) if (b.type === 'dr' || b.type === 'stoneskin') amt *= 1 - b.value;
@@ -689,7 +713,7 @@ export class Sim {
     amt = Math.max(1, Math.round(amt));
     let absorbed = 0;
     for (const b of tgt.buffs) {
-      if (b.type !== 'absorb' || amt <= 0) continue;
+      if (b.type !== 'absorb' || amt <= 0 || o.pierce) continue; // pierce: ignores shields
       const a = Math.min(b.value, amt); b.value -= a; amt -= a; absorbed += a;
       if (b.value <= 0) b.t = 0;
     }
@@ -732,6 +756,7 @@ export class Sim {
     let amt = amount * (0.95 + Math.random() * 0.1);
     const crit = Math.random() < RULES.critChance;
     if (crit) amt *= RULES.critMult;
+    if (src && hasBuff(src, 'treeform')) amt *= 1.4; // Druid Tree of Life: +40% healing done
     const hr = tgt.buffs.reduce((m, b) => b.type === 'healred' ? Math.max(m, b.value) : m, 0);
     amt *= (1 - hr) * (1 - this.damp / 100);
     amt = Math.round(Math.min(amt, tgt.maxHp - tgt.hp));
@@ -743,7 +768,7 @@ export class Sim {
 
   addBuff(f, type, dur, o = {}) {
     if (!f.alive) return null;
-    if (type === 'slow' && o.src !== f.id && hasBuff(f, 'berserk')) return null; // berserk: immune to slows
+    if (type === 'slow' && o.src !== f.id && (hasBuff(f, 'berserk') || hasBuff(f, 'treeform'))) return null; // berserk / Tree of Life: immune to slows
     if (o.cc) {
       if (hasBuff(f, 'tempest') || hasBuff(f, 'ccimmune')) { this.event({ e: 'immune', id: f.id }); return null; }
       if (o.cc === 'root' && hasBuff(f, 'berserk')) { this.event({ e: 'immune', id: f.id }); return null; }
@@ -776,6 +801,18 @@ export class Sim {
     return n;
   }
   stacksOf(src, tgt, name) { return tgt.buffs.find(x => x.type === 'dot' && x.name === name && x.src === src.id)?.data.stacks || 0; }
+  // heal over time; stacking adds a stack (up to max) and refreshes (Druid Rejuvenation stacks 3x)
+  addHot(src, tgt, name, total, dur, ab, max = 1) {
+    if (!tgt.alive) return 0;
+    const find = () => tgt.buffs.find(x => x.type === 'hot' && x.name === name && x.src === src.id);
+    const n = Math.min(max, (find()?.data.stacks || 0) + 1), ticks = Math.round(dur);
+    const b = this.addBuff(tgt, 'hot', dur + 0.05, { src: src.id, name, icon: '✿', data: { acc: 0, ticks, per: total * n / ticks, ab, stacks: n } });
+    if (b) { b.data = { acc: 0, ticks, per: total * n / ticks, ab, stacks: n }; b.t = dur + 0.05; }
+    return n;
+  }
+  // curse = any of a Necromancer's effects flagged data.curse (counted by Martyr's Curse and Doom)
+  curses(src, tgt) { return tgt.buffs.filter(b => b.src === src.id && b.data && b.data.curse).length; }
+  curseDot(src, tgt, name, total, dur, icon) { this.addDot(src, tgt, name, total, dur, 'shadow', icon); const b = tgt.buffs.find(x => x.type === 'dot' && x.name === name && x.src === src.id); if (b) b.data.curse = true; }
   // Fire Mage passive Kindling: Burning stacks up to 3 (25 damage over 4 sec per stack)
   kindle(src, tgt) { return this.stackDot(src, tgt, 'Burning', 25, 4, 3, 'fire', '🔥'); }
   // Assassination passive Venom Mastery: Deadly Poison stacks up to 5 (14 damage over 4 sec per stack)
@@ -858,6 +895,13 @@ export class Sim {
           this.addBuff(f, 'stun', 1, { src: owner.id, cc: 'cc', name: 'Meteor Strike', icon: '☄' });
           if (z.data.burn) this.kindle(owner, f);
         }
+      } else if (z.type === 'trap') {
+        // Sharpshooter Freezing Trap: arms after 1 sec, freezes the first enemy that steps in, then breaks
+        if (z.t > 1) for (const e of this.enemiesOf(owner)) if (this.inZone(e, z)) {
+          this.event({ e: 'fx', fx: 'trap_spring', id: z.owner, x: z.x, y: z.y, z: z.z });
+          this.interrupt(e, owner); this.addBuff(e, 'disorient', 4, { src: owner.id, cc: 'cc', name: 'Frozen Trap', icon: '❄' });
+          z.t = z.dur; break;
+        }
       } else if (z.type === 'earthbind') {
         // Enhancement totem: enemies inside are slowed by 50%
         for (const e of this.enemiesOf(owner)) if (this.inZone(e, z)) {
@@ -903,18 +947,24 @@ export class Sim {
     return m;
   }
   minionOf(owner) { return this.minions.find(m => m.owner === owner.id) || null; }
+  // Druid Feral: change form (the ability bar, stats and model follow the form); breaks roots and slows
+  shapeshift(f, form) {
+    if (f.form === form) return;
+    f.form = form; this.cleanse(f, ['root', 'slow']);
+    this.event({ e: 'fx', fx: 'shapeshift', id: f.id, x: f.x, z: f.z, form });
+  }
   killMinion(m) { m.hp = 0; }
   // enemy area damage also hits minions inside the area
   aoeMinions(src, x, z, r, amt) {
     for (const m of this.minions) if (m.team !== src.team && m.hp > 0 && Math.hypot(m.x - x, m.z - z) <= r) {
-      const d = Math.round(amt * m.aoeTaken); m.hp -= d;
+      const d = Math.round(amt * m.aoeTaken * (m.rageT > 0 ? 0 : 1)); m.hp -= d; // Bestial Wrath: ignores area damage
       this.event({ e: 'minionHit', id: m.id, amt: d, x: m.x, y: m.y, z: m.z });
     }
   }
   updateMinions(dt) {
     for (let i = this.minions.length - 1; i >= 0; i--) {
       const m = this.minions[i], owner = this.fighters[m.owner];
-      m.life -= dt; m.atkT = Math.max(0, m.atkT - dt); m.atkFlash = Math.max(0, m.atkFlash - dt);
+      m.life -= dt; m.atkT = Math.max(0, m.atkT - dt); m.atkFlash = Math.max(0, m.atkFlash - dt); m.rageT = Math.max(0, (m.rageT || 0) - dt);
       if (m.hp <= 0 || m.life <= 0 || !owner.alive || this.state !== 'fight') {
         this.minions.splice(i, 1); this.event({ e: 'minionDie', id: m.id, x: m.x, z: m.z, kind: m.kind }); continue;
       }
@@ -935,7 +985,7 @@ export class Sim {
         } else if (m.atkT <= 0) {
           m.atkT = m.atkSpeed; m.atkFlash = 0.35;
           this.event({ e: 'minionAtk', id: m.id, tid: t.id });
-          this.damage(owner, t, m.dmg, { school: 'phys', ab: 'pet_' + m.kind, pet: true });
+          this.damage(owner, t, m.dmg * (m.rageT > 0 ? 2 : 1), { school: 'phys', ab: 'pet_' + m.kind, pet: true });
           if (m.onHit) m.onHit(this, m, t);
         }
       } else if (Math.hypot(owner.x - m.x, owner.z - m.z) > 3) { // no enemy: heel at the owner's side
@@ -1029,7 +1079,7 @@ export class Sim {
     return {
       s: this.state, st: r(this.stateT), r: this.round, sc: this.score, ft: r(this.fightT), dp: r(this.damp), w: this.winner,
       f: this.fighters.map(f => ({
-        id: f.id, cls: f.cls, spec: f.spec, team: f.team, name: f.name, bot: f.bot,
+        id: f.id, cls: f.cls, spec: f.spec, form: f.form, team: f.team, name: f.name, bot: f.bot,
         x: r(f.x), y: r(f.y), z: r(f.z), yaw: r(f.yaw), hp: Math.round(f.hp), maxHp: f.maxHp, res: Math.round(f.res), maxRes: f.maxRes, resType: f.resType,
         cds: f.cds.map(r), ch: f.ch, gcd: r(f.gcd), cast: f.cast ? { idx: f.cast.idx, t: r(f.cast.t), dur: f.cast.dur, tid: f.cast.tid } : null,
         buffs: f.buffs.map(b => ({ type: b.type, t: r(b.t), dur: r(b.dur), value: r(b.value), name: b.name, icon: b.icon, src: b.src, fx: b.fx })),

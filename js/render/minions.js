@@ -14,7 +14,7 @@ function stripeTex() {
 }
 
 // a four-legged beast: body, chest, neck, head with snout + ears, tail, 4 two-part legs
-function quadruped({ body, belly, glow, size = 1, ears = 'pointed', maneColor, leg }) {
+function quadruped({ body, belly, glow, size = 1, ears = 'pointed', maneColor, leg, legLen = 1, bulk = 1, long = 1 }) {
   leg = leg || body;
   const root = new THREE.Group(), rig = new THREE.Group(); root.add(rig); rig.scale.setScalar(size);
   const mesh = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; return m; };
@@ -43,6 +43,13 @@ function quadruped({ body, belly, glow, size = 1, ears = 'pointed', maneColor, l
     const lo = mesh(new THREE.CapsuleGeometry(0.045, 0.22, 4, 8), leg); lo.position.y = -0.13; knee.add(lo);
     const paw = mesh(new THREE.SphereGeometry(0.06, 8, 6), belly); paw.scale.set(1, 0.6, 1.3); paw.position.set(0, -0.28, 0.03); knee.add(paw);
     legs.push({ hip, knee, phase: (x > 0 ? 0 : Math.PI) + (z > 0 ? 0 : Math.PI / 2) });
+  }
+  // proportions: shorter legs lower the whole body (bear), long stretches body + tail (panther), bulk thickens
+  if (legLen !== 1 || bulk !== 1 || long !== 1) {
+    const d = 0.62 * (1 - legLen), hips = legs.map(l => l.hip);
+    for (const c of rig.children) if (!hips.includes(c)) { c.position.y -= d; c.position.z *= long; }
+    torso.scale.set(bulk, long, bulk); chest.scale.multiplyScalar(Math.sqrt(bulk)); under.scale.set(bulk * 0.9, long, bulk * 0.9);
+    for (const h of hips) { h.position.y -= d; h.position.z *= long; h.scale.set(bulk, legLen, bulk); }
   }
   let t = 0, lunge = 0;
   return {
@@ -97,4 +104,32 @@ export function makeMinion(kind, hostile, makeHumanoid) {
     },
     dispose() { root.traverse(o => { if (o.geometry) o.geometry.dispose(); }); },
   };
+}
+
+// Druid shapeshift models: 'cat' (black panther), 'bear' (armored brown bear), 'tree' (Tree of Life treant)
+export function makeFormModel(form) {
+  const root = new THREE.Group();
+  if (form === 'tree') {
+    const bark = std(0x5a3a22, { roughness: 1, flatShading: true }), leaf = std(0x3a8a2a, { roughness: 0.9, emissive: 0x1a5a10, emissiveIntensity: 0.4, flatShading: true });
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.42, 1.9, 9), bark); trunk.position.y = 0.95; trunk.castShadow = true; root.add(trunk);
+    for (const s of [-1, 1]) { const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.12, 1.0, 6), bark); arm.position.set(s * 0.45, 1.5, 0); arm.rotation.z = -s * 0.9; arm.castShadow = true; root.add(arm);
+      const root2 = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.6, 5), bark); root2.position.set(s * 0.3, 0.12, 0.1); root2.rotation.z = s * 1.1; root.add(root2); }
+    for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45 + (i % 3) * 0.08, 0), leaf); c.position.set(Math.sin(a) * 0.45, 2.2 + Math.cos(a * 2) * 0.15, Math.cos(a) * 0.45); c.castShadow = true; root.add(c); }
+    const top = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 0), leaf); top.position.y = 2.6; root.add(top);
+    const face = new THREE.Group(); face.position.set(0, 1.45, 0.28);
+    for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: 0xbaff6a })); e.position.x = s * 0.1; face.add(e); }
+    root.add(face);
+    let t = 0;
+    return { root, update(dt, moving) { t += dt * (moving ? 6 : 1.5); root.rotation.z = Math.sin(t) * (moving ? 0.05 : 0.015); } };
+  }
+  const bear = form === 'bear';
+  const body = bear ? std(0x5a3a22, { roughness: 1 }) : std(0x15151c, { roughness: 0.6, metalness: 0.1 });
+  const belly = bear ? std(0x3a2414, { roughness: 1 }) : std(0x22222a, { roughness: 0.6 });
+  const beast = quadruped({ body, belly, glow: bear ? 0xffc060 : 0xb8ff6a, size: bear ? 1.75 : 1.35, ears: bear ? 'round' : 'pointed', maneColor: bear ? 0x4a2e18 : null,
+    legLen: bear ? 0.74 : 0.8, bulk: bear ? 1.35 : 0.9, long: bear ? 1.0 : 1.25 });
+  if (bear) { beast.tail.scale.setScalar(0.3); // stubby bear tail; bark armor plates on the back
+    const plate = std(0x6a5a40, { roughness: 0.9, flatShading: true });
+    for (let i = 0; i < 3; i++) { const p = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16, 0), plate); p.position.set(0, 0.62, 0.22 - i * 0.26); p.scale.set(1.8, 0.5, 1); beast.rig.add(p); } }
+  root.add(beast.root);
+  return { root, update(dt, moving, atk) { beast.update(dt, moving, atk, bear ? 0.8 : 1.2); } };
 }

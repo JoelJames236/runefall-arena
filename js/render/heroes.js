@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { makeMaterials, makeClassWeapon, equipArmor } from './armory.js';
+import { makeFormModel } from './minions.js';
 
 const M = 'assets/models/', P = 'assets/props/', TX = 'assets/tex/';
 const GL = {};        // loaded glTFs by name
@@ -35,6 +36,19 @@ const LOOKS = {
     tint: [0.42, 0.3, 0.2], tintAmt: 0.6, skinTint: [0.86, 0.72, 0.62], scale: 1.03, weapons: ['stormaxe', 'fireOrb'], idle: 'Idle_Loop', glow: 0x4ad8ff },
 };
 // spec looks ("class:spec"): overrides on top of the class look
+// new classes, each with a fixed race (built from the same CC0 bodies; race features are added by the armory)
+LOOKS.hunter = { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: ['Head_Hood'], // jungle troll: tall, blue-green skin
+  tint: [0.28, 0.3, 0.22], tintAmt: 0.6, skinTint: [0.42, 0.62, 0.66], scale: 1.12, weapons: ['bow'], idle: 'Idle_Loop' };
+LOOKS['hunter:sharpshooter'] = { ...LOOKS.hunter, weapons: ['crossbow'], idle: 'Pistol_Idle_Loop', tint: [0.24, 0.2, 0.16] };
+LOOKS.necromancer = { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: [], // undead: grey-green skin, hooded grave-robes
+  tint: [0.14, 0.17, 0.13], tintAmt: 0.85, skinTint: [0.55, 0.62, 0.5], scale: 1.0, weapons: ['bonestaff'], idle: 'Idle_Loop', glow: 0x7aff6a };
+LOOKS['necromancer:curser'] = { ...LOOKS.necromancer, tint: [0.15, 0.1, 0.2], glow: 0xb070ff };
+LOOKS.druid = { outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], hair: ['Hair_Long'], hide: [], // bull-folk: huge, brown fur
+  tint: [0.3, 0.24, 0.14], tintAmt: 0.6, skinTint: [0.52, 0.36, 0.24], scale: 1.24, weapons: ['druidstaff'], idle: 'Idle_Loop', glow: 0x8ad86a, hairTint: [0.18, 0.11, 0.07] };
+LOOKS['druid:feral'] = { ...LOOKS.druid, weapons: [] };
+// undead summons (minions)
+LOOKS.ghoul = { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: [], hide: [], tint: [0.2, 0.24, 0.16], tintAmt: 0.8, skinTint: [0.5, 0.6, 0.42], scale: 0.95, weapons: [], idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', noArmor: true };
+LOOKS.abomination = { ...LOOKS.ghoul, outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], skinTint: [0.55, 0.66, 0.46], scale: 1.55 };
 LOOKS['rogue:assassination'] = { ...LOOKS.rogue, tint: [0.1, 0.2, 0.1], tintAmt: 0.85 }; // dark green poisoner leathers
 LOOKS['warrior:arms'] = { ...LOOKS.warrior, weapons: ['greatsword'], idle: 'Sword_Idle', tint: [0.36, 0.2, 0.18] }; // two-handed greatsword, no shield
 LOOKS['priest:shadow'] = { ...LOOKS.priest, tint: [0.26, 0.14, 0.36], tintAmt: 0.82, halo: false, glow: 0xa060ff, voidOrb: true }; // violet vestments, void glow
@@ -44,7 +58,7 @@ LOOKS['berserker:executioner'] = { ...LOOKS.berserker, weapons: ['greatAxe'], we
 
 // one-shot actions: kind -> per-class clip list (alternated) + whether it should use the full body
 const ACTIONS = {
-  attack: { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], 'shaman:enhancement': ['Sword_Regular_A', 'Sword_Regular_B'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'] },
+  attack: { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], 'shaman:enhancement': ['Sword_Regular_A', 'Sword_Regular_B'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'], hunter: ['Pistol_Shoot'], necromancer: ['Spell_Simple_Shoot'], druid: ['Spell_Simple_Shoot'], ghoul: ['Zombie_Scratch'], abomination: ['Zombie_Scratch'] },
   slash: { any: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Cross'] },
   stab: { any: ['Punch_Cross', 'Punch_Jab'] },
   finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'], berserker: ['Sword_Regular_C'], 'berserker:executioner': ['Sword_Attack'], 'warrior:arms': ['Sword_Attack'] },
@@ -216,7 +230,7 @@ function makeWeapon(kind, look) {
 // How each weapon is held, in WORLD terms at the idle pose of a champion facing +Z:
 //   dir  = where the weapon's +Y (blade / shaft) points,  side = where its +X points,
 //   palm = offset from the bone toward the fingers (m),   up/fwd = extra world offsets.
-const ARMORY_KINDS = new Set(['runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'greatsword', 'stormaxeL', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
+const ARMORY_KINDS = new Set(['runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'greatsword', 'stormaxeL', 'bow', 'crossbow', 'bonestaff', 'druidstaff', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
 const GRIP = {
   sword: { bone: 'hand_r', dir: [0, 0.55, 1], side: [-1, 0, 0], palm: 0.085 },
   axe: { bone: 'hand_r', dir: [0, 0.35, 1], side: [-1, 0, 0], palm: 0.085 },
@@ -235,7 +249,9 @@ Object.assign(GRIP, { runesword: GRIP.sword, kiteshield: GRIP.shield, fang: GRIP
   // two-handed executioner axe: haft up through the fist, blade turned outward so its crescent reads
   greatAxe: { bone: 'hand_r', dir: [0, 0.92, 0.3], side: [-1, 0, 0.35], palm: 0.085 },
   greatsword: { bone: 'hand_r', dir: [0, 0.92, 0.3], side: [-1, 0, 0.35], palm: 0.085 },
-  stormaxeL: { bone: 'hand_l', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 } });
+  stormaxeL: { bone: 'hand_l', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 },
+  bow: { bone: 'hand_l', dir: [0, 1, 0.08], side: [0, 0, 1], palm: 0.07 }, crossbow: { bone: 'hand_r', dir: [0, 0.05, 1], side: [-1, 0, 0], palm: 0.07 },
+  bonestaff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 }, druidstaff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 } });
 export const GRIPS = GRIP; // exposed for tuning
 
 const _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
@@ -275,7 +291,7 @@ export class Character {
     body.traverse(o => { if (o.isBone) this.bones[o.name] = o; });
     this.materials = [];
     const skinMats = new Map();
-    const skin = m => { if (!skinMats.has(m)) { const c = m.clone(); c.color.setRGB(...look.skinTint); skinMats.set(m, c); } return skinMats.get(m); };
+    const skin = m => { if (!skinMats.has(m)) { const c = m.clone(); c.color.setRGB(...look.skinTint); skinMats.set(m, c); this.skinMat = this.skinMat || c; } return skinMats.get(m); };
     // outfit meshes: grade cloth, keep skin, hide parts
     body.traverse(o => {
       if (!o.isSkinnedMesh) return;
@@ -301,7 +317,7 @@ export class Character {
     for (const part of look.parts || []) GL[part.src].scene.traverse(o => {
       if (o.isSkinnedMesh && part.only.some(n => o.name.includes(n))) attach(o, o.geometry, gradeMaterial(o.material, look.tint, look.tintAmt));
     });
-    for (const hn of look.hair) GL[hn].scene.traverse(o => { if (o.isSkinnedMesh) { const mat = o.material.clone(); if (cls === 'mage') mat.color.setRGB(0.75, 0.75, 0.78); if (cls === 'shaman') mat.color.setRGB(0.35, 0.25, 0.2); if (cls === 'berserker') mat.color.setRGB(0.16, 0.1, 0.07); attach(o, o.geometry, mat); } });
+    for (const hn of look.hair) GL[hn].scene.traverse(o => { if (o.isSkinnedMesh) { const mat = o.material.clone(); if (cls === 'mage') mat.color.setRGB(0.75, 0.75, 0.78); if (cls === 'shaman') mat.color.setRGB(0.35, 0.25, 0.2); if (cls === 'berserker') mat.color.setRGB(0.16, 0.1, 0.07); if (look.hairTint) mat.color.setRGB(...look.hairTint); attach(o, o.geometry, mat); } });
     // weapons: grips are solved from the hand's pose in the idle clip, so a weapon points
     // the intended world direction at rest and then simply follows the hand bone.
     this.weapons = {};
@@ -317,7 +333,7 @@ export class Character {
       this.weapons[w] = wp;
     }
     // class armor, fitted to this body in the same rest pose
-    this.armor = equipArmor(this, cls, makeMaterials(TEX), spec);
+    this.armor = look.noArmor ? null : equipArmor(this, cls, makeMaterials(TEX), spec);
     rest.stop(); this.mixer0.uncacheRoot(body); this.mixer0 = null;
     if (look.halo) {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.008, 6, 40), glowMat(0xffe2a0, 2.5));
@@ -334,7 +350,7 @@ export class Character {
     this.cur = null;   // active one-shot { kind, name, t, dur, full, weight }
     this.deadT = 0; this.vic = false; this.hitT = 0; this.hitBig = 0;
     const W = this.weapons, tipOf = k => W[k] && (W[k].userData.tip || W[k]);
-    this.focus = ['archstaff', 'sunmace', 'fireOrb', 'stormaxe', 'runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
+    this.focus = ['archstaff', 'sunmace', 'fireOrb', 'bonestaff', 'druidstaff', 'crossbow', 'bow', 'stormaxe', 'runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
     this.tipR = ['runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
     this.tipL = (W.fangL || W.warAxeL || W.stormaxeL)?.userData.tip;
     this.tmpQ = new THREE.Quaternion(); this.tmpE = new THREE.Euler();
@@ -407,6 +423,15 @@ export class Character {
 
   // st: { speed, back, strafe, air, casting, castProgress, stunned, disoriented, dead, victory, tempest }
   update(dt, st = {}) {
+    // Druid shapeshift (cat / bear) and Tree of Life: swap the humanoid for a beast / treant model
+    const fk = st.tree ? 'tree' : (st.form || null);
+    if (fk !== (this.formKey || null)) {
+      this.formKey = fk;
+      if (this.formModel) { this.root.remove(this.formModel.root); this.formModel = null; }
+      if (fk) { this.formModel = makeFormModel(fk); this.root.add(this.formModel.root); }
+      this.body.visible = !fk;
+    }
+    if (this.formModel) this.formModel.update(dt, (st.speed || 0) > 0.1, !!(this.cur && this.cur.t < 0.35));
     this.time += dt;
     const speed = st.speed || 0;
     // ---- choose the locomotion / pose clip
@@ -416,7 +441,7 @@ export class Character {
     else if (st.tempest) { loco = 'Sword_Regular_Combo'; rate = 1.6; }
     else if (st.air) loco = 'Jump_Loop';
     else if (speed > 1.12) { loco = 'Sprint_Loop'; rate = speed / 1.3; }
-    else if (speed > 0.08) { loco = 'Jog_Fwd_Loop'; rate = Math.max(0.55, speed) * (st.back ? -0.85 : 1); }
+    else if (speed > 0.08) { loco = this.look.walk || 'Jog_Fwd_Loop'; rate = Math.max(0.55, speed) * (st.back ? -0.85 : 1); }
     else if (st.casting) loco = this.look.castPose || 'Spell_Simple_Idle_Loop';
     this.setLoco(loco, st.dead ? 0.15 : 0.2);
     const dying = st.dead;

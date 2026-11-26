@@ -8,7 +8,7 @@ import { RULES, segBlocked, rangeDist } from '../sim/sim.js';
 
 const $ = id => document.getElementById(id);
 const SCHOOL = { frost: '#8fd8ff', fire: '#ff9a4a', arcane: '#d29aff', holy: '#ffe680', nature: '#7ae0ff', shadow: '#c08aff', phys: '#ffffff' };
-const RES_NAME = { mana: 'Mana', energy: 'Energy', rage: 'Rage' };
+const RES_NAME = { mana: 'Mana', energy: 'Energy', rage: 'Rage', focus: 'Focus' };
 
 export function iconHTML(ab, size) {
   const c = ab.color;
@@ -75,7 +75,20 @@ export class HUD {
     this.minis = [...document.querySelectorAll('#partyFrames .mini, #arenaFrames .mini')].map(el => ({
       el, id: +el.dataset.id, hp: el.querySelector('.bar.hp .fill'), hpt: el.querySelector('.bar.hp span'), res: el.querySelector('.bar.res .fill'), cast: el.querySelector('.mcast div'), buffs: el.querySelector('.mbuffs'),
     }));
-    // action bar: basic attack + six abilities
+    this.buildBar(me);
+    const pips = () => Array.from({ length: RULES.winsNeeded }, () => '<div class="pip"></div>').join('');
+    $('pipsA').innerHTML = pips(); $('pipsB').innerHTML = pips();
+    $('cpA').style.display = me.cls === 'rogue' || me.cls === 'berserker' || (me.cls === 'druid' && me.spec === 'feral') ? '' : 'none';
+    $('cpA').innerHTML = me.cls === 'berserker' ? '<span class="bloodrage"></span>' : '<i></i>'.repeat(5);
+    this.lastBuffKey = {};
+    this.hintT = 14; $('controlsHint').style.opacity = 1;
+  }
+
+  flashSlot(i) { const s = this.slots && this.slots[i]; if (!s) return; s.el.classList.remove('flash'); void s.el.offsetWidth; s.el.classList.add('flash'); }
+
+  // action bar: basic attack + six abilities (rebuilt when a Druid changes form)
+  buildBar(me) {
+    const CM = kitOf(me); this.barForm = me.form;
     const bar = $('actionbar'); bar.innerHTML = '';
     const tip = (ab, meta) => `<div class="tip"><div class="tn" style="color:${ab.color}">${ab.name}</div><div class="tm">${meta}</div>${ab.desc}</div>`;
     const A = CM.auto;
@@ -90,19 +103,12 @@ export class HUD {
       bar.appendChild(s);
       return { el: s, cd: s.querySelector('.cd'), txt: s.querySelector('.cdtext'), chg: s.querySelector('.chg'), ab, wasCd: false };
     });
-    const pips = () => Array.from({ length: RULES.winsNeeded }, () => '<div class="pip"></div>').join('');
-    $('pipsA').innerHTML = pips(); $('pipsB').innerHTML = pips();
-    $('cpA').style.display = me.cls === 'rogue' || me.cls === 'berserker' ? '' : 'none';
-    $('cpA').innerHTML = me.cls === 'berserker' ? '<span class="bloodrage"></span>' : '<i></i>'.repeat(5);
-    this.lastBuffKey = {};
-    this.hintT = 14; $('controlsHint').style.opacity = 1;
   }
-
-  flashSlot(i) { const s = this.slots && this.slots[i]; if (!s) return; s.el.classList.remove('flash'); void s.el.offsetWidth; s.el.classList.add('flash'); }
 
   update(dt, view, camera, myId) {
     const F = view.fighters, me = F[myId];
     if (!me) return;
+    if ((me.form || null) !== (this.barForm || null)) this.buildBar(me); // Druid shapeshift: new ability bar
     const tgt = me.target >= 0 ? F[me.target] : null;
     const tgtVisible = tgt && tgt.alive && tgt.team !== me.team && !tgt.buffs.some(b => b.type === 'stealth');
     this.frame('A', me, 'A');

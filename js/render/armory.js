@@ -220,6 +220,40 @@ export function makeClassWeapon(kind, M, look) {
       g.add(head);
       const pom = spike(0.028, 0.09, M.darksteel); pom.rotation.z = PI; pom.position.y = -0.4; g.add(pom);
       tip.position.set(0.46, 1.06, 0); break; }
+    case 'bow': {
+      // Hunter recurve bow: two curved limbs of dark wood, leather grip, taut string, bone tips
+      const pts = s => [V(0, 0, 0), V(0, 0.25 * s, 0.05), V(0, 0.5 * s, 0.03), V(0, 0.62 * s, -0.04)];
+      for (const s of [1, -1]) { g.add(mesh(tube(pts(s), 0.015, 16, 6), M.darkwood)); const tipB = spike(0.012, 0.05, M.bone); tipB.position.set(0, 0.64 * s, -0.05); if (s < 0) tipB.rotation.x = PI; g.add(tipB); }
+      const string = mesh(cyl(0.002, 0.002, 1.24, 3), M.bone, false); string.position.z = -0.05; g.add(string);
+      const grip = mesh(cyl(0.022, 0.022, 0.12, 8), M.darkleather); grip.position.z = 0.01; g.add(grip);
+      tip.position.set(0, 0, 0.06); break; }
+    case 'crossbow': {
+      // Sharpshooter heavy crossbow: wooden stock along +Y (pointing forward), steel prod, bone stock end
+      const stock = mesh(box(0.05, 0.62, 0.06), M.darkwood); stock.position.y = 0.18; g.add(stock);
+      const butt = mesh(box(0.07, 0.16, 0.09), M.bone); butt.position.y = -0.18; g.add(butt);
+      const prod = mesh(tube([V(-0.32, 0.36, 0), V(-0.16, 0.45, 0), V(0, 0.47, 0), V(0.16, 0.45, 0), V(0.32, 0.36, 0)], 0.016, 16, 6), M.darksteel); g.add(prod);
+      const str = mesh(tube([V(-0.32, 0.36, 0), V(0, 0.3, 0), V(0.32, 0.36, 0)], 0.003, 8, 3), M.bone, false); g.add(str);
+      const bolt = mesh(cyl(0.006, 0.006, 0.4, 5), M.wood, false); bolt.position.y = 0.5; g.add(bolt);
+      const head = spike(0.012, 0.05, M.steel); head.position.y = 0.72; g.add(head);
+      const scope = mesh(cyl(0.016, 0.016, 0.16, 8), M.brass); scope.position.set(0, 0.2, 0.05); g.add(scope);
+      tip.position.set(0, 0.75, 0); break; }
+    case 'bonestaff': case 'druidstaff': {
+      // Necromancer bone staff (spine segments, floating skull) / Druid living-wood staff (twisted wood, leaves, glowing seed)
+      const druid = kind === 'druidstaff';
+      const shaft = mesh(tube([V(0, -0.35, 0), V(0.02, 0.2, 0.01), V(-0.015, 0.7, -0.01), V(0.01, 1.2, 0)], 0.024, 16, 7), druid ? M.wood : M.bone); g.add(shaft);
+      if (!druid) for (let i = 0; i < 9; i++) { const v = mesh(cyl(0.032, 0.032, 0.03, 8), M.bone); v.position.y = -0.2 + i * 0.15; g.add(v); }
+      const head = new THREE.Group(); head.position.y = 1.32;
+      if (druid) {
+        for (let i = 0; i < 5; i++) { const a = i / 5 * PI * 2; const br = mesh(tube([V(0, -0.12, 0), V(Math.sin(a) * 0.08, 0, Math.cos(a) * 0.08), V(Math.sin(a) * 0.05, 0.12, Math.cos(a) * 0.05)], 0.01, 8, 5), M.wood); head.add(br);
+          const leaf = mesh(new THREE.CircleGeometry(0.04, 5), M.rune(0x6ac84a, 0.8), false); leaf.position.set(Math.sin(a) * 0.1, 0.02, Math.cos(a) * 0.1); leaf.rotation.y = a; head.add(leaf); }
+        const seed = mesh(sph(0.055, 12, 10), M.gem(look.glow || 0x8ad86a)); head.add(seed);
+      } else {
+        const sk = skullMesh(M, 0.07); head.add(sk);
+        for (let i = 0; i < 4; i++) { const h = horn(0.12, 0.012, 1.2, M.bone); h.rotation.set(0, i * PI / 2, 0.6); h.position.y = -0.06; head.add(h); }
+      }
+      const halo = mesh(sph(0.16, 12, 10), M.glow(look.glow || 0x7aff6a, 0.16), false); head.add(halo);
+      g.add(head); g.userData.pulse = halo;
+      tip.position.set(0, 1.32, 0); break; }
     case 'greatsword': {
       // Arms: a two-handed rune greatsword — long wrapped grip (both hands), wide crossguard, broad fullered blade
       const blade = mesh(extrude([[-0.055, 0], [0.055, 0], [0.05, 1.18], [0, 1.34], [-0.05, 1.18]], 0.016, 0.005), M.silver); blade.position.y = 0.2; g.add(blade);
@@ -580,6 +614,85 @@ const shadowP = spec === 'shadow', ivoryM = shadowP ? M.shadowcloth : M.ivory, s
       gauntlets(M.leather, M.bone, 1.1);
       greaves(M.leather, M.bone);
       cape(M.greyfur, 0.42, 0.7, { ragged: 0.02 });
+      break; }
+    case 'hunter': {
+      // RACE — jungle troll: long swept-back ears, lower tusks, a red mohawk, bone jewellery
+      const face = new THREE.Group();
+      for (const s of [-1, 1]) {
+        const ear = mesh(cone(0.035 * k, 0.2 * k, 6), ch.skinMat || M.leather); ear.position.set(s * 0.1 * k, 0.0, -0.02 * k); ear.rotation.set(-0.6, 0, -s * 1.25); face.add(ear);
+        const tusk = horn(0.11 * k, 0.014 * k, 1.4, M.bone); tusk.position.set(s * 0.035 * k, -0.07 * k, 0.085 * k); tusk.rotation.set(-0.3, 0, s * 0.35); face.add(tusk);
+        const ring = mesh(tor(0.014 * k, 0.003, 4, 10), M.gold, false); ring.position.set(s * 0.13 * k, -0.03 * k, -0.04 * k); face.add(ring);
+      }
+      for (let i = 0; i < 9; i++) { const m = mesh(cone(0.022 * k, 0.11 * k, 5), M.crimson); m.position.set(0, 0.11 * k + Math.sin(i / 8 * PI) * 0.01, 0.08 * k - i * 0.026 * k); m.rotation.x = -0.35; face.add(m); }
+      put('Head', face, headPos(0.1));
+      // huntsman gear: leather pauldrons with fur trim, bone trophy necklace, quiver, bracers, belt pouches
+      shoulders({ r: 0.12, plates: 2, mat: M.leather, trim: M.bone, spikes: 0 });
+      const neck = new THREE.Group();
+      for (let i = 0; i < 7; i++) { const a = (i / 6 - 0.5) * 1.8; const t = mesh(cone(0.012 * k, 0.05 * k, 5), M.bone); t.position.set(Math.sin(a) * 0.12 * k, -Math.cos(a) * 0.03 - 0.02, Math.cos(a) * 0.12 * k); t.rotation.x = PI; neck.add(t); }
+      put('spine_03', neck, L.neck.clone().add(V(0, -0.1 * k, 0.05 * k)));
+      if (spec !== 'sharpshooter') { // quiver of arrows on the back
+        const q = new THREE.Group(); q.add(mesh(cyl(0.05 * k, 0.045 * k, 0.42 * k, 10), M.darkleather));
+        for (let i = 0; i < 5; i++) { const ar = mesh(cyl(0.004, 0.004, 0.2 * k, 4), M.wood, false); ar.position.set((i - 2) * 0.014, 0.28 * k, 0); q.add(ar); const fl = mesh(box(0.016, 0.05 * k, 0.004), M.crimson, false); fl.position.set((i - 2) * 0.014, 0.36 * k, 0); q.add(fl); }
+        put('spine_03', q, L.chest.clone().add(V(0.06 * k, 0.02 * k, -0.16 * k)), { roll: -0.35 });
+      } else { // bolt bandolier across the chest
+        const band = new THREE.Group();
+        for (let i = 0; i < 8; i++) { const u = i / 7, b = mesh(cyl(0.006, 0.006, 0.09 * k, 4), M.darksteel, false); b.position.set((u - 0.5) * 0.3 * k, (u - 0.5) * 0.34 * k, 0.15 * k); b.rotation.z = 0.85; band.add(b); }
+        put('spine_03', band, L.chest.clone());
+      }
+      gauntlets(M.leather, M.bone, 1.0);
+      belt(M.darkleather, M.bone, 0.18);
+      greaves(M.leather, M.bone);
+      break; }
+    case 'necromancer': {
+      // RACE — undead: glowing green eyes, exposed jaw and ribs, sunken skull ridge
+      const face = new THREE.Group();
+      const eyeM = M.rune(0x7aff6a, 3.2);
+      for (const s of [-1, 1]) { const e = mesh(sph(0.012 * k, 8, 6), eyeM, false); e.position.set(s * 0.034 * k, 0.0, 0.095 * k); face.add(e); }
+      const jaw = mesh(box(0.06 * k, 0.025 * k, 0.05 * k), M.bone); jaw.position.set(0, -0.075 * k, 0.07 * k); face.add(jaw);
+      for (let i = 0; i < 6; i++) { const t = mesh(box(0.008, 0.012, 0.008), M.bone, false); t.position.set((i - 2.5) * 0.009, -0.06 * k, 0.095 * k); face.add(t); }
+      put('Head', face, headPos(0.1));
+      const ribs = new THREE.Group();
+      for (let i = 0; i < 4; i++) { const r = mesh(tor(0.1 * k, 0.008 * k, 4, 18, PI * 0.9), M.bone, false); r.rotation.set(0, 0, PI * 0.05); r.position.set(0, -i * 0.045 * k, 0.03 * k); r.scale.set(1.1, 1, 0.9); ribs.add(r); }
+      put('spine_03', ribs, L.chest.clone().add(V(0, -0.02 * k, 0.06 * k)), { pitch: -PI / 2 });
+      if (spec === 'curser') { // chains and floating violet sigils
+        const ch = new THREE.Group();
+        for (let i = 0; i < 12; i++) { const u = i / 11, l = mesh(tor(0.015 * k, 0.005, 4, 8), M.darksteel, false); l.position.set((u - 0.5) * 0.36 * k, -(u - 0.5) * 0.36 * k, 0.15 * k); l.rotation.set(i % 2 ? PI / 2 : 0, 0, -0.8); ch.add(l); }
+        put('spine_03', ch, L.chest.clone());
+        const orbit = new THREE.Group();
+        for (let i = 0; i < 3; i++) { const s = mesh(new THREE.TorusGeometry(0.05, 0.006, 4, 6), M.rune(0xb070ff, 2.4), false); s.position.set(Math.sin(i * 2.1) * 0.4, 0.15 * i - 0.1, Math.cos(i * 2.1) * 0.4); orbit.add(s); }
+        const op = new THREE.Group(); op.add(orbit); put('spine_03', op, L.chest.clone()); animated.spinners.push(orbit);
+        shoulders({ r: 0.11, plates: 2, mat: M.shadowcloth, trim: M.darksteel, spikes: 0 });
+      } else { // summoner: bone pauldrons with skulls, orbiting skulls
+        const big = pauldron(M, { r: 0.13 * k, plates: 2, mat: M.bone, trim: M.darksteel, spikes: 2, skull: true });
+        put('clavicle_l', big, L.lcl.clone().lerp(L.lsh, 0.8).add(V(0.03 * k, 0.06 * k, 0)));
+        const pr = pauldron(M, { r: 0.13 * k, plates: 2, mat: M.bone, trim: M.darksteel, spikes: 2, skull: true });
+        put('clavicle_r', pr, L.rcl.clone().lerp(L.rsh, 0.8).add(V(-0.03 * k, 0.06 * k, 0)), { yaw: PI });
+      }
+      const skirt = mesh(new THREE.LatheGeometry([V(0.17 * k, 0), V(0.22 * k, -0.25 * k), V(0.3 * k, -0.6 * k), V(0.36 * k, -0.85 * k)], 18), spec === 'curser' ? M.shadowcloth : M.darkleather);
+      const sg = new THREE.Group(); sg.add(skirt); put('pelvis', sg, L.pelvis.clone().add(V(0, 0.03 * k, 0)));
+      belt(M.darkleather, M.bone, 0.18);
+      gauntlets(M.darkleather, M.bone, 1.0);
+      cape(M.shadowcloth, 0.42, 1.0, { ragged: 0.04 });
+      break; }
+    case 'druid': {
+      // RACE — bull-folk: great curved horns, broad muzzle with a nose ring, braided mane
+      const face = new THREE.Group();
+      for (const s of [-1, 1]) { const h = horn(0.36 * k, 0.04 * k, 1.9, M.bone); h.position.set(s * 0.1 * k, 0.07 * k, 0.0); h.rotation.set(-0.15, 0, -s * 1.45); face.add(h); }
+      const muzzle = mesh(sph(0.075 * k, 14, 10), ch.skinMat || M.fur); muzzle.scale.set(1.15, 0.85, 1.1); muzzle.position.set(0, -0.045 * k, 0.1 * k); face.add(muzzle);
+      const nose = mesh(sph(0.04 * k, 10, 8), M.darkleather); nose.scale.set(1.3, 0.8, 0.8); nose.position.set(0, -0.035 * k, 0.17 * k); face.add(nose);
+      const ringN = mesh(tor(0.022 * k, 0.004, 6, 14), M.gold, false); ringN.position.set(0, -0.07 * k, 0.175 * k); face.add(ringN);
+      for (const s of [-1, 1]) { const ear = mesh(sph(0.03 * k, 8, 6), ch.skinMat || M.fur); ear.scale.set(1.6, 0.6, 0.8); ear.position.set(s * 0.12 * k, 0.03 * k, -0.01); face.add(ear); }
+      put('Head', face, headPos(0.1));
+      // wildwarden: bark pauldrons, leaf charms, wooden totems, fur mantle
+      furMantle(M.fur, 1.0);
+      shoulders({ r: 0.12, plates: 2, mat: M.darkwood, trim: M.wood, spikes: 0 });
+      const charms = new THREE.Group();
+      for (let i = 0; i < 6; i++) { const a = (i / 5 - 0.5) * 1.6; const leaf = mesh(new THREE.CircleGeometry(0.03 * k, 5), M.rune(0x8ad86a, 1.2), false); leaf.position.set(Math.sin(a) * 0.13 * k, -Math.cos(a) * 0.04 - 0.03, Math.cos(a) * 0.13 * k); leaf.rotation.y = a; charms.add(leaf); }
+      put('spine_03', charms, L.neck.clone().add(V(0, -0.1 * k, 0.05 * k)));
+      belt(M.darkleather, M.wood, 0.2);
+      tassets(M.wood, M.darkwood, 4);
+      gauntlets(M.darkleather, M.wood, 1.1);
+      greaves(M.darkleather, M.wood);
       break; }
   }
   mergeStatic(placed, new Set([...animated.capes, ...animated.tabards, ...animated.spinners]));

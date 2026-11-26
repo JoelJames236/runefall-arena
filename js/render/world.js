@@ -35,9 +35,10 @@ import { Character as HeroCharacter, heroesReady } from './heroes.js';
 // realistic rigged champions when their assets loaded, procedural fallback otherwise
 const makeChar = (cls, spec) => heroesReady() ? new HeroCharacter(cls, spec) : new ProcCharacter(cls);
 // undead summons (ghoul, abomination) are rigged champions with a minion look; null until assets load
-const makeHumanoidMinion = kind => { if (!heroesReady()) return null; try { const c = new HeroCharacter(kind); return { root: c.root, update: (dt, m) => c.update(dt, { speed: m.moving ? 0.6 : 0, attackPulse: m.atk }) , char: c }; } catch { return null; } };
+const makeHumanoidMinion = kind => { if (!heroesReady()) return null; try { const c = new HeroCharacter(kind); let prev = false; return { root: c.root, char: c, update: (dt, m) => { if (m.atk && !prev) c.play('attack', 0.6); prev = m.atk; c.update(dt, { speed: m.moving ? 0.7 : 0 }); } }; } catch (e) { console.warn('minion model', e); return null; } };
 import { PILLARS, BRIDGE, archY, floorAt, hasBuff, angleDiff } from '../sim/sim.js';
 // height for ground rings: on a sloped ramp lift them so the flat ring isn't half buried
+const PREVIEW_Z = 10; // class-screen model stands here (the arena centre is under the bridge)
 const ringY = (x, z, y, off) => { const fl = floorAt(x, z, y); return fl + (fl > 0.01 && fl < BRIDGE.H - 0.01 ? 0.42 : off); };
 import { CLASSES, kit, kitOf } from '../data/classes.js';
 
@@ -51,6 +52,12 @@ const AB_ANIM = {
   skullsplitter: 'finisher', ground_breaker: 'slam', iron_hide: 'raise',
   fireball: 'release', frostbite: 'release', blazing_step: 'dash', meteor: 'raise', flame_ring: 'slam',
   stormstrike: 'finisher', lava_lash: 'slash', healing_surge: 'raise', earthbind_totem: 'slam', spirit_wolf: 'raise',
+  kill_command: 'raise', serpent_sting: 'attack', disengage: 'dash', intimidation: 'raise', bestial_bond: 'raise', bestial_wrath: 'raise',
+  aimed_shot: 'attack', concussive_bolt: 'attack', freezing_trap: 'release', piercing_volley: 'attack',
+  soul_rot: 'release', corpse_explosion: 'raise', bone_spear: 'release', grave_step: 'dash', bone_shield: 'raise', abomination: 'raise',
+  curse_of_agony: 'release', curse_of_weakness: 'release', soul_siphon: 'raise', doom: 'release',
+  rejuvenation: 'raise', regrowth: 'release', moonfire: 'release', wild_charge: 'dash', entangling_roots: 'release', tree_of_life: 'raise',
+  rake: 'attack', shred: 'attack', ferocious_bite: 'attack', wild_pounce: 'charge', bear_form: 'raise', cat_form: 'raise', berserk_instinct: 'raise', maul: 'attack', thrash: 'attack', frenzied_regen: 'raise',
   envenom: 'finisher', crippling_poison: 'stab', plague_cloud: 'release', die_by_the_sword: 'raise', execute: 'finisher', bladestorm: 'charge',
   shadow_word_pain: 'release', mind_blast: 'release', psychic_scream: 'raise', void_eruption: 'release',
 };
@@ -233,13 +240,13 @@ export class World {
     this.mode = 'preview';
     this.clearChars();
     const c = makeChar(cls, spec);
-    c.root.position.set(0, 0, 0);
+    c.root.position.set(0, 0, PREVIEW_Z); // class-screen stage, in front of the bridge
     this.scene.add(c.root);
-    this.preview.char = c;
+    this.preview.char = c; this.preview.form = kit(cls, spec).defaultForm; // Feral Druid previews in cat form
     this.preview.yaw = 0.5;
     c.play('raise', 0.9);
-    this.vfx.burst(0, 1, 0, [CLASSES[cls].color === undefined ? 0xffffff : new THREE.Color(CLASSES[cls].color).getHex(), 0xffffff], 18, 3, 0.7, 0.25, { up: 1 });
-    this.vfx.groundRing(0, 0, new THREE.Color(CLASSES[cls].color).getHex(), 0.5, 2.4, 0.8, 0.08, 0.6);
+    this.vfx.burst(0, 1, PREVIEW_Z, [CLASSES[cls].color === undefined ? 0xffffff : new THREE.Color(CLASSES[cls].color).getHex(), 0xffffff], 18, 3, 0.7, 0.25, { up: 1 });
+    this.vfx.groundRing(0, PREVIEW_Z, new THREE.Color(CLASSES[cls].color).getHex(), 0.5, 2.4, 0.8, 0.08, 0.6);
   }
 
   previewAttack() {
@@ -272,7 +279,7 @@ export class World {
     const col = new THREE.Color(ab.color).getHex();
     const p = c.focusWorld();
     this.vfx.burst(p.x, p.y, p.z, [col, 0xffffff], 40, 4, 0.7, 0.45);
-    this.vfx.groundRing(0, 0, col, 0.4, 2.5, 0.6);
+    this.vfx.groundRing(0, PREVIEW_Z, col, 0.4, 2.5, 0.6);
     this.vfx.flash(p.x, p.y, p.z, col, 30, 0.4);
   }
 
@@ -321,7 +328,7 @@ export class World {
       }
       const won = (view.state === 'roundEnd' || view.state === 'matchEnd') && f.alive && view.lastWinner === f.team;
       ch.update(dt, {
-        speed: f.alive ? cs.speed / baseSpeed : 0, back, strafe, air: f.y - floorAt(f.x, f.z, f.y) > 0.1, casting: !!f.cast, castProgress: f.cast ? f.cast.t / f.cast.dur : 0,
+        speed: f.alive ? cs.speed / baseSpeed : 0, back, strafe, air: f.y - floorAt(f.x, f.z, f.y) > 0.1, casting: !!f.cast, form: f.form, tree: hasBuff(f, 'treeform'), castProgress: f.cast ? f.cast.t / f.cast.dur : 0,
         stunned: hasBuff(f, 'stun'), disoriented: hasBuff(f, 'disorient'), dead: !f.alive, victory: won, tempest: hasBuff(f, 'tempest'),
       });
       // stealth visibility
@@ -437,13 +444,13 @@ export class World {
       for (const c of this.chars) if (c) c.update(dt, { speed: 0 });
     } else if (this.mode === 'preview') {
       const c = this.preview.char;
-      if (c) { c.root.rotation.y = this.preview.yaw; if (!this.preview.dragging) this.preview.yaw += dt * 0.15; c.update(dt, { speed: 0 }); }
+      if (c) { c.root.rotation.y = this.preview.yaw; if (!this.preview.dragging) this.preview.yaw += dt * 0.15; c.update(dt, { speed: 0, form: this.preview.form }); }
       const d = this.preview.dist;
       // frame the champion slightly left of centre (details panel is on the right)
       const sx = 0.6 * d / 5 * Math.min(1.4, 1100 / innerWidth);
-      this.camera.position.set(sx, 1.35 + d * 0.06, d);
-      this.camera.lookAt(sx, 1.0, 0);
-      if (Math.random() < dt * 6) { const a = Math.random() * 6.28; this.vfx.emit({ x: Math.sin(a) * 1.4, y: 0.05, z: Math.cos(a) * 1.4, vy: 0.8 + Math.random(), life: 1.5, size: 0.18, color: 0xffd8a0 }); }
+      this.camera.position.set(sx, 1.35 + d * 0.06, PREVIEW_Z + d);
+      this.camera.lookAt(sx, 1.0, PREVIEW_Z);
+      if (Math.random() < dt * 6) { const a = Math.random() * 6.28; this.vfx.emit({ x: Math.sin(a) * 1.4, y: 0.05, z: PREVIEW_Z + Math.cos(a) * 1.4, vy: 0.8 + Math.random(), life: 1.5, size: 0.18, color: 0xffd8a0 }); }
     }
     this.vfx.update(dt);
     if (this.useBloom) this.composer.render(); else this.renderer.render(this.scene, this.camera);

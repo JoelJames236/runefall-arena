@@ -24,6 +24,13 @@ const PROJ_STYLE = {
   frostbite: { color: 0xa8e4ff, core: 0xeaffff, size: 0.3, trail: 0x7ac8ff, stretch: 2.2, shard: true },
   shadow_bolt: { color: 0xa060ff, core: 0xe8d0ff, size: 0.32, trail: 0x5a1aa0, caster: true, orbit: 2 },
   mind_blast: { color: 0x9a4aff, core: 0xf0e0ff, size: 0.52, trail: 0x4a0a8a, rays: true, halo: true },
+  arrow: { color: 0xd8c890, core: 0xfff8e0, size: 0.16, trail: 0x8a7a50, stretch: 6, shard: true, small: true },
+  crossbow_bolt: { color: 0xc8c0b0, core: 0xffffff, size: 0.2, trail: 0x6a6050, stretch: 6, shard: true, small: true },
+  bone_bolt: { color: 0xc8ffb0, core: 0xf0ffe8, size: 0.3, trail: 0x4a8a3a, caster: true, shard: true },
+  bone_spear: { color: 0xe8f0d0, core: 0xffffff, size: 0.28, trail: 0x7aff6a, stretch: 4, shard: true },
+  soul_rot: { color: 0x7aff6a, core: 0xe8ffe0, size: 0.48, trail: 0x2a6a1a, smoke: true, halo: true },
+  hex_bolt: { color: 0xb070ff, core: 0xf0e0ff, size: 0.3, trail: 0x5a1aa0, caster: true, orbit: 2 },
+  wrath: { color: 0xb8ff6a, core: 0xf8ffe0, size: 0.3, trail: 0x5aaa2a, caster: true, rays: true },
 };
 const SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff7a2a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff, phys: 0xffffff };
 const CAST_SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff8a3a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff };
@@ -404,8 +411,15 @@ export class VFX {
       fill.rotation.x = -Math.PI / 2; fill.position.y = 0.07; g.add(fill);
       const totem = this.makeTotem(0x8a6a4a, 0xffa040); g.add(totem);
       g.userData = { fill, edge, totem };
+    } else if (z.type === 'trap') {
+      // only allies see the trap clearly; enemies see a faint glint
+      const ring = new THREE.Mesh(this.G.plane, this.addMat(0x8fd8ff, hostile ? 0.18 : 0.7, { map: this.teleTexture }));
+      ring.scale.setScalar(z.r); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring);
+      const jaws = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.05, 4, 12), new THREE.MeshStandardMaterial({ color: 0x8a9aa8, metalness: 0.8, roughness: 0.35, emissive: 0x2a6aaa, emissiveIntensity: 0.5 }));
+      jaws.rotation.x = -Math.PI / 2; jaws.position.y = 0.08; g.add(jaws);
+      g.userData = { ring, jaws };
     } else if (z.type === 'earthbind') {
-      const ring = new THREE.Mesh(this.G.plane, this.addMat(hostile ? 0xd0a060 : 0xb0a070, 0.7, { map: this.teleTexture }));
+      const ring =new THREE.Mesh(this.G.plane, this.addMat(hostile ? 0xd0a060 : 0xb0a070, 0.7, { map: this.teleTexture }));
       ring.scale.setScalar(z.r); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring);
       const totem = this.makeTotem(0x6a5a40, 0xd0b070); g.add(totem);
       g.userData = { ring, totem };
@@ -625,7 +639,7 @@ export class VFX {
       case 'fizzle': this.burst(ev.x, ev.y, ev.z, 0x888888, 10, 2, 0.4, 0.3); this.smokeBurst(ev.x, ev.y, ev.z, 0x444444, 4, 1, 0.6, 0.5, 0.3); break;
       case 'dmg': {
         const P = at(ev.id);
-        const meleeAb = ev.ab === 'auto' ? !!(F[ev.src] && ['rogue', 'warrior', 'berserker'].includes(F[ev.src].cls)) : ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skullsplitter', 'ground_breaker', 'envenom', 'crippling_poison', 'execute', 'bladestorm'].includes(ev.ab);
+        const meleeAb = ev.ab === 'auto' ? !!(F[ev.src] && (['rogue', 'warrior', 'berserker'].includes(F[ev.src].cls) || F[ev.src].spec === 'enhancement' || F[ev.src].spec === 'feral')) : ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skullsplitter', 'ground_breaker', 'envenom', 'crippling_poison', 'execute', 'bladestorm'].includes(ev.ab);
         if (meleeAb) {
           this.burst(P.x, P.y + 1.2, P.z, [0xff3a2a, 0xffe0c0], ev.crit || ev.big ? 26 : 10, 5, 0.35, 0.28, { gravity: 9 });
           const src = F[ev.src];
@@ -683,7 +697,7 @@ export class VFX {
     const F = ctx.fighters, src = F[ev.id]; if (!src) return;
     if (ev.ranged) {
       const p = handPos(ev.id);
-      const c = { mage: 0xb98cff, priest: 0xffe680, shaman: 0x7ae0ff }[src.cls] || 0xffffff;
+      const c = { mage: 0xb98cff, priest: 0xffe680, shaman: 0x7ae0ff, hunter: 0xd8c890, necromancer: 0x9aff7a, druid: 0xb8ff6a }[src.cls] || 0xffffff;
       this.burst(p.x, p.y, p.z, [c, 0xffffff], 16, 3, 0.35, 0.3, { drag: 3 }); this.sphereFlash(p.x, p.y, p.z, c, 0.1, 0.55, 0.16, 0.45);
       if (src.cls === 'shaman') { const T = at(ev.tid); this.beam(p.clone(), new THREE.Vector3(p.x + (T.x - p.x) * 0.15, p.y, p.z + (T.z - p.z) * 0.15), 0x7ae0ff, 0.12, 0.03, 0.4); }
     } else {
@@ -791,6 +805,18 @@ export class VFX {
         this.flash(ev.x, 1, ev.z, 0xff9a4a, 70, 0.5);
         this.shards(ev.x, 0.3, ev.z, 0x6a5a4a, 12, 8, 1.3, 0.45);
         break;
+      case 'corpse_explosion':
+        this.burst(ev.x, 0.8, ev.z, [0x7aff6a, 0x3a6a2a, 0xe8f0d0], 60, 9, 0.8, 0.55, { up: 3, gravity: 10 }); this.shards(ev.x, 0.6, ev.z, 0xe8f0d0, 12, 7, 1.1, 0.25);
+        this.smokeBurst(ev.x, 0.5, ev.z, 0x2a4a1a, 20, 5, 1.4, 1.8, 0.6); this.groundRing(ev.x, ev.z, 0x7aff6a, 0.5, 6, 0.5); this.flash(ev.x, 1, ev.z, 0x7aff6a, 60, 0.45); break;
+      case 'trap_spring': { const y = ev.y || 0; this.burst(ev.x, y + 0.5, ev.z, [0x8fd8ff, 0xffffff], 40, 5, 0.6, 0.4, { up: 2 }); this.shards(ev.x, y + 0.5, ev.z, 0xbfefff, 12, 5, 1.0, 0.25); this.sphereFlash(ev.x, y + 1, ev.z, 0x8fd8ff, 0.3, 2, 0.4, 0.6); break; }
+      case 'volley': { const T = ev.tid >= 0 ? at(ev.tid) : null, P = at(ev.id); if (T) { this.beam(new THREE.Vector3(P.x, P.y + 1.6, P.z), new THREE.Vector3(T.x, T.y + 1.2, T.z), 0xffd27a, 0.25, 0.05, 0.05); this.burst(T.x, T.y + 1.2, T.z, [0xffd27a, 0xffffff], 40, 7, 0.5, 0.35); this.flash(T.x, T.y + 1.2, T.z, 0xffd27a, 40, 0.3); } break; }
+      case 'siphon': { const T = ev.tid >= 0 ? at(ev.tid) : null, P = at(ev.id); if (T) this.beam(new THREE.Vector3(T.x, T.y + 1.2, T.z), new THREE.Vector3(P.x, P.y + 1.4, P.z), 0xb070ff, 0.4, 0.05, 0.4); break; }
+      case 'doom_pop': this.pillar(ev.x, ev.z, 0x7a3aff, 8, 1.0, 0.6); this.burst(ev.x, 1.2, ev.z, [0x7a3aff, 0x1a0a2a, 0xe8d0ff], 60, 8, 0.8, 0.5, { up: 2 }); this.flash(ev.x, 1.5, ev.z, 0x7a3aff, 70, 0.5); break;
+      case 'shapeshift': this.burst(ev.x, 1, ev.z, [0x8ad86a, 0xffffff, 0xe8a05a], 40, 4, 0.6, 0.45, { up: 2 }); this.smokeBurst(ev.x, 0.6, ev.z, 0x3a5a2a, 14, 3, 1.0, 1.2, 0.5); this.groundRing(ev.x, ev.z, 0x8ad86a, 0.3, 3, 0.4); break;
+      case 'thrash': this.groundRing(ev.x, ev.z, 0xff6a4a, 0.5, 6, 0.4); this.burst(ev.x, 0.8, ev.z, [0xff6a4a, 0x8a2a1a], 40, 7, 0.5, 0.4, { up: 1 }); this.smokeBurst(ev.x, 0.3, ev.z, 0x6a5a48, 12, 4, 0.8, 1.2, 0.45); break;
+      case 'moonfire': this.pillar(ev.x, ev.z, 0xc8b0ff, 6, 0.6, 0.45); this.burst(ev.x, 1, ev.z, [0xc8b0ff, 0xffffff], 24, 4, 0.5, 0.35); break;
+      case 'roots': for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; this.burst(ev.x + Math.sin(a) * 0.8, 0.3, ev.z + Math.cos(a) * 0.8, [0x6a8a3a, 0x3a5a1a], 5, 2, 0.8, 0.3, { up: 3 }); } this.groundRing(ev.x, ev.z, 0x8ad86a, 0.3, 2, 0.6); break;
+      case 'nature_heal': { const T = ev.tid >= 0 ? at(ev.tid) : null; if (T) { this.burst(T.x, T.y + 1, T.z, [0x8aff9a, 0xffffff], 18, 2, 0.8, 0.3, { up: 2 }); this.groundRing(T.x, T.z, 0x8aff9a, 0.3, 1.8, 0.5, (T.y || 0) + 0.08); } break; }
       case 'shadow_touch': { const T = ev.tid >= 0 ? at(ev.tid) : null; if (T) { this.smokeBurst(T.x, T.y + 1.2, T.z, 0x2a0a4a, 10, 1.5, 0.9, 1.0, 0.6); this.burst(T.x, T.y + 1.4, T.z, [0xa060ff, 0x3a0a6a], 18, 3, 0.6, 0.4); } break; }
       case 'psychic_scream': { const P = at(ev.id), y = P.y || 0;
         this.groundRing(ev.x, ev.z, 0xa060ff, 0.5, 8, 0.5, y + 0.08); this.ringBurst(P.x, y + 1.4, P.z, 0xb070ff, 30, 6, 0.6, 0.4);

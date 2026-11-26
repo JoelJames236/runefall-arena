@@ -208,7 +208,7 @@ function selectClass(id) {
   document.querySelectorAll('.cs-card').forEach(c => c.classList.toggle('on', c.dataset.cls === id));
   const spec = mySpec(), C = kit(id, spec);
   world.showPreview(id, spec);
-  const resName = { mana: 'Mana', energy: 'Energy', rage: 'Rage' }[C.resType];
+  const resName = { mana: 'Mana', energy: 'Energy', rage: 'Rage', focus: 'Focus' }[C.resType];
   const A = C.auto;
   // spec cards: pick one of the class's two specs (unbuilt ones are shown as "coming soon")
   const specCards = `<div class="spec-pick"><div class="sp-h">Choose a spec <span>locked for the match</span></div><div class="sp-cards">${specsOf(id).map(s => `
@@ -723,7 +723,7 @@ function onSnapshot(s) {
   S.lastSnap = s; S.lastSnapT = now;
   const me = s.f[S.myId], L = S.local;
   if (!me || !L) return;
-  L.buffs = me.buffs; L.alive = me.alive; L.locked = me.locked; L.cast = me.cast; // cast: moving casts slow you
+  L.buffs = me.buffs; L.alive = me.alive; L.locked = me.locked; L.cast = me.cast; L.form = me.form; // cast: moving casts slow you; form: druid shape
   // server-forced movement (blinks, charges, round resets) overrides our prediction
   if (me.forceSeq !== S.ack || me.locked) {
     L.x = me.x; L.y = me.y; L.z = me.z; L.vy = 0;
