@@ -300,6 +300,8 @@ Object.assign(GRIP, { runesword: GRIP.sword, kiteshield: GRIP.shield, holysword:
   bow: { bone: 'hand_l', dir: [0, 1, 0.08], side: [0, 0, 1], palm: 0.07 }, longbow: { bone: 'hand_l', dir: [0, 1, 0.08], side: [0, 0, 1], palm: 0.07 }, orcaxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 }, crossbow: { bone: 'hand_r', dir: [0, 0.05, 1], side: [-1, 0, 0], palm: 0.07 },
   bonestaff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 }, druidstaff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 } });
 export const GRIPS = GRIP; // exposed for tuning
+export let TROLL_KNEE = -0.22; // knee crouch for jungle trolls (bone-local X in the base skeleton's axes)
+export const setTrollKnee = v => { TROLL_KNEE = v; };
 // generated champions (champions.js) have their own sculpted forearms and gauntlets: shields are fitted to
 // the measured arm instead of a fixed grip (fitShield)
 const SHIELDS = new Set(['shield', 'orcshield', 'kiteshield', 'towershield']);
@@ -658,8 +660,15 @@ export class Character {
     if (st.disoriented && !dying) { this.addRot(b.Head, -0.2, Math.sin(this.time * 2.4) * 0.5, 0); this.addRot(b.spine_02, 0, Math.sin(this.time * 2.4) * 0.25, 0); }
     if (this.hitT > 0) { this.hitT -= dt; const k = Math.max(0, this.hitT / 0.3); this.addRot(b.spine_02, -0.25 * k * (1 + this.hitBig), 0, 0); }
     if (st.casting && b.hand_r) { this.addRot(b.spine_03, -0.05, 0, 0); }
-    const hunch = this.raceDef.hunch; // orcs, trolls, undead and bull-folk lean into the world; the head stays level
+    // orcs, trolls, undead and bull-folk lean into the world; the head stays level. Jungle trolls stoop the most:
+    // a deep rounded back, head thrust forward and a loose crouch in the knees.
+    const troll = this.race === 'troll';
+    const hunch = this.raceDef.hunch * (troll ? 1.7 : 1);
     if (hunch && !dying) { this.addRot(b.spine_02, hunch * 0.45, 0, 0); this.addRot(b.spine_03, hunch * 0.55, 0, 0); this.addRot(b.neck_01, -hunch * 0.6, 0, 0); this.addRot(b.Head, -hunch * 0.35, 0, 0); }
+    if (this.baseY === undefined) this.baseY = this.body.position.y;
+    const crouch = troll && !dying && !st.air;
+    this.body.position.y = this.baseY - (crouch ? 0.2 * -TROLL_KNEE * this.look.scale : 0); // keep the feet on the ground
+    if (crouch) { const k = TROLL_KNEE; this.addRot(b.thigh_l, k, 0, 0); this.addRot(b.thigh_r, k, 0, 0); this.addRot(b.calf_l, -k * 1.6, 0, 0); this.addRot(b.calf_r, -k * 1.6, 0, 0); this.addRot(b.foot_l, k * 0.6, 0, 0); this.addRot(b.foot_r, k * 0.6, 0, 0); }
     // props
     const T = this.time;
     for (const w of Object.values(this.weapons)) {
