@@ -69,7 +69,7 @@ host refused or queued disappears again within half a second.
 | Key | Action |
 | --- | --- |
 | `W A S D` | Move / strafe |
-| Mouse | Turn camera & champion (click to capture the mouse; if capture is blocked, hold the right button and drag) |
+| Mouse | Turn camera & champion (click the arena to capture the mouse; if the browser refuses once — e.g. right after Esc — the next click captures it again. Where capture is impossible, such as an embedded view, the cursor itself aims and the right button held turns the camera) |
 | **Left click** | Basic attack where the dot in the middle of the screen points (aimed — it hits the enemy hitbox under the dot, or nothing). One swing per click, hold to keep swinging at your attack speed. The enemy you click on also becomes your target |
 | `1`–`6` | Abilities (`Q` / `E` also trigger 5 / 6). **Rebind them in Settings** → Ability Keys: two keys per slot, any key or the middle / back / forward mouse button |
 | `Tab` | Cycle enemy targets |
@@ -89,6 +89,8 @@ host refused or queued disappears again within half a second.
   abilities), and so does the first enemy you hit when you have none.
 - **Hitboxes are the same for everyone**: a capsule of 0.55 yd radius from the ankles to just above head height
   (0.1–1.95 yd), whatever the size of the champion's model — a dwarf is as easy to hit as a bull-folk druid.
+  Pets and summons (the necromancer's ghoul and abomination, the hunter's gorilla, the spirit wolf) share one smaller
+  hitbox (0.45 yd radius, up to 1.5 yd) and can be hit on their own; one standing in front of its master takes the hit.
 - **Melee swings land on the blow**: a swing starts on your click and its damage lands 0.13–0.24 s later (heavier
   weapons take longer), exactly when the animation connects. At that moment the aim counts: the blow hits the first
   enemy hitbox under the dot that is within 4.5 yd and inside your frontal 200° arc (the swing sweeps a little, so

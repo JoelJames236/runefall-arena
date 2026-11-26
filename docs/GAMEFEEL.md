@@ -105,6 +105,21 @@ ranged autos homed in. Now they are aimed.
   error that drifts (Squire 0.9 / Knight 0.45 / Champion 0.2 yd), and they only swing when a hit is possible
   (`autoBlock`). Champion bots land 70–100 % of their basic attacks (melee ~95 %, ranged less against movement).
 - Balance after the change (hard bots): 1v1 40–59 %, 2v2 38–62 % — no numbers had to change.
+- **Pets and summons are hit on their own**: ghoul, abomination, gorilla and spirit wolf share one smaller hitbox
+  (`MINION_HITBOX`, radius 0.45, up to 1.5 — with the full champion capsule the spirit wolf blocked so many blows aimed
+  at its shaman that Enhancement gained 6 win-% points) and are
+  part of `Sim.units()`; `Sim.hitMinion` applies the attacker's crits / damage bonuses and rage. A summon standing
+  between you and its master takes the blow. Clicking still only targets champions.
+- **One rhythm for all basic attacks**: swing timers now lie between 1.5 and 2.2 s (they were 1.2–3.0 s; the heavy
+  two-handers at 2.5–3.0 s felt sluggish and a miss cost them the most), with damage per hit rescaled so damage per
+  second is unchanged: Claws / Twin Slashes / Envenomed Slashes 1.2–1.3 → 1.5 s, Dawn Hammer 2.5 → 2.0 s, Greatsword
+  2.6 → 2.0 s, Great Axe 3.0 → 2.2 s, Quick Shot 1.4 → 1.6 s, Heavy Arrow 2.2 → 2.0 s, Fire Bolt 1.6 → 1.8 s.
+- **Mouse capture**: a refused pointer-lock request (Chrome refuses a re-lock right after Esc, or a request without a
+  click) used to switch the game to the no-capture controls for the rest of the session — visible cursor, camera only
+  while a button is held, and since aimed attacks every swing went to the middle of the screen, not to the cursor.
+  Now only a page that can never lock (`WrongDocumentError`, e.g. an embedded view) uses those controls, and there the
+  cursor aims (the dot follows it, the system cursor is hidden over the arena, the right button turns the camera).
+  Anything else is retried on the next click.
 
 ## Not done / next steps
 

@@ -52,6 +52,46 @@ damage); burst specs (Subtlety, Sharpshooter, Elemental, Summoner) have the high
 **Watch list for the next pass** (inside the band, but at its edges): Shadow Priest and Beastmaster in 1v1 (41 %),
 Elemental and Enhancement in 2v2 (41–42 %), Protection Warrior in 2v2 (62 %, Shieldwall), the Priests in 2v2 (59 %).
 
+## Change log — one attack rhythm, hittable summons
+
+- **Swing timers 1.5–2.2 s for every basic attack** (were 1.2–3.0 s), damage per hit rescaled so damage per second
+  is unchanged:
+
+  | Basic attack | Before | After |
+  | --- | --- | --- |
+  | Claws (Feral cat) | 28 / 1.2 s | 35 / 1.5 s |
+  | Twin Slashes (Subtlety) | 30 / 1.3 s | 35 / 1.5 s |
+  | Envenomed Slashes (Assassination) | 26 / 1.3 s | 30 / 1.5 s |
+  | Dawn Hammer (Crusader) | 48 / 2.5 s | 38 / 2.0 s |
+  | Greatsword Cleave (Arms) | 59 / 2.6 s | 45 / 2.0 s |
+  | Great Axe Cleave (Executioner) | 66 / 3.0 s | 48 / 2.2 s |
+  | Quick Shot (Beastmaster) | 20 / 1.4 s | 23 / 1.6 s |
+  | Heavy Arrow (Sharpshooter) | 40 / 2.2 s | 36 / 2.0 s |
+  | Fire Bolt (Fire) | 22 / 1.6 s | 25 / 1.8 s |
+
+- **Fire Mage**: Fireball impact 86 → 80 (and the Fire Bolt's slower rhythm means fewer Burning stacks per second).
+- **Shaman — Enhancement**: Healing Surge 166 → 156 (64 % in 1v1 once enemy blows could hit its spirit wolf).
+- **Pets and summons can be hit** by aimed basic attacks (one shared hitbox, radius 0.45, up to 1.5; with the full
+  champion hitbox the spirit wolf shielded its shaman from enough blows to be worth +6 win-% points).
+
+Result (hard AI): **1v1 42–61 %**, **2v2 37–65 %**, first kill after a median 17 s.
+
+| Spec | 1v1 % | 2v2 % | | Spec | 1v1 % | 2v2 % |
+| --- | --- | --- | --- | --- | --- | --- |
+| Mage — Frost | 57 | 41 | | Priest — Discipline | 46 | 47 |
+| Mage — Fire | 51 | 42 | | Priest — Shadow | 42 | 55 |
+| Rogue — Subtlety | 48 | 58 | | Shaman — Elemental | 61 | 37 |
+| Rogue — Assassination | 50 | 54 | | Shaman — Enhancement | 56 | 60 |
+| Warrior — Protection | 48 | 63 | | Hunter — Beastmaster | 50 | 46 |
+| Warrior — Arms | 52 | 45 | | Hunter — Sharpshooter | 46 | 41 |
+| Berserker — Fury | 51 | 52 | | Necromancer — Summoner | 53 | 48 |
+| Berserker — Executioner | 50 | 55 | | Necromancer — Curser | 58 | 45 |
+| Paladin — Crusader | 43 | 52 | | Druid — Feral | 44 | 65 |
+| Paladin — Protection | 51 | 51 | | Druid — Restoration | 44 | 45 |
+
+Watch list: Feral and Protection Warrior in 2v2 (63–65 %), Elemental's format gap (61 % 1v1, 37 % 2v2 — a cut of
+Lightning Lash to 73 dropped its 2v2 to 31 %, so it stayed at 76).
+
 ## Change log — aimed basic attacks
 
 Basic attacks now hit what the crosshair dot is on (uniform hitbox for every champion, straight ranged bolts that

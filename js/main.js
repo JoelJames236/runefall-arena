@@ -655,7 +655,7 @@ function startMatch(roster, mode, myId) {
 
 function endGame() {
   S.inGame = false; S.sim = null; S.ais = new Map(); S.local = null; S.remotes = new Map();
-  input.enabled = false; input.exitLock();
+  input.enabled = false; input.exitLock(); canvas.style.cursor = '';
   hud.show(false);
   showOverlay('pause', false); showOverlay('matchEnd', false);
   $('spectate').classList.add('hidden');
@@ -671,7 +671,7 @@ input.onEscape = () => {
   if ($('pause').classList.contains('active')) { showOverlay('pause', false); S.paused = false; }
   else if (!$('matchEnd').classList.contains('active')) openPause();
 };
-input.onFallback = () => toast('Mouse capture unavailable here — hold the right mouse button and drag to look around.', 5000);
+input.onFallback = () => toast('Mouse capture is not possible here: the cursor aims, hold the right mouse button and drag to look around.', 6000);
 const offline = () => S.mode === 'duel' || S.mode === 'bots2v2';
 function openPause() {
   if (offline()) S.paused = true;
@@ -945,6 +945,9 @@ function handleEvents(evs, view) {
         if (ev.type === 'stun' || ev.type === 'disorient') audio.play('stun', pos(ev.id));
         break;
       case 'interrupted': if (ev.id === my || ev.id === me?.target) hud.castInterrupted(ev.id === my); hud.combatText(ev, F, my); audio.play('interrupt', pos(ev.id)); break;
+      case 'minionHit': // your basic attack hit a pet / summon: its number, the crosshair tick and the impact
+        if (ev.src === my && ev.amt) { hud.floatText({ x: ev.x, y: (ev.y || 0) + 1.6, z: ev.z }, String(ev.amt), '#ffd9a0', ev.crit ? 'crit' : 'small'); hud.hitMarker(ev.crit); if (ev.melee) audio.play('melee_hit', { x: ev.x, z: ev.z }); }
+        break;
       case 'miss': if (ev.id === my) hud.floatText({ x: ev.x, y: ev.y, z: ev.z }, 'Miss', '#b8b8b8', 'small'); break; // a melee swing that found no hitbox
       case 'err': if (ev.id === my) { hud.error(ev.msg); audio.play('error'); if (S.mode === 'guest') { if (S.pred?.cast) $('castA')._had = false; S.pred = newPred(); } } break; // the host refused: drop what we predicted
       case 'blink': if (ev.fx === 'arcane_shift' || ev.fx === 'shadow_leap') audio.play('blink', { x: ev.x1, z: ev.z1 }); break;
@@ -1050,17 +1053,22 @@ function gameFrame(dt) {
   // Left click = a basic attack where the crosshair dot points (aimed: it hits whichever hitbox the dot is on,
   // or nothing). An enemy under the dot when you click also becomes your target, for your abilities.
   let setTarget, setFriend;
-  const aim = world.aimRay();
+  // the aim: the dot in the middle while the mouse is captured; where mouse capture is impossible (embedded views)
+  // the cursor itself aims — the dot follows it and the system cursor is hidden over the arena
+  const freeAim = !input.locked;
+  const aim = freeAim ? world.aimRay(raw.aimPos.x, raw.aimPos.y) : world.aimRay();
+  { const ch = $('crosshair'); ch.style.left = freeAim ? raw.aimPos.x * 100 + '%' : ''; ch.style.top = freeAim ? raw.aimPos.y * 100 + '%' : '';
+    canvas.style.cursor = input.fallback && !overlay ? 'none' : ''; }
   const myA = meV ? kitOf(meV).auto : null;
   if (raw.attack && meV) {
-    const pick = aimPick(pre.fighters, meV, aim, 80);
+    const pick = aimPick(pre.fighters, meV, aim, 80); // clicking a champion targets it (pets / summons are hit, never targeted)
     if (pick && pick.f.id !== meV.target) setTarget = pick.f.id;
   }
   // crosshair feedback: is an enemy hitbox under the dot that this basic attack can reach right now?
   if (meV && myA) {
     const reachOk = myA.ranged ? (t => rangeDist(meV, t) <= myA.range + 1)
       : (t => rangeDist(meV, t) <= MELEE_AUTO_RANGE + meleeBonus(meV, t) && Math.abs(angleDiff(meV.yaw, angleTo(meV, t))) <= FACE_ARC);
-    hud.aimOn = !!aimPick(pre.fighters, meV, aim, 80, myA.ranged ? 0 : MELEE_AIM_WIDTH, reachOk);
+    hud.aimOn = !!aimPick([...pre.fighters, ...(pre.minions || [])], meV, aim, 80, myA.ranged ? 0 : MELEE_AIM_WIDTH, reachOk);
   }
   const atkHold = !!raw.atkHeld;
   if (raw.friendKey === 1) setFriend = S.myId;

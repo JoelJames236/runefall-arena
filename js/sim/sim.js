@@ -38,11 +38,14 @@ export const meleeHitT = A => Math.max(0.13, Math.min(0.24, 0.06 + A.speed * 0.0
 // front of you; a ranged shot flies straight at the aim point and hits whichever hitbox it passes through.
 // Every champion has the same hitbox, a vertical capsule, whatever the size of its model.
 export const HITBOX = { r: 0.55, y0: 0.1, y1: 1.95 };
+// pets and summons (ghoul, abomination, gorilla, spirit wolf …) share one smaller hitbox — also independent of the model
+export const MINION_HITBOX = { r: 0.45, y0: 0.1, y1: 1.5 };
+const boxOf = t => (t.owner !== undefined && t.cls === undefined ? MINION_HITBOX : HITBOX);
 export const MELEE_AIM_WIDTH = 0.25; // a weapon swing sweeps a little: for melee the aim ray counts this much wider
 const PROJ_R = 0.12;                 // radius of an aimed bolt / arrow
 // Closest approach between the segment p + s·u (s in 0..1) and the axis of t's hitbox: { d, s }
 export function hitboxDist(px, py, pz, ux, uy, uz, t) {
-  const qx = t.x, qy = t.y + HITBOX.y0, qz = t.z, vy = HITBOX.y1 - HITBOX.y0; // axis: q + w·(0, vy, 0), w in 0..1
+  const H = boxOf(t), qx = t.x, qy = t.y + H.y0, qz = t.z, vy = H.y1 - H.y0; // axis: q + w·(0, vy, 0), w in 0..1
   const rx = px - qx, ry = py - qy, rz = pz - qz;
   const a = ux * ux + uy * uy + uz * uz, e = vy * vy, b = uy * vy, c = ux * rx + uy * ry + uz * rz, f = vy * ry;
   const den = a * e - b * b, cl = v => Math.max(0, Math.min(1, v));
@@ -51,14 +54,18 @@ export function hitboxDist(px, py, pz, ux, uy, uz, t) {
   const dx = px + ux * s - qx, dy = py + uy * s - (qy + vy * w), dz = pz + uz * s - qz;
   return { d: Math.sqrt(dx * dx + dy * dy + dz * dz), s };
 }
-// aim = [ox, oy, oz, dx, dy, dz] (a ray, unit direction). The first enemy of `me` whose hitbox the ray passes
-// through within `len` metres (ray widened by `thick`) and that passes `ok`: { f, dist } or null.
-export function aimPick(fighters, me, aim, len, thick = 0, ok = null) {
+// a champion or a minion (pet / summon) that an aimed basic attack can hit — minions have the same hitbox
+export const isMinion = u => u.owner !== undefined && u.cls === undefined;
+const hittable = u => (isMinion(u) ? u.hp > 0 : u.alive && !u.buffs.some(b => b.type === 'stealth'));
+// aim = [ox, oy, oz, dx, dy, dz] (a ray, unit direction). The first enemy unit of `me` (champions and minions)
+// whose hitbox the ray passes through within `len` metres (ray widened by `thick`) and that passes `ok`:
+// { f, dist } or null.
+export function aimPick(units, me, aim, len, thick = 0, ok = null) {
   let best = null;
-  for (const t of fighters) {
-    if (t.team === me.team || !t.alive || t.buffs.some(b => b.type === 'stealth')) continue;
+  for (const t of units) {
+    if (t.team === me.team || !hittable(t)) continue;
     const r = hitboxDist(aim[0], aim[1], aim[2], aim[3] * len, aim[4] * len, aim[5] * len, t);
-    if (r.d > HITBOX.r + thick || r.s * len < 0.3 || (ok && !ok(t))) continue;
+    if (r.d > boxOf(t).r + thick || r.s * len < 0.3 || (ok && !ok(t))) continue;
     if (!best || r.s * len < best.dist) best = { f: t, dist: r.s * len };
   }
   return best;
@@ -578,6 +585,8 @@ export class Sim {
     f.atkReq = ATTACK_BUFFER;
   }
 
+  // everything an aimed basic attack can hit: champions and their pets / summons
+  units() { return this.minions.length ? [...this.fighters, ...this.minions] : this.fighters; }
   // the fighter's aim ray this tick; without one (bots that don't aim, old clients) straight ahead at chest height
   aimOf(f) { return f.aim || [f.x, f.y + 1.3, f.z, Math.sin(f.yaw), 0, Math.cos(f.yaw)]; }
   // what you hit becomes your target when you have none (so abilities follow your basic attacks)
@@ -590,7 +599,7 @@ export class Sim {
     const M = [f.x + fw.x * 0.8, f.y + 1.6, f.z + fw.z * 0.8];
     const reach = A.range + 1;
     const L = Math.hypot(aim[0] - f.x, aim[1] - f.y - 1.5, aim[2] - f.z) + reach; // camera → beyond the weapon's range
-    const pick = aimPick(this.fighters, f, aim, L, 0, t => this.dist(f, t) <= reach);
+    const pick = aimPick(this.units(), f, aim, L, 0, t => this.dist(f, t) <= reach);
     let s = pick ? pick.dist : L;
     if (!pick && aim[4] < -1e-3) s = Math.min(s, (aim[1] - floorAt(f.x, f.z, f.y) - 0.05) / -aim[4]); // into the ground
     let dx = aim[0] + aim[3] * s - M[0], dy = aim[1] + aim[4] * s - M[1], dz = aim[2] + aim[5] * s - M[2];
@@ -599,6 +608,7 @@ export class Sim {
     const t0 = pick ? pick.f : null;
     this.projectiles.push({ id: NEXT_ID++, kind: A.proj, owner: f.id, team: f.team, target: -1, straight: true, x: M[0], y: M[1], z: M[2], dx: dx / l, dy: dy / l, dz: dz / l, speed: A.projSpeed, left: reach + 2,
       onHit: t => {
+        if (isMinion(t)) { this.hitMinion(f, t, A.dmg, { school: A.school }); return; }
         this.claimTarget(f, t);
         this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
         if (A.burn) this.kindle(f, t); // Fire Mage: Kindling
@@ -640,13 +650,14 @@ export class Sim {
   landSwing(f, s, A) {
     if (!f.alive || !A || A.ranged) return;
     const aim = this.aimOf(f);
-    const pick = aimPick(this.fighters, f, aim, 40, MELEE_AIM_WIDTH, t => this.dist(f, t) <= MELEE_AUTO_RANGE + meleeBonus(f, t) && Math.abs(angleDiff(f.yaw, angleTo(f, t))) <= FACE_ARC);
+    const pick = aimPick(this.units(), f, aim, 40, MELEE_AIM_WIDTH, t => this.dist(f, t) <= MELEE_AUTO_RANGE + (isMinion(t) ? 0 : meleeBonus(f, t)) && Math.abs(angleDiff(f.yaw, angleTo(f, t))) <= FACE_ARC);
     if (!pick) {
       const fw = this.forward(f);
       this.event({ e: 'miss', id: f.id, x: f.x + fw.x * 2.2, y: f.y + 1.4, z: f.z + fw.z * 2.2, melee: true });
       return;
     }
     const t = pick.f;
+    if (isMinion(t)) { this.hitMinion(f, t, A.dmg, { school: A.school, melee: true }); return; } // a ghoul / pet in the way takes the blow
     this.claimTarget(f, t);
     this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true, melee: true });
     if (A.poison) this.poison(f, t); // Assassination: Venom Mastery
@@ -977,17 +988,17 @@ export class Sim {
     const step = Math.min(p.speed * dt, p.left); p.left -= step;
     const ux = p.dx * step, uy = p.dy * step, uz = p.dz * step;
     let hit = null, hs = 2;
-    for (const t of this.fighters) {
-      if (t.team === p.team || !t.alive || hasBuff(t, 'stealth')) continue;
+    for (const t of this.units()) {
+      if (t.team === p.team || !hittable(t)) continue;
       const r = hitboxDist(p.x, p.y, p.z, ux, uy, uz, t);
-      if (r.d <= HITBOX.r + PROJ_R && r.s < hs) { hs = r.s; hit = t; }
+      if (r.d <= boxOf(t).r + PROJ_R && r.s < hs) { hs = r.s; hit = t; }
     }
     const ex = p.x + ux * (hit ? hs : 1), ey = p.y + uy * (hit ? hs : 1), ez = p.z + uz * (hit ? hs : 1);
     const end = () => { this.projectiles.splice(i, 1); this.event({ e: 'fizzle', kind: p.kind, x: p.x, y: p.y, z: p.z }); };
     if (segBlocked(p.x, p.z, ex, ez, p.y, ey) || ey < floorAt(ex, ez, ey) + 0.02) { end(); return; }
     if (hit) {
       this.projectiles.splice(i, 1);
-      this.event({ e: 'hit', kind: p.kind, id: hit.id, src: p.owner, x: ex, y: ey, z: ez });
+      this.event({ e: 'hit', kind: p.kind, id: isMinion(hit) ? -1 : hit.id, src: p.owner, x: ex, y: ey, z: ez });
       if (this.fighters[p.owner]) p.onHit(hit);
       return;
     }
@@ -1124,6 +1135,25 @@ export class Sim {
     this.event({ e: 'fx', fx: 'shapeshift', id: f.id, x: f.x, z: f.z, form });
   }
   killMinion(m) { m.hp = 0; }
+  // An aimed basic attack on a pet / summon (ghoul, abomination, gorilla, spirit wolf …): the attacker's own
+  // bonuses and crits count; the minion has no armor or defensives. Rage users gain rage as on champions.
+  hitMinion(src, m, amount, o = {}) {
+    if (m.hp <= 0 || this.state !== 'fight') return 0;
+    let amt = amount * (0.94 + Math.random() * 0.12);
+    if (hasBuff(src, 'divine')) amt *= 0.5;
+    const SP = kitOf(src).passive || {};
+    const crit = Math.random() < RULES.critChance + (SP.critBonus || 0);
+    if (crit) amt *= SP.critMult || RULES.critMult;
+    amt *= bloodrage(src);
+    if (SP.schoolBonus) amt *= 1 + (SP.schoolBonus[o.school] || 0);
+    const wr = getBuff(src, 'wrath'); if (wr) amt *= 1 + wr.value;
+    const bz = getBuff(src, 'berserk'); if (bz) amt *= 1 + bz.value;
+    amt = Math.max(1, Math.round(amt));
+    m.hp -= amt;
+    if (src.resType === 'rage') src.res = Math.min(src.maxRes, src.res + amt * 0.09);
+    this.event({ e: 'minionHit', id: m.id, src: src.id, amt, crit, melee: !!o.melee, x: m.x, y: m.y, z: m.z });
+    return amt;
+  }
   // enemy area damage also hits minions inside the area
   aoeMinions(src, x, z, r, amt) {
     for (const m of this.minions) if (m.team !== src.team && m.hp > 0 && Math.hypot(m.x - x, m.z - z) <= r) {

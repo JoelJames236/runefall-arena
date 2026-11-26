@@ -69,28 +69,37 @@ export class Input {
       if (!this.enabled) return;
       if (!this.locked) this.mousePos = { x: e.clientX / innerWidth, y: e.clientY / innerHeight };
       // pointer-locked mouselook, or hold any mouse button to look when pointer lock is unavailable
-      if (!this.locked && !(this.fallback && e.buttons)) return;
+      if (!this.locked && !(this.fallback && (e.buttons & 2))) return; // fallback: the right button looks, the left one attacks
       this.yaw -= e.movementX * 0.0025 * this.sens;
       this.pitch += e.movementY * 0.0025 * this.sens * (this.invert ? -1 : 1);
       this.pitch = Math.max(-0.35, Math.min(1.25, this.pitch));
     });
     addEventListener('wheel', e => { if (!this.enabled) return; this.zoom = Math.max(4, Math.min(16, this.zoom + Math.sign(e.deltaY) * 0.8)); }, { passive: true });
-    document.addEventListener('pointerlockerror', () => { this.fallback = true; this.onFallback && this.onFallback(); });
+    // A refused lock request is normal — Chrome refuses a re-lock right after Esc, a request that didn't come from
+    // a click, the first try with raw input on systems without it — and only means "try again on the next click".
+    // Only a page that can never lock (an embedded view) switches to the fallback controls for good.
+    this.lockFails = 0;
+    document.addEventListener('pointerlockerror', () => { if (!this.promiseLock && ++this.lockFails >= 3) this.noLock(); });
     document.addEventListener('pointerlockchange', () => {
       const was = this.locked;
       this.locked = document.pointerLockElement === canvas;
+      if (this.locked) this.lockFails = 0;
       if (was && !this.locked) { this.keys.clear(); this.mouseHeld = false; this.onUnlock && this.onUnlock(); }
     });
   }
 
   requestLock() {
-    if (this.fallback) return;
-    const fail = () => { this.fallback = true; this.onFallback && this.onFallback(); };
+    if (this.fallback || this.locked) return;
+    if (!this.canvas.requestPointerLock) { this.noLock(); return; }
+    const plain = () => { try { const q = this.canvas.requestPointerLock(); if (q && q.catch) q.catch(e => this.lockRefused(e)); } catch (e) { this.lockRefused(e); } };
     try {
-      const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
-      if (p && p.catch) p.catch(() => { try { const q = this.canvas.requestPointerLock(); if (q && q.catch) q.catch(fail); } catch { fail(); } });
-    } catch { try { this.canvas.requestPointerLock(); } catch { fail(); } }
+      const p = this.canvas.requestPointerLock({ unadjustedMovement: true }); // raw mouse input where the system has it
+      if (p && p.catch) { this.promiseLock = true; p.catch(e => (e && e.name === 'NotSupportedError' ? plain() : this.lockRefused(e))); }
+    } catch { plain(); }
   }
+  // why a lock request failed: an embedded view can never lock; anything else is retried on the next click
+  lockRefused(e) { if (e && e.name === 'WrongDocumentError') this.noLock(); }
+  noLock() { if (this.fallback) return; this.fallback = true; this.onFallback && this.onFallback(); }
   setBinds(binds) {
     this.bindList = binds.map(l => [...(l || [])]);
     this.binds = new Map();
