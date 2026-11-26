@@ -10,7 +10,7 @@ sight, resources, swing timers, and — since this update — attacks only while
 
 | Test | Conditions |
 | --- | --- |
-| **1v1 matrix** | every spec against every other spec, 10 rounds per pairing (sides alternate), 3,800 rounds |
+| **1v1 matrix** | every spec against every other spec, 20 rounds per pairing (sides alternate), 3,800 rounds |
 | **2v2 sample** | 2,400 random team-ups of the 20 specs (≈ 480 games per spec) |
 | **Spec benchmark** | identical conditions for every spec: **sustained DPS** over 60 s against a passive target dummy (no armor), **burst** = best 6-second window, **survival** = seconds lasted while a dummy deals a fixed 85 physical + 35 arcane damage per second (armor, defensives, self-heals and absorbs all count), **partner HPS** = healing done on a passive partner taking 75 damage per second |
 
@@ -19,7 +19,7 @@ outlier; differences of a few points are noise (±3 % in 1v1, ±2.5 % in 2v2 at 
 Rage users look weak against the passive dummy because nothing hits them back (rage comes from dealing and
 taking damage) — the benchmark measures the kit, the matrix measures the fight.
 
-## Where every spec stands (final run of this update)
+## Where every spec stands (benchmark from an earlier update; current win rates are in the first change log below)
 
 | Spec | Role | 1v1 win % | 2v2 win % | Sustained DPS | Burst DPS (6 s) | Survival (s) | Partner HPS |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -51,6 +51,57 @@ damage); burst specs (Subtlety, Sharpshooter, Elemental, Summoner) have the high
 
 **Watch list for the next pass** (inside the band, but at its edges): Shadow Priest and Beastmaster in 1v1 (41 %),
 Elemental and Enhancement in 2v2 (41–42 %), Protection Warrior in 2v2 (62 %, Shieldwall), the Priests in 2v2 (59 %).
+
+## Change log — gameplay follow-ups (leeway, team vitality, bot filler)
+
+Rule and bot changes in this update (details in `docs/GAMEFEEL.md`, "Second pass") that move balance:
+
+| Change | Effect in the lab |
+| --- | --- |
+| **Melee leeway** (+0.8 yd while both fighters move) | helps every melee spec against kiters; 1.5 yd was tried first and cost Sharpshooter, Frost, Shadow and Elemental 10–17 points in 1v1 |
+| **Team vitality** (2v2: ×1.5 health) | median time to the first kill 11 s → **16 s**, median 2v2 round 44 s; long fights favour sustain over burst |
+| **Bot filler** (attack instead of idling) | the first version re-cast running damage-over-time spells and swung the 1v1 matrix to 26–74 %; it now skips a DoT / debuff of its own that still has more than 35 % to run |
+| **Slow resistance** 35 % (Executioner, Enhancement) and **Assassination** energy 16 → 17 /s | less time out of range or energy-starved (20 /s pushed Assassination to 67–72 %) |
+| **Pillar blocking** | Arcane Comet only; blocking Aimed Shot, the Sharpshooter's main filler, cost it ~10 points |
+
+Numbers changed over six lab passes (1v1: 20 rounds per pairing, 3,800 rounds; 2v2: 2,400 random team-ups each):
+
+| Spec | Change |
+| --- | --- |
+| Mage (both) | health 1000 → 1080 (1100 overshot Fire to 62 % in 1v1) |
+| Mage — Frost | Frost Lance 88 → 94 |
+| Mage — Fire | Fireball 85 → 86 |
+| Rogue — Assassination | energy regeneration 17 /s (class: 16), Venom Mastery 3.5 → 3 % per stack |
+| Warrior — Protection | Shieldwall (team play): self 15 → 8 %, allies 8 → 5 % |
+| Warrior — Arms | auto 62 → 59 |
+| Berserker — Executioner, Shaman — Enhancement | slows on you are 35 % weaker |
+| Priest — Shadow | Mind Blast heals for 70 % of its damage (was 40 %) — it fell to 34 % in 1v1 once melee had leeway |
+| Shaman — Elemental | Lightning Lash 68 → 76 |
+| Hunter — Beastmaster | jungle cat damage 17 → 22 |
+| Hunter — Sharpshooter | Aimed Shot 160 → 168 |
+| Necromancer — Curser | health 1150 → 1200 |
+
+Result (hard AI, final pass): **1v1 43–58 %** (before: 41–58 %), **2v2 35–66 %** (before: 42–64 %).
+
+| Spec | 1v1 % | 2v2 % | | Spec | 1v1 % | 2v2 % |
+| --- | --- | --- | --- | --- | --- | --- |
+| Mage — Frost | 54 | 42 | | Priest — Discipline | 43 | 49 |
+| Mage — Fire | 50 | 39 | | Priest — Shadow | 43 | 61 |
+| Rogue — Subtlety | 46 | 55 | | Shaman — Elemental | 56 | 41 |
+| Rogue — Assassination | 52 | 55 | | Shaman — Enhancement | 58 | 54 |
+| Warrior — Protection | 51 | 66 | | Hunter — Beastmaster | 44 | 44 |
+| Warrior — Arms | 58 | 47 | | Hunter — Sharpshooter | 43 | 35 |
+| Berserker — Fury | 48 | 48 | | Necromancer — Summoner | 46 | 44 |
+| Berserker — Executioner | 52 | 59 | | Necromancer — Curser | 57 | 48 |
+| Paladin — Crusader | 51 | 51 | | Druid — Feral | 46 | 61 |
+| Paladin — Protection | 53 | 49 | | Druid — Restoration | 49 | 53 |
+
+The 2v2 edges move ±3–5 points between passes of the same build (Sharpshooter 35–44 %, Protection Warrior 62–67 %,
+Fire 38–46 % over the last four passes), so treat them as a trend.
+
+Watch list: Protection Warrior in 2v2 (62–67 % in every pass, also before this update — the Shieldwall cut didn't
+move it, so it is the warrior's kit in team fights, not the passive); the ranged burst specs in 2v2 (Fire, Frost,
+Elemental, Sharpshooter around 40 %: longer team fights blunt burst); Shadow Priest and Feral in 2v2 (~60 %).
 
 ## Change log — gameplay-feel update (cast reliability)
 

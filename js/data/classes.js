@@ -16,14 +16,14 @@ export const CLASSES = {
     id: 'mage', name: 'Mage', role: 'Ranged Elemental Caster', race: 'Sun Elf', emblem: '✦', color: '#7fb8ff', accent: '#b98cff',
     desc: 'A master of frost and arcane power. Devastating at range and able to lock enemies in place, but fragile when caught. Positioning and timing are everything.',
     weapon: 'A gilded frost wand with an ice-claw crystal, and a sapphire spellbook ringed by runes', armor: 'Hooded indigo leathers',
-    hp: 1000, defense: 0.0, speed: 7.0, resType: 'mana', res: 1000, regen: 16,
+    hp: 1080, defense: 0.0, speed: 7.0, resType: 'mana', res: 1000, regen: 16,
     auto: { name: 'Arcane Bolt', dmg: 28, speed: 1.8, range: 30, ranged: true, school: 'arcane', proj: 'arcane_bolt', projSpeed: 42, glyph: '✧', color: '#b98cff',
       desc: 'Basic attack: fire a small bolt of arcane energy from your staff (28 damage, 30 yd, every 1.8 sec). Usable while moving.' },
     rating: { health: 2, damage: 5, mobility: 3, defense: 1 },
     abilities: [
       { id: 'frost_lance', name: 'Frost Lance', glyph: '❄', color: '#8fd8ff', school: 'frost', cost: 50, cd: 0, gcd: true, cast: 1.3, range: 30, target: true,
-        desc: 'Hurl a lance of ice dealing 88 frost damage and slowing the target by 50% for 4 sec.',
-        exec(sim, c, t) { sim.spawnProjectile(c, t, 'frost_lance', 34, () => { sim.damage(c, t, 88, { school: 'frost', ab: 'frost_lance' }); sim.addBuff(t, 'slow', 4, { value: 0.5, src: c.id, name: 'Chilled', icon: '❄' }); }); } },
+        desc: 'Hurl a lance of ice dealing 94 frost damage and slowing the target by 50% for 4 sec.',
+        exec(sim, c, t) { sim.spawnProjectile(c, t, 'frost_lance', 34, () => { sim.damage(c, t, 94, { school: 'frost', ab: 'frost_lance' }); sim.addBuff(t, 'slow', 4, { value: 0.5, src: c.id, name: 'Chilled', icon: '❄' }); }); } },
       { id: 'flame_burst', name: 'Flame Burst', glyph: '🔥', color: '#ff8a3a', school: 'fire', cost: 70, cd: 6, gcd: true, cast: 0, range: 30, target: true,
         desc: 'Instantly ignite the target for 100 fire damage plus 45 burn damage over 3 sec.',
         exec(sim, c, t) { sim.spawnProjectile(c, t, 'flame_burst', 55, () => { sim.damage(c, t, 100, { school: 'fire', ab: 'flame_burst' }); sim.addDot(c, t, 'Ignite', 45, 3, 'fire', '🔥'); }); } },
@@ -38,8 +38,8 @@ export const CLASSES = {
         desc: 'Surround yourself with a ward that absorbs 380 damage for 10 sec.',
         exec(sim, c) { sim.addBuff(c, 'absorb', 10, { value: sim.shieldAmt(380), src: c.id, name: 'Mana Ward', icon: '◈', fx: 'mana_ward' }); } },
       { id: 'arcane_comet', name: 'Arcane Comet', glyph: '☄', color: '#d17bff', school: 'arcane', cost: 160, cd: 30, gcd: true, cast: 2.0, range: 34, target: true, signature: true,
-        desc: 'SIGNATURE — Call down a colossal arcane comet that deals 270 damage and stuns the target for 1.5 sec.',
-        exec(sim, c, t) { sim.spawnProjectile(c, t, 'arcane_comet', 22, () => { sim.damage(c, t, 270, { school: 'arcane', ab: 'arcane_comet', big: true }); sim.addBuff(t, 'stun', 1.5, { src: c.id, cc: 'cc', name: 'Starstruck', icon: '☄' }); }); } },
+        desc: 'SIGNATURE — Call down a colossal arcane comet that deals 270 damage and stuns the target for 1.5 sec. The comet is slow: a target that ducks behind a pillar while it flies makes it shatter.',
+        exec(sim, c, t) { sim.spawnProjectile(c, t, 'arcane_comet', 22, () => { sim.damage(c, t, 270, { school: 'arcane', ab: 'arcane_comet', big: true }); sim.addBuff(t, 'stun', 1.5, { src: c.id, cc: 'cc', name: 'Starstruck', icon: '☄' }); }, 0, { block: true }); } },
     ],
   },
 
@@ -75,13 +75,13 @@ export const CLASSES = {
 
   warrior: {
     id: 'warrior', name: 'Warrior', role: 'Armored Juggernaut', race: 'Orc', emblem: '⛨', color: '#e0604a', accent: '#c9c9d4',
-    desc: 'A towering wall of steel who wins in close quarters. Generates rage from dealing and taking damage, and closes the gap with charges and crippling blows. Passive — Shieldwall (team play): you take 15% less damage, allies within 15 yards of you take 8% less, and you gain rage when a nearby ally is hit.',
+    desc: 'A towering wall of steel who wins in close quarters. Generates rage from dealing and taking damage, and closes the gap with charges and crippling blows. Passive — Shieldwall (team play): you take 8% less damage, allies within 15 yards of you take 5% less, and you gain rage when a nearby ally is hit.',
     weapon: 'Black-iron war axe and a spiked orcish round shield', armor: 'Black-iron plate, spiked pauldrons, fur trim and a skull-buckled belt',
     hp: 1380, defense: 0.15, speed: 6.8, resType: 'rage', res: 100, resStart: 20, regen: 1,
     auto: { name: 'Sword Swing', dmg: 50, speed: 2.0, range: 4.5, ranged: false, school: 'phys', glyph: '🗡', color: '#e0604a',
       desc: 'Basic attack: heavy alternating sword swings (50 damage every 2.0 sec). Melee range, generates rage.' },
     rating: { health: 5, damage: 3, mobility: 2, defense: 5 },
-    passive: { name: 'Shieldwall', self: 0.15, ally: 0.08, radius: 15, rageShare: 0.03, dmg: 0 }, // team play only
+    passive: { name: 'Shieldwall', self: 0.08, ally: 0.05, radius: 15, rageShare: 0.03, dmg: 0 }, // team play only
     abilities: [
       { id: 'rending_blow', name: 'Rending Blow', glyph: '⚔', color: '#ff6a4a', school: 'phys', cost: 25, cd: 5, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
         desc: 'A savage strike dealing 122 damage and reducing healing received by 50% for 8 sec.',
@@ -183,8 +183,8 @@ export const CLASSES = {
     rating: { health: 3, damage: 4, mobility: 3, defense: 3 },
     abilities: [
       { id: 'lightning_lash', name: 'Lightning Lash', glyph: '⚡', color: '#7ae0ff', school: 'nature', cost: 50, cd: 0, gcd: true, cast: 1.3, range: 30, target: true,
-        desc: 'Strike the target with a bolt of lightning for 68 nature damage.',
-        exec(sim, c, t) { sim.event({ e: 'fx', fx: 'lightning_lash', id: c.id, tid: t.id }); sim.damage(c, t, 68, { school: 'nature', ab: 'lightning_lash' }); } },
+        desc: 'Strike the target with a bolt of lightning for 76 nature damage.',
+        exec(sim, c, t) { sim.event({ e: 'fx', fx: 'lightning_lash', id: c.id, tid: t.id }); sim.damage(c, t, 76, { school: 'nature', ab: 'lightning_lash' }); } },
       { id: 'magma_burst', name: 'Magma Burst', glyph: '♨', color: '#ff7a2a', school: 'fire', cost: 70, cd: 7, gcd: true, cast: 0, range: 30, target: true,
         desc: 'Launch molten rock that deals 72 fire damage and burns for 60 more over 6 sec.',
         exec(sim, c, t) { sim.spawnProjectile(c, t, 'magma_burst', 40, () => { sim.damage(c, t, 72, { school: 'fire', ab: 'magma_burst' }); sim.addDot(c, t, 'Magma Burn', 60, 6, 'fire', '♨'); }); } },
@@ -212,7 +212,7 @@ export const CLASSES = {
     auto: { name: 'Quick Shot', dmg: 20, speed: 1.4, range: 32, ranged: true, school: 'phys', proj: 'arrow', projSpeed: 62, glyph: '➵', color: '#d8c890',
       desc: 'Basic attack: a quick arrow (20 damage, 32 yd, every 1.4 sec). Usable while moving.' },
     rating: { health: 3, damage: 4, mobility: 4, defense: 2 },
-    passive: { name: 'Pack Leader', pet: { kind: 'cat', hp: 450, dmg: 17, atkSpeed: 1.3, speed: 9.5, respawn: 18, range: 2.4 } },
+    passive: { name: 'Pack Leader', pet: { kind: 'cat', hp: 450, dmg: 22, atkSpeed: 1.3, speed: 9.5, respawn: 18, range: 2.4 } },
     abilities: [
       { id: 'kill_command', name: 'Kill Command', glyph: '🐾', color: '#ffc060', school: 'phys', cost: 30, cd: 6, gcd: true, cast: 0, range: 40, target: true, needsPet: true,
         desc: 'Order your cat to maul the target for 70 damage (needs your pet).',
@@ -376,8 +376,8 @@ export const SPECS = {
         desc: 'Basic attack: a quick bolt of fire (22 damage, 30 yd, every 1.6 sec) that adds a stack of Burning. Usable while moving.' },
       abilities: {
         0: { id: 'fireball', name: 'Fireball', glyph: '☀', color: '#ff7a2a', school: 'fire', cost: 50, cd: 0, gcd: true, cast: 1.5, moveCast: true, range: 30, target: true,
-          desc: 'Hurl a fireball for 85 fire damage and a stack of Burning. Can be cast while moving (you move 35% slower while casting).',
-          exec(sim, c, t) { sim.spawnProjectile(c, t, 'fireball', 34, () => { sim.damage(c, t, 85, { school: 'fire', ab: 'fireball' }); sim.kindle(c, t); }); } },
+          desc: 'Hurl a fireball for 86 fire damage and a stack of Burning. Can be cast while moving (you move 35% slower while casting).',
+          exec(sim, c, t) { sim.spawnProjectile(c, t, 'fireball', 34, () => { sim.damage(c, t, 86, { school: 'fire', ab: 'fireball' }); sim.kindle(c, t); }); } },
         2: { id: 'flame_ring', name: 'Flame Ring', glyph: '◎', color: '#ff8a3a', school: 'fire', cost: 70, cd: 16, gcd: true, cast: 0, range: 0, target: false,
           desc: 'Erupt in a ring of fire: 45 damage to all enemies within 8 yards, slowing them by 60% for 3 sec and adding a stack of Burning.',
           exec(sim, c) { sim.event({ e: 'fx', fx: 'flame_ring', id: c.id, x: c.x, z: c.z }); sim.aoeMinions(c, c.x, c.z, 8, 45); for (const f of sim.enemiesOf(c)) if (sim.dist(c, f) <= 8) { sim.damage(c, f, 45, { school: 'fire', ab: 'flame_ring' }); sim.addBuff(f, 'slow', 3, { value: 0.6, src: c.id, name: 'Scorched', icon: '◎' }); sim.kindle(c, f); } } },
@@ -395,9 +395,9 @@ export const SPECS = {
     {
       id: 'assassination', name: 'Assassination', icon: '🐍', color: '#6aff4a', tag: 'Poisons and stacking DoTs',
       role: 'Venomous Assassin',
-      desc: 'Poisons everything, then keeps moving while the venom does the work. Passive — Venom Mastery: your slashes apply Deadly Poison (stacks up to 5 times, 14 damage over 4 sec per stack), and every stack on the target makes your attacks deal 3% more damage.',
+      desc: 'Poisons everything, then keeps moving while the venom does the work. Passive — Venom Mastery: your slashes apply Deadly Poison (stacks up to 5 times, 14 damage over 4 sec per stack), and every stack on the target makes your attacks deal 3% more damage. Faster energy regeneration (17 per sec).',
       weapon: 'Twin fangs dripping with green venom', armor: 'Dark green leathers with a poison-vial belt',
-      passive: { name: 'Venom Mastery', poisonBonus: 0.035 },
+      passive: { name: 'Venom Mastery', poisonBonus: 0.03 }, regen: 17,
       auto: { name: 'Envenomed Slashes', dmg: 26, speed: 1.3, range: 4.5, ranged: false, school: 'phys', glyph: '⚔', color: '#6aff4a', poison: true,
         desc: 'Basic attack: alternating poisoned slashes (26 damage every 1.3 sec), each adding a stack of Deadly Poison.' },
       abilities: {
@@ -423,8 +423,8 @@ export const SPECS = {
       hp: 1350, defense: 0.13,
       rating: { health: 4, damage: 4, mobility: 2, defense: 4 },
       passive: { name: 'Battle Trance', self: 0, ally: 0, rageShare: 0, dmg: 0, executeBonus: 0.35, executeAt: 0.3 },
-      auto: { name: 'Greatsword Cleave', dmg: 62, speed: 2.6, range: 4.5, ranged: false, school: 'phys', glyph: '⚔', color: '#e0604a',
-        desc: 'Basic attack: a heavy two-handed sweep (62 damage every 2.6 sec). Melee range, generates rage.' },
+      auto: { name: 'Greatsword Cleave', dmg: 59, speed: 2.6, range: 4.5, ranged: false, school: 'phys', glyph: '⚔', color: '#e0604a',
+        desc: 'Basic attack: a heavy two-handed sweep (59 damage every 2.6 sec). Melee range, generates rage.' },
       abilities: {
         3: { id: 'die_by_the_sword', name: 'Die by the Sword', glyph: '⛨', color: '#e8d0b0', school: 'phys', cost: 0, cd: 40, gcd: false, cast: 0, range: 0, target: false, allowCC: true,
           desc: 'Parry with the great axe: take 35% less damage for 5 sec. Usable while stunned.',
@@ -443,11 +443,11 @@ export const SPECS = {
     {
       id: 'executioner', name: 'Executioner', icon: '💀', color: '#c8b8a0', tag: 'One great axe · slow swings, huge crits',
       role: 'Bloodraged Great-Axe Executioner',
-      desc: 'Trades speed for sheer weight: one colossal two-handed axe, slow swings and devastating critical hits. Passive — Bloodrage: up to 50% more damage as his health drops (in team play also up to 25% less damage taken). Heavy Hands: +15% critical strike chance, and critical hits deal +80% damage instead of +50%.',
+      desc: 'Trades speed for sheer weight: one colossal two-handed axe, slow swings and devastating critical hits. Passive — Bloodrage: up to 50% more damage as his health drops (in team play also up to 25% less damage taken). Heavy Hands: +15% critical strike chance, and critical hits deal +80% damage instead of +50%; slows on you are 35% weaker.',
       weapon: 'One colossal two-handed executioner\'s axe', armor: 'Fur mantle, skull pauldron and war-kilt',
       speed: 7.0, defense: 0.08,
       rating: { health: 4, damage: 5, mobility: 2, defense: 3 },
-      passive: { name: 'Heavy Hands', critBonus: 0.15, critMult: 1.8 },
+      passive: { name: 'Heavy Hands', critBonus: 0.15, critMult: 1.8, slowResist: 0.35 },
       auto: { name: 'Great Axe Cleave', dmg: 66, speed: 3.0, range: 4.5, ranged: false, school: 'phys', glyph: '🪓', color: '#c8b8a0',
         desc: 'Basic attack: a slow, crushing two-handed chop (66 damage every 3.0 sec). Melee range, generates rage. Heavy Hands crits hit +80%.' },
       abilities: {
@@ -489,8 +489,8 @@ export const SPECS = {
           desc: 'Instantly afflict the target with shadow pain: 166 damage over 12 sec.',
           exec(sim, c, t) { sim.addDot(c, t, 'Shadow Word: Pain', 166, 12, 'shadow', '☾'); sim.event({ e: 'fx', fx: 'shadow_touch', id: c.id, x: t.x, z: t.z, tid: t.id }); } },
         1: { id: 'mind_blast', name: 'Mind Blast', glyph: '✹', color: '#c08aff', school: 'shadow', cost: 60, cd: 7, gcd: true, cast: 1.4, range: 30, target: true,
-          desc: 'Blast the target\'s mind for 114 shadow damage, healing you for 40% of the damage dealt.',
-          exec(sim, c, t) { sim.spawnProjectile(c, t, 'mind_blast', 38, () => { const d = sim.damage(c, t, 114, { school: 'shadow', ab: 'mind_blast' }); if (d > 0) sim.heal(c, c, Math.round(d * 0.4), 'mind_blast'); }); } },
+          desc: 'Blast the target\'s mind for 114 shadow damage, healing you for 70% of the damage dealt.',
+          exec(sim, c, t) { sim.spawnProjectile(c, t, 'mind_blast', 38, () => { const d = sim.damage(c, t, 114, { school: 'shadow', ab: 'mind_blast' }); if (d > 0) sim.heal(c, c, Math.round(d * 0.7), 'mind_blast'); }); } },
         4: { id: 'psychic_scream', name: 'Psychic Scream', glyph: '☄', color: '#b070ff', school: 'shadow', cost: 70, cd: 30, gcd: true, cast: 0, range: 0, target: false,
           desc: 'Let out a scream: enemies within 8 yards flee in terror (disoriented) for 3 sec, broken by direct damage. Interrupts casts.',
           exec(sim, c) { sim.event({ e: 'fx', fx: 'psychic_scream', id: c.id, x: c.x, z: c.z });
@@ -507,11 +507,11 @@ export const SPECS = {
     {
       id: 'enhancement', name: 'Enhancement', icon: '🐺', color: '#c8fff0', tag: 'Two weapons in melee · spirit wolf',
       role: 'Stormblade Shaman', melee: true,
-      desc: 'Charges into melee with two storm axes, heals itself between blows and calls a spectral wolf to hunt with it. Passive — Maelstrom: each basic attack has a 30% chance to crackle with lightning for 24 extra nature damage.',
+      desc: 'Charges into melee with two storm axes, heals itself between blows and calls a spectral wolf to hunt with it. Passive — Maelstrom: each basic attack has a 30% chance to crackle with lightning for 24 extra nature damage; slows on you are 35% weaker.',
       weapon: 'Two short storm axes crackling with lightning', armor: 'Wolf-pelt cloak over mail',
       defense: 0.1, speed: 7.3,
       rating: { health: 4, damage: 4, mobility: 4, defense: 3 },
-      passive: { name: 'Maelstrom' },
+      passive: { name: 'Maelstrom', slowResist: 0.35 },
       auto: { name: 'Storm Strikes', dmg: 34, speed: 1.5, range: 4.5, ranged: false, school: 'phys', glyph: '⚡', color: '#c8fff0', zap: 0.3,
         desc: 'Basic attack: alternating axe strikes (34 damage every 1.5 sec). Melee range. Maelstrom: 30% chance for +24 lightning damage.' },
       abilities: {
@@ -547,8 +547,8 @@ export const SPECS = {
         desc: 'Basic attack: a heavy war arrow (40 damage, 34 yd, every 2.2 sec). Usable while moving (Steady Aim needs you to stand still).' },
       abilities: {
         0: { id: 'aimed_shot', name: 'Aimed Shot', glyph: '◎', color: '#ffe0a0', school: 'phys', cost: 35, cd: 0, gcd: true, cast: 2.0, range: 34, target: true,
-          desc: 'Take careful aim (2 sec, stand still) and loose a heavy arrow for 160 damage.',
-          exec(sim, c, t) { sim.spawnProjectile(c, t, 'crossbow_bolt', 80, () => sim.damage(c, t, 160, { school: 'phys', ab: 'aimed_shot', big: true })); } },
+          desc: 'Take careful aim (2 sec, stand still) and loose a heavy arrow for 168 damage.',
+          exec(sim, c, t) { sim.spawnProjectile(c, t, 'crossbow_bolt', 80, () => sim.damage(c, t, 168, { school: 'phys', ab: 'aimed_shot', big: true })); } },
         3: { id: 'concussive_bolt', name: 'Concussive Shot', glyph: '⛓', color: '#bfefff', school: 'phys', cost: 20, cd: 10, gcd: true, cast: 0, range: 34, target: true,
           desc: 'A blunt-headed arrow: 40 damage and a 50% slow for 4 sec.',
           exec(sim, c, t) { sim.spawnProjectile(c, t, 'crossbow_bolt', 70, () => { sim.damage(c, t, 40, { school: 'phys', ab: 'concussive_bolt' }); sim.addBuff(t, 'slow', 4, { value: 0.5, src: c.id, name: 'Concussed', icon: '⛓' }); }); } },
@@ -569,7 +569,7 @@ export const SPECS = {
       role: 'Undead Curse-Weaver',
       desc: 'Piles curse upon curse: the more curses an enemy carries, the more damage they take — but the Curser pays too. Passive — Martyr\'s Curse: every curse on a target makes it take 6% more damage (max 5), and you take 3% more damage for every curse you keep on enemies. Your Hex Bolts add a short curse.',
       weapon: 'A chained grimoire and a black bone staff', armor: 'Black rags bound in chains, floating sigils',
-      rating: { health: 2, damage: 5, mobility: 3, defense: 1 }, hp: 1150,
+      rating: { health: 2, damage: 5, mobility: 3, defense: 1 }, hp: 1200,
       passive: { name: 'Martyr\'s Curse', pet: null, martyr: true },
       auto: { name: 'Hex Bolt', dmg: 20, speed: 1.8, range: 30, ranged: true, school: 'shadow', proj: 'hex_bolt', projSpeed: 40, glyph: '☠', color: '#b070ff', hex: true,
         desc: 'Basic attack: a cursed bolt (20 damage, 30 yd, every 1.8 sec) that leaves a 4 sec Hex curse. Usable while moving.' },

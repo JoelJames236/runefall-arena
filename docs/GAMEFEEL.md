@@ -63,11 +63,29 @@ What was wrong with how combat felt, what was changed, and where the knobs are.
 | `IMPACT`, `STRIKE_LEAD` | `js/render/heroes.js` | impact time of each attack clip; lead of instant strikes |
 | hit-stop / flash strengths | `World.onHit` in `js/render/world.js` | weight of a hit |
 
+## Second pass: eight follow-ups
+
+| # | Change | Where |
+| --- | --- | --- |
+| 1 | **Melee leeway**: while attacker *and* target are both moving, melee swings and strikes reach `MELEE_LEEWAY` (0.8 yd) further. 1.5 yd was tried first and cost kiting ranged specs 10–17 win-% points. | `meleeBonus` in `js/sim/sim.js`, used by `check`, `autoBlock` and the HUD range display |
+| 2 | **Team vitality**: in 2v2 every champion has `TEAM_VITALITY` (×1.5) health. Measured median time to the first kill in 2,400 bot games: 11 s → 16 s; median round 44 s. | `Sim.vitality`, `startRound` |
+| 3 | **Dead time**: Assassination regenerates 17 energy/s (16 base) instead of starving between Envenoms; Executioner and Enhancement shrug off 35% of every slow (`passive.slowResist`, applied in `speedMult`) so kiting doesn't keep them out of range all fight. | `js/data/classes.js`, `speedMult` |
+| 4 | **Guest prediction**: an online guest's press shows at once — GCD sweep, cooldown, cast bar and casting pose, animation and sound of instants — and the host's snapshots take over when they show it. A press the host refused (`err` event) or held (spell queue, wait-to-stop) disappears within `PRED_HOLD` (450 ms); a host event for something already shown doesn't play twice. Only presses the guest can check (GCD free, not casting, cooldown, resources, range, facing, line of sight, stuns / silence / roots) are predicted; the rest wait for the host as before. | `guestPredict`, `applyPred`, `onSnapshot` in `js/main.js` |
+| 5 | **Bot filler**: when a bot's priority list has nothing to do, it uses the strongest ready short-cooldown attack instead of idling (never a signature, spender, crowd control or big cooldown, and never a damage-over-time that is still running on the target). | `AI.filler` in `js/sim/ai.js` |
+| 6 | **Arcane Comet shatters on cover**: a projectile with `block: true` that hits a pillar on its way is destroyed (`fizzle` event with `blocked`: "Dodged!" for the target, "Blocked" for the caster). Only the Frost signature uses it; Aimed Shot is the Sharpshooter's main filler, and blocking it cost the spec 10 points. | `spawnProjectile`, `updateProjectiles` |
+| 7 | **Key bindings**: Settings → Ability Keys, two keys per slot, any key or the middle / back / forward mouse button (`Mouse1`, `Mouse3`, `Mouse4`). A key can only do one thing (binding it moves it); movement, Tab, Esc and F1 / F2 can't be bound. Saved with the settings; the action bar and champion screen show the bound key. | `DEFAULT_BINDS`, `Input.setBinds`, `renderBinds` |
+| 8 | **Healer comfort and readability**: mouseover healing (ally under the crosshair / cursor gets your ally spells; frame and nameplate glow; validated on the host so it can't redirect a hostile ability), enemy big-cooldown callouts (30 s+ or signature), and a "not facing" marker (↻ on melee slots, orange crosshair). | `World.pickAlly`, `HUD.callout`, `HUD.update` |
+
+Also: bots can be set to 🎲 Random in the duel (new opponent panel), 2v2 vs bots and the party lobby (new lobby bots
+start random; class and spec are rolled at every match start, avoiding a class already on that team).
+
 ## Not done / next steps
 
-- Online guests still see other players ~100 ms in the past and their own abilities after a round trip; the
-  improvements above run on the host and in offline play, and guests get the same events and animations.
-- Projectiles home on their target and pass through pillars visually (line of sight is checked when the cast ends).
+- Online guests still see *other* players ~100 ms in the past. Their own presses are predicted (see above), but
+  damage numbers, projectiles and buffs still arrive with the host's answer. Prediction was tested with a simulated
+  host in one page, not over a real connection.
+- Projectiles other than Arcane Comet home on their target and pass through pillars visually (line of sight is
+  checked when the cast ends).
 - Pets and summons still deal their damage at the start of their attack animation.
 - Melee ability damage is still instant (the animation was moved to it, not the other way round).
 - No per-ability sound for most of the newer specs' strikes beyond the shared melee / spell impacts.

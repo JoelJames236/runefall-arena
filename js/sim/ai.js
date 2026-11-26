@@ -11,6 +11,8 @@ const DIFF = {
   hard: { react: 0.15, interrupt: 0.9, defensive: 1.0, kite: 1.0, dodge: 0.95, focus: 1.0 },
 };
 
+// debuff an ability leaves on its target when it isn't named after the ability (see AI.filler)
+const FILLER_DEBUFF = { rending_axes: 'Bleeding', crippling_slash: 'Crippled' };
 const MELEE_CLASSES = new Set(['rogue', 'warrior', 'berserker', 'paladin']);
 // melee or not: a spec can override its class (e.g. Enhancement Shaman fights in melee)
 const isMelee = f => { const k = kitOf(f); return k.melee ?? MELEE_CLASSES.has(f.cls); };
@@ -27,6 +29,24 @@ export class AI {
 
   idx(f, id) { return kitOf(f).abilities.findIndex(a => a.id === id); }
   ok(f, id, tid) { const i = this.idx(f, id); return i >= 0 && !this.sim.check(f, i, true, tid !== undefined ? { tid } : {}) ? i : -1; }
+
+  // Damage filler: the strongest short-cooldown hostile ability that is ready (never a big cooldown, a
+  // signature, a spender or crowd control). Cast-time spells only when no enemy stands within 8 yards.
+  filler(me, foe, living) {
+    const K = kitOf(me), crowded = living.some(e => this.sim.dist(me, e) < 8);
+    let best = null, bestCd = -1;
+    K.abilities.forEach((ab, i) => {
+      if (!ab || !ab.target || ab.ally || ab.signature || ab.needsCp || ab.needsPet || ab.minRange || ab.cd > 9) return;
+      if (ab.cast > 0 && !ab.moveCast && (crowded || me.moving)) return;
+      if (ab.cost > me.res * 0.8) return; // keep a reserve for the priority list
+      // never re-apply our own damage over time / debuff while most of it is still running (wastes resources)
+      const deb = FILLER_DEBUFF[ab.id] || ab.name;
+      if (foe.buffs.some(b => b.src === me.id && b.name === deb && b.t > b.dur * 0.35)) return;
+      if (this.ok(me, ab.id, foe.id) < 0) return;
+      if (ab.cd > bestCd) { bestCd = ab.cd; best = { i, tid: foe.id }; }
+    });
+    return best;
+  }
 
   // How hard an enemy is to kill right now: health through armor and damage reduction, plus shields.
   effectiveHp(e) {
@@ -124,7 +144,9 @@ export class AI {
     this.think -= dt;
     if (this.think <= 0 && !me.cast && !airborne(me)) {
       this.think = this.d.react * (0.6 + Math.random() * 0.8);
-      const pick = this.choose(me, foe, { dist, foeCC, visible, threat, td, threatCC, allies, living });
+      let pick = this.choose(me, foe, { dist, foeCC, visible, threat, td, threatCC, allies, living });
+      // the priority list had nothing to say: rather than idle on a free global cooldown, use a damage filler
+      if (!pick && visible && Math.random() < this.d.focus) pick = this.filler(me, foe, living);
       if (pick) inp.abilities.push(pick);
     }
 

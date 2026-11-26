@@ -4,7 +4,8 @@
 // costs almost nothing per frame.
 import * as THREE from 'three';
 import { CLASSES, BUFF_ICONS, kitOf } from '../data/classes.js';
-import { RULES, segBlocked, rangeDist } from '../sim/sim.js';
+import { RULES, segBlocked, rangeDist, angleTo, angleDiff, FACE_ARC, MELEE_AUTO_RANGE, meleeBonus } from '../sim/sim.js';
+import { keyLabel } from '../input.js';
 
 const $ = id => document.getElementById(id);
 const SCHOOL = { frost: '#8fd8ff', fire: '#ff9a4a', arcane: '#d29aff', holy: '#ffe680', nature: '#7ae0ff', shadow: '#c08aff', phys: '#ffffff' };
@@ -85,6 +86,10 @@ export class HUD {
     this.hintT = 14; $('controlsHint').style.opacity = 1;
   }
 
+  // key shown on an action-bar slot: the first key bound to it (set from the settings)
+  setBinds(binds) { this.bindList = binds; if (this.slots) this.slots.forEach((s, i) => { const k = s.el.querySelector('.key'); if (k) k.textContent = this.keyText(i); }); }
+  keyText(i) { return keyLabel((this.bindList?.[i] || [])[0]) || ''; }
+
   flashSlot(i) { const s = this.slots && this.slots[i]; if (!s) return; s.el.classList.remove('flash'); void s.el.offsetWidth; s.el.classList.add('flash'); }
 
   // action bar: basic attack + six abilities (rebuilt when a Druid changes form)
@@ -100,7 +105,7 @@ export class HUD {
     this.slots = CM.abilities.map((ab, i) => {
       const s = document.createElement('div'); s.className = 'slot';
       const meta = [ab.cost ? `${ab.cost} ${RES_NAME[CM.resType]}` : 'No cost', ab.cast ? `${ab.cast}s cast` : 'Instant', ab.cd ? `${ab.cd}s cooldown` : '', ab.range ? `${ab.range} yd` : ''].filter(Boolean).join(' · ');
-      s.innerHTML = `${iconHTML(ab)}<div class="cd"></div><div class="cdtext"></div><div class="key">${i + 1}</div><div class="cost">${ab.cost || ''}</div>${ab.charges ? '<div class="chg"></div>' : ''}${tip(ab, meta)}`;
+      s.innerHTML = `${iconHTML(ab)}<div class="cd"></div><div class="cdtext"></div><div class="key">${this.keyText(i)}</div><div class="cost">${ab.cost || ''}</div>${ab.charges ? '<div class="chg"></div>' : ''}${tip(ab, meta)}`;
       bar.appendChild(s);
       return { el: s, cd: s.querySelector('.cd'), txt: s.querySelector('.cdtext'), chg: s.querySelector('.chg'), ab, wasCd: false };
     });
@@ -156,12 +161,18 @@ export class HUD {
     const dist = t ? rangeDist(me, t) : 999;
     const los = t ? !segBlocked(me.x, me.z, t.x, t.z, me.y + 1.5, t.y + 1.5) : false;
     const A = kitOf(me).auto;
+    // melee: same reach as the sim (incl. the leeway while both are moving); 'face' = target outside the frontal arc
+    const bonus = t ? meleeBonus(me, t) : 0;
+    const facing = !t || Math.abs(angleDiff(me.yaw, angleTo(me, t))) <= FACE_ARC;
     if (this.atkSlot) {
       const frac = Math.min(1, (me.autoT || 0) / A.speed);
       setStyle(this.atkSlot.cd, 'background', frac > 0.02 ? `conic-gradient(transparent ${(1 - frac) * 360}deg, rgba(0,0,0,0.6) 0)` : 'none');
       setCls(this.atkSlot.el, 'active', !!me.autoOn);
-      setCls(this.atkSlot.el, 'oor', !t || dist > A.range + 0.3 || (A.ranged && !los));
+      setCls(this.atkSlot.el, 'oor', !t || (A.ranged ? dist > A.range + 0.3 || !los : dist > MELEE_AUTO_RANGE + bonus));
+      setCls(this.atkSlot.el, 'face', !!t && !A.ranged && !facing);
     }
+    const crossFace = !!t && !facing && (!A.ranged || this.slots?.some(s => s.ab.melee && s.ab.target));
+    setCls($('crosshair'), 'noface', crossFace && dist < MELEE_AUTO_RANGE + bonus + 2);
     this.slots && this.slots.forEach((s, i) => {
       const ab = s.ab;
       // charges (e.g. 2 blinks): usable while any charge is left; the badge shows how many
@@ -178,8 +189,12 @@ export class HUD {
       if (s.wasCd && cd <= 0) { s.el.classList.remove('ready'); void s.el.offsetWidth; s.el.classList.add('ready'); }
       s.wasCd = cd > 0;
       setCls(s.el, 'nores', ab.cost > me.res || (ab.needsCp && me.cp < 1));
-      setCls(s.el, 'oor', !!(ab.target && t && (dist > ab.range + 0.3 || (ab.minRange && dist < ab.minRange) || (!ab.melee && !los))));
+      setCls(s.el, 'oor', !!(ab.target && t && (dist > ab.range + 0.3 + (ab.melee ? bonus : 0) || (ab.minRange && dist < ab.minRange) || (!ab.melee && !los))));
+      setCls(s.el, 'face', !!(ab.target && ab.melee && t && !facing));
     });
+    // mouseover healing: the ally your heals would land on right now
+    for (const m of this.minis || []) setCls(m.el, 'mouseover', this.mouseover === m.id);
+    for (const [id, p] of Object.entries(this.plateFor || {})) if (p) setCls(p.el, 'mouseover', this.mouseover === +id);
     // score
     const sA = view.score[me.team], sB = view.score[1 - me.team];
     [...$('pipsA').children].forEach((p, i) => setCls(p, 'won', i < sA));
@@ -270,7 +285,7 @@ export class HUD {
       t.el.style.opacity = u > 0.7 ? ((1 - u) / 0.3).toFixed(2) : '1';
     }
   }
-  clearTexts() { for (const t of this.texts) t.el.remove(); this.texts = []; }
+  clearTexts() { for (const t of this.texts) t.el.remove(); this.texts = []; const c = $('callouts'); if (c) c.innerHTML = ''; }
 
   // show numbers involving me (dealt or taken) prominently; others' fights small
   combatText(ev, F, myId) {
@@ -300,6 +315,16 @@ export class HUD {
 
   // crosshair tick confirming that one of my own blows connected (restarts on every hit)
   hitMarker(big) { const el = $('crosshair'); if (!el) return; el.classList.remove('hit', 'hitbig'); void el.offsetWidth; el.classList.add(big ? 'hitbig' : 'hit'); }
+  // short alert line under the round banner (enemy pops a big cooldown); at most 3 at a time
+  callout(who, what, color, ally = false) {
+    const box = $('callouts'); if (!box) return;
+    const el = document.createElement('div'); el.className = 'callout' + (ally ? ' ally' : '');
+    el.innerHTML = `<span class="who"></span> <span class="what"></span>`;
+    el.querySelector('.who').textContent = who; const w = el.querySelector('.what'); w.textContent = what; w.style.color = color || '#ffe6a0';
+    box.prepend(el);
+    while (box.children.length > 3) box.lastChild.remove();
+    setTimeout(() => el.classList.add('out'), 2600); setTimeout(() => el.remove(), 3100);
+  }
   error(msg) { const el = $('errorText'); el.textContent = msg; el.classList.add('show'); this.errT = 1.4; }
 
   announce(text, cls = '', hold = false, sub = '') {

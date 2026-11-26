@@ -89,11 +89,21 @@ select { background: rgba(0,0,0,0.6); border: 1px solid var(--panel-edge); color
 #join, #settings, #howto { align-items: center; justify-content: center; background: rgba(0,0,0,0.35); }
 .lobby-panel { width: 520px; max-width: 94vw; text-align: center; }
 .code-input { width: 100%; text-align: center; font-family: var(--font-title); font-size: 34px; letter-spacing: 0.3em; text-transform: uppercase; margin: 12px 0 0; background: rgba(0,0,0,0.5); border: 1px solid var(--panel-edge); color: var(--text); padding: 10px; }
-.settings-panel { width: 460px; max-width: 94vw; display: flex; flex-direction: column; gap: 14px; }
+.settings-panel { width: 460px; max-width: 94vw; max-height: 94vh; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
 .settings-panel label { display: flex; justify-content: space-between; align-items: center; gap: 16px; font-size: 18px; }
 .settings-panel label.check { justify-content: flex-start; }
 .settings-panel input[type=range] { width: 200px; accent-color: var(--gold); }
 .settings-panel select { flex: 0 0 220px; }
+.binds { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--gold-dim); padding-top: 10px; }
+.binds-h { display: flex; justify-content: space-between; align-items: center; font-size: 18px; }
+.binds-hint { font-size: 13px; }
+.bind-row { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.bind-row > span { flex: 1; }
+.bind-key { min-width: 64px; padding: 4px 8px; border: 1px solid var(--gold-dim); border-bottom-width: 3px; border-radius: 3px; background: #1b1420; color: var(--gold); font-family: var(--font-title); font-size: 13px; cursor: pointer; }
+.bind-key:hover { border-color: var(--gold); }
+.bind-key.empty { color: #777; }
+.bind-key.wait { color: #fff; border-color: #fff; animation: bindPulse 0.8s ease-in-out infinite alternate; }
+@keyframes bindPulse { from { box-shadow: 0 0 0 rgba(255,255,255,0); } to { box-shadow: 0 0 10px rgba(255,220,140,0.7); } }
 .howto-panel { width: 720px; max-width: 95vw; max-height: 92vh; overflow-y: auto; }
 .howto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin: 14px 0; font-size: 18px; }
 kbd { display: inline-block; min-width: 26px; padding: 2px 7px; margin-right: 3px; border: 1px solid var(--gold-dim); border-bottom-width: 3px; border-radius: 3px; background: #1b1420; font-family: var(--font-title); font-size: 13px; text-align: center; color: var(--gold); }
@@ -390,3 +400,20 @@ kbd { display: inline-block; min-width: 26px; padding: 2px 7px; margin-right: 3p
 #crosshair.hitbig::after { animation: hitmark-big 0.32s ease-out; }
 @keyframes hitmark { 0% { opacity: 0.95; transform: scale(0.7); } 100% { opacity: 0; transform: scale(1.25); } }
 @keyframes hitmark-big { 0% { opacity: 1; transform: scale(0.8); filter: drop-shadow(0 0 3px #ffb040) brightness(1.2); } 100% { opacity: 0; transform: scale(1.7); filter: drop-shadow(0 0 3px #ffb040); } }
+
+/* melee: target outside the frontal arc (the swing / strike would be refused) */
+.slot.face .icon { filter: grayscale(0.7) brightness(0.65); }
+.slot.face::before { content: '↻'; position: absolute; left: 3px; top: 1px; z-index: 3; font-size: 15px; font-weight: 700; color: #ffb84a; text-shadow: 0 0 4px #000, 0 0 2px #000; }
+#crosshair.noface { background: rgba(255, 150, 60, 0.95); box-shadow: 0 0 6px #ff7a20, 0 0 2px #000; }
+
+/* mouseover healing: the ally under the crosshair / cursor gets your heals */
+.mini.mouseover { box-shadow: 0 0 0 2px #b8ffcf, 0 0 18px rgba(120,255,170,0.75); }
+.nameplate.mouseover .np-bar { box-shadow: 0 0 0 1px #b8ffcf, 0 0 10px rgba(120,255,170,0.8); }
+.nameplate.mouseover::before { content: '✚'; position: absolute; top: -18px; left: 50%; transform: translateX(-50%); color: #8affb0; font-size: 13px; text-shadow: 0 0 6px #1aa850; }
+
+/* enemy cooldown callouts */
+.callouts { position: absolute; left: 50%; top: 21%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; z-index: 6; }
+.callout { padding: 3px 14px; border-radius: 3px; background: linear-gradient(90deg, transparent, rgba(20,8,14,0.82) 15%, rgba(20,8,14,0.82) 85%, transparent); font-family: var(--font-title); font-size: 17px; letter-spacing: 0.03em; text-shadow: 0 0 6px #000; white-space: nowrap; animation: calloutIn 0.18s ease-out; transition: opacity 0.4s; }
+.callout .who { color: #ff8a7a; } .callout.ally .who { color: #9ad4ff; }
+.callout.out { opacity: 0; }
+@keyframes calloutIn { from { transform: scale(1.25); opacity: 0; } to { transform: scale(1); opacity: 1; } }

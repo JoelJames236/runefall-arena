@@ -144,6 +144,12 @@
       </select>
     </label>
     <label class="check"><input type="checkbox" id="setFps"> Show FPS</label>
+    <label class="check" title="Heals and other ally spells go to the ally under your crosshair (or cursor) without changing your selected friend"><input type="checkbox" id="setMouseover"> Mouseover healing (ally under the crosshair)</label>
+    <div class="binds">
+      <div class="binds-h"><span>Ability Keys</span><button class="btn small" id="bindsReset">Reset</button></div>
+      <div class="muted binds-hint">Click a key, then press any key or mouse button (middle, back, forward). Right-click a key to clear it.</div>
+      <div id="bindRows"></div>
+    </div>
     <button class="btn primary" id="settingsBack">Done</button>
   </div>
 </section>
@@ -156,7 +162,7 @@
       <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move &amp; strafe</div>
       <div><kbd>Mouse</kbd> Turn camera &amp; champion</div>
       <div><kbd>Left Click</kbd> Basic attack (one swing per click · hold to keep swinging)</div>
-      <div><kbd>1</kbd>–<kbd>6</kbd> Abilities</div>
+      <div><kbd>1</kbd>–<kbd>6</kbd> Abilities (rebind them in Settings, e.g. to R, F or the side mouse buttons)</div>
       <div><kbd>Tab</kbd> Cycle enemy targets</div>
       <div><kbd>F1</kbd> / <kbd>F2</kbd> Friendly target: self / ally</div>
       <div><kbd>Space</kbd> Jump · <kbd>Shift</kbd> Sprint</div>
@@ -211,6 +217,7 @@
   <div class="arena-frames" id="arenaFrames"></div>
 
   <div id="errorText" class="error-text"></div>
+  <div id="callouts" class="callouts"></div>
   <div id="announce" class="announce"></div>
   <div id="subAnnounce" class="sub-announce"></div>
   <div id="crosshair"></div>

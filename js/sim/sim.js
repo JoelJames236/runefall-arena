@@ -11,12 +11,19 @@ export const PILLARS = [0, 1, 2, 3].map(i => {
 export const RULES = { winsNeeded: 4, countdown: 3.5, roundEnd: 4.0, dampStart: 60, dampRate: 1.2, gcd: 1.0, critChance: 0.08, critMult: 1.5, backMult: 1.1 };
 export const FIGHTER_R = 0.6;
 export const MOVE_CAST_SPEED = 0.65;
-const MOVE_ABS = new Set(['arcane_shift', 'shadow_leap', 'bull_rush', 'gale_dash', 'skull_leap', 'blazing_step']);
+export const MOVE_ABS = new Set(['arcane_shift', 'shadow_leap', 'bull_rush', 'gale_dash', 'skull_leap', 'blazing_step']);
 // Berserker passive: up to +60% damage as health drops (linear with missing health)
 export const bloodrage = f => f.cls === 'berserker' ? 1 + (CLASSES.berserker.passive.maxBonus) * (1 - Math.max(0, f.hp) / f.maxHp) : 1;
 const STUNLIKE = ['stun', 'disorient'];
 const RES_NAME = { mana: 'mana', energy: 'energy', rage: 'rage', focus: 'focus' };
-const MELEE_AUTO_RANGE = 4.5;
+export const MELEE_AUTO_RANGE = 4.5;
+// Melee leeway: when attacker and target are BOTH on the move, melee reaches this much further. Chasing a
+// running target otherwise means standing right behind it and still being "out of range" every other swing.
+export const MELEE_LEEWAY = 0.8;
+export const meleeBonus = (f, t) => (f.moving && t.moving ? MELEE_LEEWAY : 0);
+// Arena vitality: in team fights everyone has this much more health, so focus fire doesn't end a fight
+// before heals, interrupts and defensive cooldowns get a say (first kill: median 11 s → ~16 s)
+export const TEAM_VITALITY = 1.5;
 export const ATTACK_BUFFER = 0.4; // s a left click stays queued while the swing timer finishes
 export const FACE_ARC = 1.75;     // rad to either side: melee swings and strikes need the target inside this frontal arc (200°)
 export const QUEUE_WINDOW = 0.5;  // s before the GCD / current cast ends in which the next ability press is buffered
@@ -35,6 +42,7 @@ export function speedMult(f) {
     if (b.type === 'slow') slow = Math.max(slow, b.value);
     else if (b.type === 'speed') fast = Math.max(fast, b.value);
   }
+  slow *= 1 - (kitOf(f).passive?.slowResist || 0); // some melee specs shrug off part of every slow (they must stick to their target)
   return (1 + fast) * (1 - slow);
 }
 export const angleTo = (a, b) => Math.atan2(b.x - a.x, b.z - a.z);
@@ -263,7 +271,7 @@ export class Sim {
     for (const f of this.fighters) {
       const C = kitOf(f);
       Object.assign(f, {
-        hp: C.hp, maxHp: C.hp, res: C.resStart ?? C.res, maxRes: C.res, cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [],
+        hp: Math.round(C.hp * this.vitality(f)), maxHp: Math.round(C.hp * this.vitality(f)), res: C.resStart ?? C.res, maxRes: C.res, cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [],
         cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, atkReq: 0, atkHold: false, atkWarn: false, swing: null, form: kit(f.cls, f.spec).defaultForm || null, petT: 0,
         target: this.defaultTarget(f), friend: -1,
       });
@@ -274,6 +282,8 @@ export class Sim {
     this.state = 'countdown'; this.stateT = RULES.countdown; this.fightT = 0; this.damp = 0;
     this.event({ e: 'roundStart', round: this.round });
   }
+
+  vitality(f) { return this.teamSize[f.team] >= 2 && this.teamSize[1 - f.team] >= 2 ? TEAM_VITALITY : 1; }
 
   defaultTarget(f) {
     const foes = this.fighters.filter(o => o.team !== f.team);
@@ -441,7 +451,7 @@ export class Sim {
       const t = this.hostileFor(f, opts.tid);
       if (!t) return 'No target';
       const d = this.dist(f, t);
-      if (d > ab.range + 0.3) return 'Out of range';
+      if (d > ab.range + 0.3 + (ab.melee ? meleeBonus(f, t) : 0)) return 'Out of range';
       if (ab.minRange && d < ab.minRange) return 'Too close';
       if (!ab.melee && !this.los(f, t)) return 'Target not in line of sight';
       if (ab.melee && Math.abs(angleDiff(f.yaw, angleTo(f, t))) > FACE_ARC) return 'You must face your target';
@@ -542,7 +552,7 @@ export class Sim {
   autoBlock(f, t, A) {
     const d = this.dist(f, t);
     if (A.ranged) return d > A.range + 0.3 ? 'Out of range' : !this.los(f, t) ? 'Target not in line of sight' : null;
-    return d > MELEE_AUTO_RANGE ? 'Out of range' : Math.abs(angleDiff(f.yaw, angleTo(f, t))) > FACE_ARC ? 'You must face your target' : null;
+    return d > MELEE_AUTO_RANGE + meleeBonus(f, t) ? 'Out of range' : Math.abs(angleDiff(f.yaw, angleTo(f, t))) > FACE_ARC ? 'You must face your target' : null;
   }
 
   updateAuto(f, dt) {
@@ -900,9 +910,11 @@ export class Sim {
     if (f.buffs.length !== before) this.event({ e: 'cleanse', id: f.id });
   }
 
-  spawnProjectile(src, tgt, kind, speed, onHit, yOff = 0) {
+  // o.block: a big, slow projectile (Arcane Comet, Aimed Shot) that shatters on a pillar or the bridge if the
+  // target gets behind cover while it flies — the counterplay to a long cast is to break line of sight in time
+  spawnProjectile(src, tgt, kind, speed, onHit, yOff = 0, o = {}) {
     const fw = this.forward(src);
-    this.projectiles.push({ id: NEXT_ID++, kind, owner: src.id, target: tgt.id, x: src.x + fw.x * 0.8, y: src.y + 1.7 + yOff, z: src.z + fw.z * 0.8, speed, onHit, life: 4 });
+    this.projectiles.push({ id: NEXT_ID++, kind, owner: src.id, target: tgt.id, x: src.x + fw.x * 0.8, y: src.y + 1.7 + yOff, z: src.z + fw.z * 0.8, speed, onHit, life: 4, block: !!o.block });
   }
 
   updateProjectiles(dt) {
@@ -921,7 +933,15 @@ export class Sim {
         this.projectiles.splice(i, 1);
         this.event({ e: 'hit', kind: p.kind, id: t.id, src: p.owner, x: tx, y: ty, z: tz });
         p.onHit();
-      } else { p.x += dx / d * step; p.y += dy / d * step; p.z += dz / d * step; }
+      } else {
+        const nx = p.x + dx / d * step, ny = p.y + dy / d * step, nz = p.z + dz / d * step;
+        if (p.block && segBlocked(p.x, p.z, nx, nz, p.y, ny)) {
+          this.projectiles.splice(i, 1);
+          this.event({ e: 'fizzle', kind: p.kind, x: p.x, y: p.y, z: p.z, blocked: true, id: t.id, src: p.owner });
+          continue;
+        }
+        p.x = nx; p.y = ny; p.z = nz;
+      }
     }
   }
 

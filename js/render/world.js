@@ -393,6 +393,24 @@ export class World {
     return best;
   }
 
+  // Mouseover healing: the living ally (not yourself) whose body is under the crosshair / cursor, or -1.
+  pickAlly(view, myId, sx = 0.5, sy = 0.45) {
+    const F = view.fighters, me = F[myId]; if (!me) return -1;
+    let best = -1, bestD = 0.06;
+    const v = new THREE.Vector3();
+    for (const f of F) {
+      if (f.team !== me.team || f.id === myId || !f.alive || !this.chars[f.id]) continue;
+      const p = this.chars[f.id].root.position;
+      for (const h of [0.5, 1.1, 1.7]) {
+        v.set(p.x, p.y + h, p.z).project(this.camera);
+        if (v.z > 1) continue;
+        const d = Math.hypot((v.x * 0.5 + 0.5) - sx, ((-v.y * 0.5 + 0.5) - sy) * (innerHeight / innerWidth));
+        if (d < bestD) { bestD = d; best = f.id; }
+      }
+    }
+    return best;
+  }
+
   onAbilityAnim(id, ab) {
     const ch = this.chars[id]; if (!ch) return;
     const kind = AB_ANIM[ab];

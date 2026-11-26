@@ -10,9 +10,9 @@ peer-to-peer online play via a shareable link. No install, no build step.
 
 | Mode | How |
 | --- | --- |
-| **Duel vs. AI** | 1v1 against a bot (Squire / Knight / Champion difficulty). |
+| **Duel vs. AI** | 1v1 against a bot (Squire / Knight / Champion difficulty). Pick its class and spec, or leave it on 🎲 Random. |
 | **2v2 vs. Bots** | You + an AI ally (Aldor) against the bots **Zigi** and **Jöggu**. Pick every class or leave them random. |
-| **Play with Friends** | Opens a party lobby (1v1 or 2v2). Share the invite link; friends join your team. Empty slots can be filled with bots, players can be moved between teams. |
+| **Play with Friends** | Opens a party lobby (1v1 or 2v2). Share the invite link; friends join your team. Empty slots can be filled with bots (new bots are 🎲 Random — class and spec are rolled at every match start — or pick one), players can be moved between teams. |
 | **Find Opponents** | In a 2v2 lobby, the party leader searches for another party that is also searching; when found, their party joins your arena as the Crimson team. |
 | **Join Match** | Enter a 6-letter room code (or open an invite link). |
 
@@ -55,7 +55,9 @@ Online play is peer-to-peer over WebRTC. The free PeerJS cloud broker is only us
 (and to hold the matchmaking queue slots); game traffic then flows directly between players. The lobby
 host runs the authoritative simulation — damage, cooldowns, crowd control and match results are decided
 there; guests send inputs and receive state snapshots. If a guest disconnects mid-match, a bot takes over
-their champion so the match can finish.
+their champion so the match can finish. A guest's own ability presses show at once (global cooldown, cooldown,
+cast bar, casting pose, animation and sound of instants); the host's snapshots then confirm them, and a press the
+host refused or queued disappears again within half a second.
 
 - Testing several players on one machine: use separate browser **windows**, not tabs — browsers throttle
   background tabs, which makes a host stutter.
@@ -69,9 +71,10 @@ their champion so the match can finish.
 | `W A S D` | Move / strafe |
 | Mouse | Turn camera & champion (click to capture the mouse; if capture is blocked, hold the right button and drag) |
 | **Left click** | Basic attack on your target — one swing per click, hold to keep swinging at your attack speed. Clicking a different enemy only selects it |
-| `1`–`6` | Abilities (`Q` / `E` also trigger 5 / 6) |
+| `1`–`6` | Abilities (`Q` / `E` also trigger 5 / 6). **Rebind them in Settings** → Ability Keys: two keys per slot, any key or the middle / back / forward mouse button |
 | `Tab` | Cycle enemy targets |
 | `F1` / `F2` | Friendly target: yourself / your ally (heals and shields go to the friendly target) |
+| Crosshair on an ally | **Mouseover healing**: heals and shields go to the ally under the crosshair (or under the cursor without mouse capture) without changing your friendly target; the ally's frame and nameplate light up green. Can be turned off in Settings |
 | `Space` / `Shift` | Jump / sprint (stamina) |
 | Mouse wheel / `Esc` | Zoom / menu |
 
@@ -87,6 +90,14 @@ their champion so the match can finish.
   weapons take longer), exactly when the animation connects. A swing that has started always lands. Melee needs the
   target within 4.5 yd and inside your frontal 200° arc. A click a step out of range (or not quite facing) is kept
   for 0.4 s and swings the moment it can; holding the button with no target picks up the nearest enemy in front.
+- **Melee leeway**: while you *and* your target are both moving, melee swings and strikes reach 0.8 yd further, so
+  chasing a running enemy doesn't drop every other swing. When your target is outside your frontal arc, melee slots
+  show a turn arrow (↻) and the crosshair turns orange.
+- **Team fights last longer**: in 2v2 every champion has 50% more health (the same damage would otherwise end a
+  focused fight in ~11 s; now the first kill comes after ~16 s).
+- **Arcane Comet** (Frost Mage signature) shatters on a pillar if the target gets behind cover while it flies.
+- **Callouts**: when an enemy uses a big cooldown (30 s or more, or its signature ability) a line names it at the
+  top of the screen.
 - **Hits from behind deal 10% more damage.** Direct hits and heals can **crit** (8%, +50%).
 - Cast-time spells require standing still; moving (on your own input — being shoved doesn't count) or jumping
   cancels them. A cast pressed while still running waits up to 0.45 s for you to stop instead of failing.
@@ -99,7 +110,7 @@ their champion so the match can finish.
 - Crowd control has diminishing returns (100% → 50% → 25% → immune, resets after 15 s).
 - **Dampening** starts after 60 s and steadily reduces healing and shields, so every round ends.
 - **Taunt (Challenge)**: a Protection Paladin's Shield Slam, Sentinel's Shield, Consecration and Guardian's Resolve
-  *Challenge* enemies — a Challenged enemy deals 25% less damage to anyone but that paladin, and bots turn on him.
+  *Challenge* enemies — a Challenged enemy deals 15% less damage to anyone but that paladin, and bots turn on him.
 
 ## Classes
 

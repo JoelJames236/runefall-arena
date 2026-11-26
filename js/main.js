@@ -7,9 +7,9 @@
 import { World } from './render/world.js';
 import { loadHeroAssets, preloadChampions } from './render/heroes.js';
 import { HUD, iconHTML, emblemStyle } from './ui/hud.js';
-import { Input } from './input.js';
+import { Input, DEFAULT_BINDS, RESERVED_KEYS, keyLabel } from './input.js';
 import { Audio, AB_SOUND, HIT_SOUND, CAST_SOUND } from './audio.js';
-import { Sim, moveFighter, RULES } from './sim/sim.js';
+import { Sim, moveFighter, RULES, rangeDist, segBlocked, angleTo, angleDiff, FACE_ARC, meleeBonus, airborne, MOVE_ABS } from './sim/sim.js';
 import { AI } from './sim/ai.js';
 import { Net } from './net.js';
 import { ARENAS } from './render/arenas.js';
@@ -20,8 +20,10 @@ const STEP = 1 / 60;
 const rand = a => a[Math.floor(Math.random() * a.length)];
 
 // ------------------------------------------------------------------ settings
-const DEFAULTS = { music: 55, sfx: 80, sens: 100, invert: false, quality: 'high', fps: false, arena: 'runefall' };
+const DEFAULTS = { music: 55, sfx: 80, sens: 100, invert: false, quality: 'high', fps: false, arena: 'runefall', binds: DEFAULT_BINDS, mouseover: true };
 let settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('runefall-settings') || '{}') };
+if (!Array.isArray(settings.binds) || settings.binds.length !== 6) settings.binds = DEFAULT_BINDS;
+settings.binds = settings.binds.map(l => (Array.isArray(l) ? l : []).filter(c => typeof c === 'string').slice(0, 2));
 function saveSettings() { localStorage.setItem('runefall-settings', JSON.stringify(settings)); applySettings(); }
 
 // ------------------------------------------------------------------ core objects
@@ -52,7 +54,12 @@ const S = {
   screen: 'splash', mode: null, sim: null, ais: new Map(), net: null, myId: 0,
   myCls: localStorage.getItem('runefall-class') || 'mage', difficulty: localStorage.getItem('runefall-diff') || 'normal',
   playerName: localStorage.getItem('runefall-name') || ('Champion' + Math.floor(100 + Math.random() * 900)),
-  team: { ally: 'random', foe1: 'random', foe2: 'random' }, teamSpec: { ally: 'random', foe1: 'random', foe2: 'random' },
+  // bot opponents / allies picked on the champion screen ('random' = rolled at the start of every match); remembered
+  ...(() => {
+    const d = { team: { duel: 'random', ally: 'random', foe1: 'random', foe2: 'random' }, teamSpec: { duel: 'random', ally: 'random', foe1: 'random', foe2: 'random' } };
+    try { const s = JSON.parse(localStorage.getItem('runefall-bots')) || {}; for (const k of Object.keys(d.team)) { if (s.team?.[k] === 'random' || CLASSES[s.team?.[k]]) d.team[k] = s.team[k]; if (typeof s.teamSpec?.[k] === 'string') d.teamSpec[k] = s.teamSpec[k]; } } catch {}
+    return d;
+  })(),
   mySpecs: (() => { try { return JSON.parse(localStorage.getItem('runefall-specs')) || {}; } catch { return {}; } })(), // chosen spec per class
   csMode: 'duel', inGame: false, paused: false, acc: 0, roster: null,
   room: null, roomView: null, mySlot: 0, queueing: false,
@@ -66,6 +73,7 @@ const S = {
 function applySettings() {
   audio.setVolumes(settings.music / 100, settings.sfx / 100);
   input.sens = settings.sens / 100; input.invert = settings.invert;
+  input.setBinds(settings.binds); hud.setBinds(settings.binds);
   if (world.quality !== settings.quality) world.setQuality(settings.quality);
   $('fps').classList.toggle('hidden', !settings.fps);
 }
@@ -143,14 +151,41 @@ $('menu').addEventListener('click', e => {
 function openSettings(back) {
   S.settingsBack = back;
   $('setMusic').value = settings.music; $('setSfx').value = settings.sfx; $('setSens').value = settings.sens;
-  $('setInvert').checked = settings.invert; $('setQuality').value = settings.quality; $('setFps').checked = settings.fps;
+  $('setInvert').checked = settings.invert; $('setQuality').value = settings.quality; $('setFps').checked = settings.fps; $('setMouseover').checked = settings.mouseover;
+  renderBinds();
   if (back === 'pause') showOverlay('pause', false);
   show('settings');
 }
+// ability key rows: two keys per slot; click one, then press the new key (or a mouse button)
+function renderBinds() {
+  const rows = $('bindRows'); if (!rows) return;
+  input.capture = null;
+  rows.innerHTML = settings.binds.map((codes, i) => `<div class="bind-row"><span>Ability ${i + 1}</span>${[0, 1].map(k =>
+    `<button class="bind-key${codes[k] ? '' : ' empty'}" data-i="${i}" data-k="${k}" title="${codes[k] || 'not bound'}">${codes[k] ? keyLabel(codes[k]) : '—'}</button>`).join('')}</div>`).join('');
+  rows.querySelectorAll('.bind-key').forEach(b => {
+    const i = +b.dataset.i, k = +b.dataset.k;
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      rows.querySelectorAll('.bind-key.wait').forEach(x => x.classList.remove('wait'));
+      b.classList.add('wait'); b.textContent = 'Press…';
+      input.capture = code => {
+        if (code === 'Escape') { renderBinds(); return; }
+        if (RESERVED_KEYS.has(code)) { toast(`${keyLabel(code)} is already used for movement or targeting`); renderBinds(); return; }
+        // a key can only do one thing: take it away from any other slot first
+        settings.binds = settings.binds.map(l => l.filter(c => c !== code));
+        const l = settings.binds[i]; l[k] = code; settings.binds[i] = l.filter(Boolean);
+        saveSettings(); renderBinds();
+      };
+    });
+    b.addEventListener('contextmenu', e => { e.preventDefault(); settings.binds[i] = settings.binds[i].filter((_, j) => j !== k); saveSettings(); renderBinds(); });
+  });
+}
+$('bindsReset').addEventListener('click', () => { settings.binds = DEFAULT_BINDS.map(l => [...l]); saveSettings(); renderBinds(); });
 for (const [id, key, conv] of [['setMusic', 'music', Number], ['setSfx', 'sfx', Number], ['setSens', 'sens', Number], ['setQuality', 'quality', String]]) $(id).addEventListener('input', e => { settings[key] = conv(e.target.value); saveSettings(); });
 $('setInvert').addEventListener('change', e => { settings.invert = e.target.checked; saveSettings(); });
 $('setFps').addEventListener('change', e => { settings.fps = e.target.checked; saveSettings(); });
-$('settingsBack').addEventListener('click', () => { if (S.settingsBack === 'pause') { show(null); showOverlay('pause', true); } else show(S.settingsBack || 'menu'); });
+$('setMouseover').addEventListener('change', e => { settings.mouseover = e.target.checked; saveSettings(); });
+$('settingsBack').addEventListener('click', () => { input.capture = null; if (S.settingsBack === 'pause') { show(null); showOverlay('pause', true); } else show(S.settingsBack || 'menu'); });
 $('howtoBack').addEventListener('click', () => { if (S.howtoBack === 'pause') { show(null); showOverlay('pause', true); } else show('menu'); });
 
 // ------------------------------------------------------------------ class selection
@@ -159,7 +194,7 @@ function openClassSelect(mode) {
   show('classSelect');
   $('csTitle').textContent = { browse: 'The Champions', room: 'Choose Your Champion', duel: 'Duel — Choose Your Champion', bots2v2: '2v2 — Choose Your Champion' }[mode];
   $('csDifficulty').classList.toggle('hidden', mode !== 'duel' && mode !== 'bots2v2');
-  $('csTeam').classList.toggle('hidden', mode !== 'bots2v2');
+  $('csTeam').classList.toggle('hidden', mode !== 'bots2v2' && mode !== 'duel');
   $('csConfirm').classList.toggle('hidden', mode === 'browse');
   $('csConfirm').textContent = mode === 'room' ? 'Confirm' : 'Enter the Arena';
   document.querySelectorAll('#csDifficulty .chip').forEach(c => c.classList.toggle('on', c.dataset.diff === S.difficulty));
@@ -171,7 +206,7 @@ function openClassSelect(mode) {
     el.addEventListener('click', () => selectClass(id));
     list.appendChild(el);
   }
-  if (mode === 'bots2v2') renderTeamPanel();
+  if (mode === 'bots2v2' || mode === 'duel') renderTeamPanel();
   selectClass(S.myCls);
 }
 
@@ -184,15 +219,21 @@ const specLabel = (cls, spec) => { const K = kit(cls, spec); return `${K.specIco
 const specOptions = (cls, v, withRandom = true) => (withRandom ? `<option value="random"${v === 'random' ? ' selected' : ''}>Random spec</option>` : '') +
   playableSpecs(cls).map(s => `<option value="${s.id}"${v === s.id ? ' selected' : ''}>${s.icon} ${s.name}</option>`).join('');
 
+const saveBots = () => localStorage.setItem('runefall-bots', JSON.stringify({ team: S.team, teamSpec: S.teamSpec }));
+// a class for a bot: the chosen one, or (for 'random') any class not in `avoid` (falls back to any class)
+const botClass = (v, avoid = []) => CLASSES[v] ? v : rand(CLASS_ORDER.filter(c => !avoid.includes(c)).length ? CLASS_ORDER.filter(c => !avoid.includes(c)) : CLASS_ORDER);
+
 function renderTeamPanel() {
-  const opts = v => `<option value="random"${v === 'random' ? ' selected' : ''}>Random</option>` + CLASS_ORDER.map(c => `<option value="${c}"${v === c ? ' selected' : ''}>${CLASSES[c].name}</option>`).join('');
+  const opts = v => `<option value="random"${v === 'random' ? ' selected' : ''}>🎲 Random</option>` + CLASS_ORDER.map(c => `<option value="${c}"${v === c ? ' selected' : ''}>${CLASSES[c].name}</option>`).join('');
   // a bot row: class picker + spec picker (spec picker only once a class is chosen)
   const row = (label, k) => `<div class="tm"><span>${label}</span><select data-k="${k}">${opts(S.team[k])}</select>${S.team[k] !== 'random' ? `<select data-ks="${k}">${specOptions(S.team[k], S.teamSpec[k])}</select>` : ''}</div>`;
-  $('csTeam').innerHTML = `<div class="ally"><h4>Your Team</h4><div class="tm"><span>${esc(S.playerName)}</span><b style="color:${CLASSES[S.myCls].color}">${specLabel(S.myCls, mySpec())}</b></div>
-    ${row(`${BOT_NAMES.ally[0]} (bot)`, 'ally')}</div>
+  const me = `<div class="tm"><span>${esc(S.playerName)}</span><b style="color:${CLASSES[S.myCls].color}">${specLabel(S.myCls, mySpec())}</b></div>`;
+  $('csTeam').innerHTML = S.csMode === 'duel'
+    ? `<div class="ally"><h4>You</h4>${me}</div><div class="foe"><h4>Opponent</h4>${row('Bot', 'duel')}</div>`
+    : `<div class="ally"><h4>Your Team</h4>${me}${row(`${BOT_NAMES.ally[0]} (bot)`, 'ally')}</div>
     <div class="foe"><h4>Enemy Team</h4>${row(BOT_NAMES.enemy[0], 'foe1')}${row(BOT_NAMES.enemy[1], 'foe2')}</div>`;
-  $('csTeam').querySelectorAll('select[data-k]').forEach(s => s.addEventListener('change', () => { S.team[s.dataset.k] = s.value; S.teamSpec[s.dataset.k] = 'random'; renderTeamPanel(); }));
-  $('csTeam').querySelectorAll('select[data-ks]').forEach(s => s.addEventListener('change', () => { S.teamSpec[s.dataset.ks] = s.value; }));
+  $('csTeam').querySelectorAll('select[data-k]').forEach(s => s.addEventListener('change', () => { S.team[s.dataset.k] = s.value; S.teamSpec[s.dataset.k] = 'random'; saveBots(); renderTeamPanel(); }));
+  $('csTeam').querySelectorAll('select[data-ks]').forEach(s => s.addEventListener('change', () => { S.teamSpec[s.dataset.ks] = s.value; saveBots(); }));
 }
 
 function selectSpec(cls, spec) {
@@ -233,7 +274,7 @@ function selectClass(id) {
         <div class="adesc">${A.desc}</div></div></div>
       ${C.abilities.map((ab, i) => `
       <div class="ab-row" data-i="${i}" style="cursor:pointer">${iconHTML(ab)}
-        <div><div class="aname" style="color:${ab.color}">${ab.name} <span class="key">KEY ${i + 1}</span></div>
+        <div><div class="aname" style="color:${ab.color}">${ab.name} <span class="key">KEY ${keyLabel(settings.binds[i]?.[0]) || '—'}</span></div>
         <div class="meta">${[ab.cost ? `${ab.cost} ${resName}` : 'No cost', ab.cast ? `${ab.cast}s cast` : 'Instant', ab.cd ? `${ab.cd}s cooldown` : '', ab.range ? `${ab.range} yd` : ''].filter(Boolean).join(' · ')}</div>
         <div class="adesc">${ab.desc}</div></div></div>`).join('')}
     </div>`;
@@ -245,7 +286,7 @@ function selectClass(id) {
     world.previewAbility(ab);
     audio.play(AB_SOUND[ab.id]);
   }));
-  if (S.csMode === 'bots2v2') renderTeamPanel();
+  if (S.csMode === 'bots2v2' || S.csMode === 'duel') renderTeamPanel();
 }
 
 document.querySelectorAll('#csDifficulty .chip').forEach(c => c.addEventListener('click', () => {
@@ -259,13 +300,12 @@ $('csBack').addEventListener('click', () => {
 });
 $('csConfirm').addEventListener('click', () => {
   if (S.csMode === 'duel') {
-    const foe = rand(CLASS_ORDER.filter(c => c !== S.myCls));
-    startMatch([{ cls: S.myCls, spec: mySpec(), team: 0, name: S.playerName }, { cls: foe, spec: pickSpec(foe, 'random'), team: 1, name: rand(BOT_NAMES.enemy), bot: true, diff: S.difficulty }], 'duel', 0);
+    const foe = botClass(S.team.duel, [S.myCls]);
+    startMatch([{ cls: S.myCls, spec: mySpec(), team: 0, name: S.playerName }, { cls: foe, spec: pickSpec(foe, S.team.duel === 'random' ? 'random' : S.teamSpec.duel), team: 1, name: rand(BOT_NAMES.enemy), bot: true, diff: S.difficulty }], 'duel', 0);
   } else if (S.csMode === 'bots2v2') {
-    const pick = (v, avoid) => v !== 'random' ? v : rand(CLASS_ORDER.filter(c => !avoid.includes(c)));
-    const ally = pick(S.team.ally, [S.myCls]);
-    const f1 = pick(S.team.foe1, []);
-    const f2 = pick(S.team.foe2, [f1]);
+    const ally = botClass(S.team.ally, [S.myCls]);
+    const f1 = botClass(S.team.foe1, S.team.foe2 !== 'random' ? [S.team.foe2] : []);
+    const f2 = botClass(S.team.foe2, [f1]);
     startMatch([
       { cls: S.myCls, spec: mySpec(), team: 0, name: S.playerName },
       { cls: ally, spec: pickSpec(ally, S.teamSpec.ally), team: 0, name: BOT_NAMES.ally[0], bot: true, diff: S.difficulty },
@@ -296,8 +336,13 @@ function botFor(i) {
   const used = S.room.slots.filter(s => s.kind === 'bot').map(s => s.name);
   const names = enemy ? BOT_NAMES.enemy : [...BOT_NAMES.ally, ...BOT_NAMES.enemy];
   const name = names.find(n => !used.includes(n)) || (enemy ? 'Zigi' : 'Aldor');
-  const cls = rand(CLASS_ORDER); return { kind: 'bot', name, cls, spec: pickSpec(cls, 'random'), ready: true };
+  // new bots are a surprise: class and spec are rolled when the match starts (the host can pick one instead)
+  return { kind: 'bot', name, cls: 'random', spec: 'random', ready: true };
 }
+// lobby label + emblem for a slot whose class may still be 'random'
+const RANDOM_C = { name: 'Random', color: '#c8b98a', emblem: '?' };
+const slotC = s => CLASSES[s.cls] || RANDOM_C;
+const slotLabel = s => !CLASSES[s.cls] ? '🎲 Random champion' : s.spec === 'random' ? `🎲 Random ${CLASSES[s.cls].name}` : specLabel(s.cls, s.spec);
 
 function startHost() {
   closeNet();
@@ -332,12 +377,12 @@ function renderRoom() {
   const card = i => {
     const s = room.slots[i], me = i === S.mySlot;
     if (s.kind === 'empty') return `<div class="slot-card empty" data-i="${i}">Open slot ${isHost ? `<span class="sbtns"><button class="btn small" data-act="bot" data-i="${i}">+ Bot</button></span>` : ''}</div>`;
-    const C = CLASSES[s.cls];
+    const C = slotC(s);
     const ctrl = isHost ? (s.kind === 'bot'
-      ? `<select data-act="botcls" data-i="${i}">${CLASS_ORDER.map(c => `<option value="${c}"${c === s.cls ? ' selected' : ''}>${CLASSES[c].name}</option>`).join('')}</select><select data-act="botspec" data-i="${i}">${specOptions(s.cls, validSpec(s.cls, s.spec), false)}</select><button class="btn small" data-act="kick" data-i="${i}" title="Remove bot">✕</button>`
+      ? `<select data-act="botcls" data-i="${i}"><option value="random"${CLASSES[s.cls] ? '' : ' selected'}>🎲 Random</option>${CLASS_ORDER.map(c => `<option value="${c}"${c === s.cls ? ' selected' : ''}>${CLASSES[c].name}</option>`).join('')}</select>${CLASSES[s.cls] ? `<select data-act="botspec" data-i="${i}">${specOptions(s.cls, s.spec === 'random' ? 'random' : validSpec(s.cls, s.spec))}</select>` : ''}<button class="btn small" data-act="kick" data-i="${i}" title="Remove bot">✕</button>`
       : `<button class="btn small" data-act="swap" data-i="${i}" title="Move to the other team">⇄</button>${s.host ? '' : `<button class="btn small" data-act="kick" data-i="${i}" title="Kick">✕</button>`}`) : '';
     return `<div class="slot-card ${me ? 'me' : ''}"><div class="emblem" style="${emblemStyle(C)}">${C.emblem}</div>
-      <div class="sinfo"><div class="sname">${esc(s.name)}${s.host ? ' <span class="muted">♛</span>' : ''}${me ? ' <span class="muted">(you)</span>' : ''}</div><div class="ssub" style="color:${C.color}">${specLabel(s.cls, s.spec)}${s.kind === 'bot' ? ' · Bot' : ''}</div></div>
+      <div class="sinfo"><div class="sname">${esc(s.name)}${s.host ? ' <span class="muted">♛</span>' : ''}${me ? ' <span class="muted">(you)</span>' : ''}</div><div class="ssub" style="color:${C.color}">${slotLabel(s)}${s.kind === 'bot' ? ' · Bot' : ''}</div></div>
       <span class="sready ${s.ready ? 'ok' : 'no'}">${s.kind === 'bot' ? 'BOT' : s.ready ? '✔ READY' : 'NOT READY'}</span><span class="sbtns">${ctrl}</span></div>`;
   };
   $('slotsA').innerHTML = act.filter(i => SLOT_TEAM[i] === 0).map(card).join('');
@@ -405,8 +450,8 @@ $('room').addEventListener('click', e => {
 $('room').addEventListener('change', e => {
   if (S.net?.role !== 'host') return;
   const sel = e.target.closest('[data-act="botcls"]'), ssel = e.target.closest('[data-act="botspec"]');
-  if (sel) { const sl = S.room.slots[+sel.dataset.i]; sl.cls = sel.value; sl.spec = pickSpec(sl.cls, 'random'); roomBroadcast(); }
-  else if (ssel) { const sl = S.room.slots[+ssel.dataset.i]; sl.spec = validSpec(sl.cls, ssel.value); roomBroadcast(); }
+  if (sel) { const sl = S.room.slots[+sel.dataset.i]; sl.cls = CLASSES[sel.value] ? sel.value : 'random'; sl.spec = 'random'; roomBroadcast(); }
+  else if (ssel) { const sl = S.room.slots[+ssel.dataset.i]; sl.spec = ssel.value === 'random' ? 'random' : validSpec(sl.cls, ssel.value); roomBroadcast(); }
 });
 $('roomBotDiff').addEventListener('change', e => { if (S.room) { S.room.botDiff = e.target.value; roomBroadcast(); } });
 $('roomFill').addEventListener('click', () => { for (const i of activeSlots(S.room)) if (S.room.slots[i].kind === 'empty') S.room.slots[i] = botFor(i); roomBroadcast(); });
@@ -477,7 +522,12 @@ function bindNet(net) {
   net.on('pick', (m, cid) => { const s = slotOf(cid); if (s && CLASSES[m.cls]) { s.cls = m.cls; s.spec = validSpec(m.cls, m.spec); s.ready = false; roomBroadcast(); } });
   net.on('ready', (m, cid) => { const s = slotOf(cid); if (s) { s.ready = !!m.v; roomBroadcast(); } });
   net.on('in', (m, cid) => { const r = remoteOf(cid); if (r) r.remote = m; });
-  net.on('ab', (m, cid) => { const r = remoteOf(cid); if (r) r.abs.push({ i: m.i, dir: m.dir }); });
+  net.on('ab', (m, cid) => {
+    const r = remoteOf(cid); if (!r) return;
+    // a mouseover heal names its ally; only accept it for an ally spell, so a hostile ability can't be redirected
+    const fid = S.cidToFid.get(cid), ab = S.sim && kitOf(S.sim.fighters[fid])?.abilities[m.i];
+    r.abs.push(Number.isInteger(m.tid) && ab?.ally ? { i: m.i, dir: m.dir, tid: m.tid } : { i: m.i, dir: m.dir });
+  });
   net.on('tg', (m, cid) => { const r = remoteOf(cid); if (r) r.targetReq = true; });
   net.on('atk', (m, cid) => { const r = remoteOf(cid); if (r) { r.attack = true; if (m.tid >= 0) r.setTarget = m.tid; } });
   net.on('sel', (m, cid) => { const r = remoteOf(cid); if (r) { if (m.tid !== undefined) r.setTarget = m.tid; if (m.fid !== undefined) r.setFriend = m.fid; } });
@@ -538,7 +588,10 @@ function startOnline() {
   const roster = [], owners = [];
   for (const i of act) {
     const s = room.slots[i];
-    roster.push({ cls: s.cls, spec: validSpec(s.cls, s.spec), team: SLOT_TEAM[i], name: s.name, bot: s.kind === 'bot', diff: room.botDiff });
+    // random bots are rolled now (a fresh roll every match), avoiding classes already on their team
+    const mates = act.filter(j => j !== i && SLOT_TEAM[j] === SLOT_TEAM[i]).map(j => roster[act.indexOf(j)]?.cls || room.slots[j].cls);
+    const cls = botClass(s.cls, mates), spec = s.spec === 'random' ? pickSpec(cls, 'random') : validSpec(cls, s.spec);
+    roster.push({ cls, spec, team: SLOT_TEAM[i], name: s.name, bot: s.kind === 'bot', diff: room.botDiff });
     owners.push(s.kind === 'human' ? s.cid : null);
   }
   const myFid = owners.indexOf('host');
@@ -573,7 +626,7 @@ function startMatch(roster, mode, myId) {
   S.mode = mode; S.inGame = true; S.paused = false; S.acc = 0; S.prev = null;
   S.roster = roster; S.myId = myId;
   S.lastCount = null; S.lastWinner = -1;
-  S.snaps = []; S.lastSnap = null; S.ack = 0; S.lastForceYaw = -1;
+  S.snaps = []; S.lastSnap = null; S.ack = 0; S.lastForceYaw = -1; S.pred = newPred();
   S.ais = new Map(); S.remotes = new Map(); S.pend = null;
   const me = roster[myId];
   if (mode === 'guest') {
@@ -726,16 +779,87 @@ function buildGuestView() {
   let a = snaps[0], b = snaps[snaps.length - 1];
   for (let i = 0; i < snaps.length - 1; i++) if (snaps[i].t <= rt && snaps[i + 1].t >= rt) { a = snaps[i]; b = snaps[i + 1]; break; }
   const u = b.t > a.t ? Math.max(0, Math.min(1, (rt - a.t) / (b.t - a.t))) : 1;
+  const age = (performance.now() - S.lastSnapT) / 1000;
   const fighters = last.f.map((f, i) => {
-    if (i === S.myId) return { ...f, id: i, x: L.x, y: L.y, z: L.z, yaw: L.yaw, stamina: L.stamina };
+    if (i === S.myId) return applyPred({ ...f, id: i, x: L.x, y: L.y, z: L.z, yaw: L.yaw, stamina: L.stamina, moving: L.moving }, age);
     const fa = a.s.f[i], fb = b.s.f[i];
     return { ...f, id: i, x: fa.x + (fb.x - fa.x) * u, y: fa.y + (fb.y - fa.y) * u, z: fa.z + (fb.z - fa.z) * u, yaw: lerpAngle(fa.yaw, fb.yaw, u) };
   });
   const pa = new Map(a.s.p.map(p => [p.id, p]));
   const projectiles = b.s.p.map(p => { const q = pa.get(p.id); return q ? { ...p, x: q.x + (p.x - q.x) * u, y: q.y + (p.y - q.y) * u, z: q.z + (p.z - q.z) * u } : p; });
-  const age = (performance.now() - S.lastSnapT) / 1000;
   const zones = last.z.map(z => ({ ...z, t: Math.min(z.dur, z.t + age) }));
   return { fighters, projectiles, zones, minions: last.m || [], state: last.s, stateT: last.st - age, round: last.r, score: last.sc, fightT: last.ft + (last.s === 'fight' ? age : 0), damp: last.dp, lastWinner: S.lastWinner };
+}
+
+// ---- guest prediction. An online guest's ability press used to show nothing until the host's answer came back
+// (one round trip). Now the press shows at once — GCD sweep, cooldown, cast bar + casting pose, the animation and
+// sound of an instant — and the host's snapshots then confirm it (and take over) or, if the host refused or
+// queued it, the prediction runs out after PRED_HOLD and the HUD shows the host's state again.
+const PRED_HOLD = 450; // ms a prediction stands without the host confirming it
+function newPred() { return { gcd: null, cds: new Map(), cast: null, anim: new Map(), castSnd: null }; }
+function guestPredict(view, i, tid) {
+  const me = view.fighters[S.myId], L = S.local, P = S.pred;
+  if (!me || !L || !P || view.state !== 'fight' || !me.alive) return;
+  const ab = kitOf(me).abilities[i]; if (!ab) return;
+  const has = type => me.buffs.some(b => b.type === type);
+  // the host's own checks, as far as the guest can see them; anything doubtful is left to the host
+  if (ab.gcd && (me.gcd > 0.05 || me.cast)) return; // goes into the host's spell queue
+  if (ab.charges ? (me.ch?.[i] ?? ab.charges) <= 0 : me.cds[i] > 0.05) return;
+  if (ab.cost > me.res || (ab.needsCp && me.cp < 1) || ab.needsPet) return;
+  if ((has('stun') || has('disorient')) && !ab.allowCC) return;
+  if (has('silence') && ab.school !== 'phys') return;
+  if (has('tempest') || (has('root') && MOVE_ABS.has(ab.id))) return;
+  if (ab.cast > 0 && ((L.moving && !ab.moveCast) || airborne(L))) return; // the host holds it until you stop
+  if (ab.target) {
+    const t = view.fighters[me.target];
+    if (!t || !t.alive || t.team === me.team || t.buffs.some(b => b.type === 'stealth')) return;
+    const d = rangeDist(me, t);
+    if (d > ab.range + 0.3 + (ab.melee ? meleeBonus(me, t) : 0) || (ab.minRange && d < ab.minRange)) return;
+    if (!ab.melee && segBlocked(me.x, me.z, t.x, t.z, me.y + 1.5, t.y + 1.5)) return;
+    if (ab.melee && Math.abs(angleDiff(me.yaw, angleTo(me, t))) > FACE_ARC) return;
+  }
+  if (ab.ally) {
+    const a = view.fighters[tid ?? me.friend];
+    if (a && a.alive && a.team === me.team && a.id !== me.id && (rangeDist(me, a) > ab.range + 0.3 || segBlocked(me.x, me.z, a.x, a.z, me.y + 1.5, a.y + 1.5))) return;
+  }
+  const now = performance.now();
+  if (ab.gcd) P.gcd = { start: now, seen: false };
+  if (ab.cast > 0) {
+    const t = ab.target ? me.target : -1;
+    P.cast = { idx: i, start: now, dur: ab.cast, tid: t };
+    P.castSnd = { ab: ab.id, t: now };
+    audio.play(CAST_SOUND[ab.school] || 'cast_arcane', { x: me.x, z: me.z });
+    return;
+  }
+  if (!ab.charges && ab.cd > 0) P.cds.set(i, { start: now, cd: ab.cd, seen: false });
+  P.anim.set(ab.id, now);
+  world.onAbilityAnim(S.myId, ab.id);
+  audio.play(AB_SOUND[ab.id], { x: me.x, z: me.z });
+  hud.flashSlot(i);
+}
+// my fighter in the guest view, with the predictions laid over the last snapshot
+function applyPred(o, age) {
+  const P = S.pred, now = performance.now();
+  if (o.cast) o.cast = { ...o.cast, t: Math.min(o.cast.dur, o.cast.t + age) }; // the host's cast, advanced to now
+  if (!P) return o;
+  if (P.gcd) {
+    const el = now - P.gcd.start;
+    if ((!P.gcd.seen && el > PRED_HOLD) || el > RULES.gcd * 1000) P.gcd = null;
+    else o.gcd = Math.max(o.gcd, RULES.gcd - el / 1000);
+  }
+  if (P.cds.size) {
+    o.cds = o.cds.slice();
+    for (const [i, c] of P.cds) {
+      const el = now - c.start;
+      if (c.seen || el > PRED_HOLD) P.cds.delete(i); else o.cds[i] = Math.max(o.cds[i], c.cd - el / 1000);
+    }
+  }
+  if (P.cast) {
+    const el = now - P.cast.start;
+    if (el > PRED_HOLD && !o.cast) { P.cast = null; $('castA')._had = false; } // refused / held by the host: the bar just goes away (no "done" flash)
+    else if (!o.cast) o.cast = { idx: P.cast.idx, t: Math.min(P.cast.dur, el / 1000), dur: P.cast.dur, tid: P.cast.tid };
+  }
+  return o;
 }
 
 function onSnapshot(s) {
@@ -745,6 +869,13 @@ function onSnapshot(s) {
   S.lastSnap = s; S.lastSnapT = now;
   const me = s.f[S.myId], L = S.local;
   if (!me || !L) return;
+  // the host has caught up with a prediction: from here on its state is shown
+  const P = S.pred;
+  if (P) {
+    if (P.gcd && me.gcd > 0.05) P.gcd.seen = true;
+    for (const [i, c] of P.cds) if (me.cds[i] > 0.05) c.seen = true;
+    if (P.cast && me.cast && me.cast.idx === P.cast.idx) P.cast = null;
+  }
   L.buffs = me.buffs; L.alive = me.alive; L.locked = me.locked; L.cast = me.cast; L.form = me.form; // cast: moving casts slow you; form: druid shape
   // server-forced movement (blinks, charges, round resets) overrides our prediction
   if (me.forceSeq !== S.ack || me.locked) {
@@ -767,14 +898,22 @@ function handleEvents(evs, view) {
     world.vfx.onEvent(ev, ctx);
     switch (ev.e) {
       case 'ab': {
-        world.onAbilityAnim(ev.id, ev.ab);
-        audio.play(AB_SOUND[ev.ab], pos(ev.id));
-        if (ev.id === my) { const i = kitOf(F[my]).abilities.findIndex(a => a.id === ev.ab); hud.flashSlot(i); }
+        // guest: an instant we already showed when the key went down (guestPredict) doesn't play twice
+        const shown = ev.id === my && S.pred?.anim.get(ev.ab) > performance.now() - 1000;
+        if (shown) S.pred.anim.delete(ev.ab);
+        if (!shown) { world.onAbilityAnim(ev.id, ev.ab); audio.play(AB_SOUND[ev.ab], pos(ev.id)); }
+        if (ev.id === my) { if (!shown) { const i = kitOf(F[my]).abilities.findIndex(a => a.id === ev.ab); hud.flashSlot(i); } }
+        // callout when an enemy pops a big cooldown (30 s+ or its signature ability)
+        else if (me && F[ev.id] && F[ev.id].team !== myTeam) {
+          const ab = kitOf(F[ev.id]).abilities.find(a => a && a.id === ev.ab);
+          if (ab && (ab.cd >= 30 || ab.signature)) hud.callout(F[ev.id].name, ab.name, ab.color);
+        }
         if (ev.ab === 'glacial_nova' || ev.ab === 'blinding_light' || ev.ab === 'halo_judgment') world.addShake(0.25);
         break; }
       case 'caststart': {
         const ab = kitOf(F[ev.id]).abilities.find(a => a.id === ev.ab);
-        audio.play(CAST_SOUND[ab?.school] || 'cast_arcane', pos(ev.id));
+        const P = S.pred, shown = ev.id === my && P?.castSnd && P.castSnd.ab === ev.ab && P.castSnd.t > performance.now() - 1000;
+        if (shown) P.castSnd = null; else audio.play(CAST_SOUND[ab?.school] || 'cast_arcane', pos(ev.id));
         break; }
       case 'auto': {
         world.onAuto(ev.id, ev.hit); // ev.hit: s until the melee blow lands (the swing animation is lined up with it)
@@ -782,6 +921,9 @@ function handleEvents(evs, view) {
         audio.play(ev.ranged ? 'auto_' + c : c === 'rogue' ? 'dagger' : 'swing', pos(ev.id));
         break; }
       case 'hit': audio.play(HIT_SOUND[ev.kind] || 'fire_hit', { x: ev.x, z: ev.z }); if (ev.kind === 'arcane_comet') world.addShake(ev.id === my ? 0.7 : 0.3); break;
+      case 'fizzle': // a big projectile shattered on cover: tell both sides
+        if (ev.blocked) { audio.play('immune', { x: ev.x, z: ev.z }); if (ev.id === my || ev.src === my) hud.floatText({ x: ev.x, y: ev.y + 0.6, z: ev.z }, ev.id === my ? 'Dodged!' : 'Blocked', ev.id === my ? '#9aff9a' : '#c8c8c8', ev.id === my ? 'big' : ''); }
+        break;
       case 'dmg': {
         hud.combatText(ev, F, my);
         const meleeHit = ev.melee || MELEE_HIT_ABS.has(ev.ab); // ranged impacts get their sound from 'hit'
@@ -803,7 +945,7 @@ function handleEvents(evs, view) {
         if (ev.type === 'stun' || ev.type === 'disorient') audio.play('stun', pos(ev.id));
         break;
       case 'interrupted': if (ev.id === my || ev.id === me?.target) hud.castInterrupted(ev.id === my); hud.combatText(ev, F, my); audio.play('interrupt', pos(ev.id)); break;
-      case 'err': if (ev.id === my) { hud.error(ev.msg); audio.play('error'); } break;
+      case 'err': if (ev.id === my) { hud.error(ev.msg); audio.play('error'); if (S.mode === 'guest') { if (S.pred?.cast) $('castA')._had = false; S.pred = newPred(); } } break; // the host refused: drop what we predicted
       case 'blink': if (ev.fx === 'arcane_shift' || ev.fx === 'shadow_leap') audio.play('blink', { x: ev.x1, z: ev.z1 }); break;
       case 'dash': world.onDash(ev.id, ev.fx); break;
       case 'death': {
@@ -920,7 +1062,12 @@ function gameFrame(dt) {
     const allies = pre.fighters.filter(f => f.team === meV.team && f.id !== S.myId);
     setFriend = allies.length ? (meV.friend === allies[0].id && allies[1] ? allies[1].id : allies[0].id) : S.myId;
   }
-  const local = { mx: raw.mx, mz: raw.mz, yaw: input.yaw, jump: raw.jump, sprint: raw.sprint, abilities: raw.abilities.map(i => ({ i, dir })), targetReq: raw.targetReq, attack: raw.attack, atkHold, setTarget, setFriend };
+  // mouseover healing: an ally under the crosshair (or cursor) takes your ally spells without changing your friendly target
+  const mo = settings.mouseover && meV && canControl ? world.pickAlly(pre, S.myId, raw.aimPos.x, raw.aimPos.y) : -1;
+  hud.mouseover = mo;
+  const myKit = meV ? kitOf(meV) : null;
+  const abInput = i => (mo >= 0 && myKit?.abilities[i]?.ally ? { i, dir, tid: mo } : { i, dir });
+  const local = { mx: raw.mx, mz: raw.mz, yaw: input.yaw, jump: raw.jump, sprint: raw.sprint, abilities: raw.abilities.map(abInput), targetReq: raw.targetReq, attack: raw.attack, atkHold, setTarget, setFriend };
 
   let view;
   if (S.mode === 'guest') {
@@ -936,7 +1083,7 @@ function gameFrame(dt) {
     if (net && S.sendT <= 0) { S.sendT = 1 / 30; net.send({ t: 'in', x: +L.x.toFixed(3), y: +L.y.toFixed(3), z: +L.z.toFixed(3), yaw: +L.yaw.toFixed(3), moving: L.moving, sprinting: L.sprinting, stamina: Math.round(L.stamina), h: atkHold ? 1 : 0, ack: S.ack }); S.sentHold = atkHold; }
     if (net) {
       if (setTarget !== undefined || setFriend !== undefined) net.send({ t: 'sel', tid: setTarget, fid: setFriend });
-      for (const a of local.abilities) net.send({ t: 'ab', i: a.i, dir: a.dir });
+      for (const a of local.abilities) { net.send({ t: 'ab', i: a.i, dir: a.dir, tid: a.tid }); guestPredict(pre, a.i, a.tid); }
       if (local.targetReq) net.send({ t: 'tg' });
       if (local.attack) net.send({ t: 'atk', tid: setTarget ?? -1 });
     }
@@ -982,5 +1129,5 @@ let fpsAcc = 0, fpsN = 0;
 function fpsCounter(dt) { if (!settings.fps) return; fpsAcc += dt; fpsN++; if (fpsAcc > 0.5) { $('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps · ' + world.renderer.info.render.calls + ' draws'; fpsAcc = 0; fpsN = 0; } }
 
 // debug handle (used for automated testing; harmless in production)
-window.__rf = { world, S, CLASSES, input, audio, hud, tick: dt => { if (S.inGame) gameFrame(dt); }, startMatch };
+window.__rf = { world, S, CLASSES, input, audio, hud, tick: dt => { if (S.inGame) gameFrame(dt); }, startMatch, onSnapshot, handleEvents, buildGuestView };
 requestAnimationFrame(frame);
