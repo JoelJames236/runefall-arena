@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Runefall Arena — Champion Viewer</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #16121c; color: #eee; font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #ui { position: absolute; top: 8px; left: 8px; z-index: 2; background: #000a; padding: 8px 10px; border-radius: 6px; }
+  #ui select, #ui button { font-size: 13px; margin: 2px; }
+  #info { margin-top: 4px; color: #e8c37a; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="ui">
+  <select id="who"></select>
+  <select id="anim"><option>idle</option><option>walk</option><option>sprint</option><option>cast</option><option>attack</option><option>finisher</option><option>bash</option><option>hit</option><option>dead</option></select>
+  <label><input id="cmp" type="checkbox" checked> compare old model</label>
+  <div id="info">loading…</div>
+</div>
+<script type="module">
+// Dev tool: inspect a champion (generated or code-built) with its weapons and animations side by side.
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { loadHeroAssets, Character, makeWeapon } from './js/render/heroes.js';
+// every weapon a champion carries (class / spec looks in heroes.js)
+const WEAPONS = [['orcaxe', 0], ['orcshield', 0], ['greatAxe', { axeStyle: 'orc' }], ['greatAxe', 0], ['warAxe', 0], ['fang', 0], ['frostwand', { glow: 0x7fd0ff }], ['tome', { glow: 0x7fd0ff }], ['firewand', { glow: 0xff7a2a }], ['tome', { glow: 0xff7a2a }], ['stormmace', 0], ['relic', 0],
+  ['sunhammer', { glow: 0xffe08a }], ['holysword', 0], ['towershield', 0], ['sunmace', { glow: 0xffd98a }], ['stormaxe', { glow: 0x4ad8ff }], ['bow', 0], ['longbow', 0], ['bonestaff', { glow: 0x7aff6a }], ['druidstaff', { glow: 0x8ad86a }]];
+import { CLASS_ORDER, specsOf } from './js/data/classes.js';
+import { CHAMPION_MODELS, DISABLED } from './js/render/champions.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x2a2432);
+const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.55;
+const cam = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 100); cam.position.set(0, 1.6, 5.2);
+const ctl = new OrbitControls(cam, renderer.domElement); ctl.target.set(0, 1.0, 0); ctl.update();
+scene.add(new THREE.HemisphereLight(0xb8c4e8, 0x4a3828, 1.1));
+const sun = new THREE.DirectionalLight(0xffd8b0, 2.6); sun.position.set(3, 6, 4); sun.castShadow = true; scene.add(sun);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(6, 48), new THREE.MeshStandardMaterial({ color: 0x3a3440, roughness: 0.9 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); });
+
+const who = document.getElementById('who'), anim = document.getElementById('anim'), cmp = document.getElementById('cmp'), info = document.getElementById('info');
+for (const c of CLASS_ORDER) for (const s of specsOf(c).filter(s => !s.soon)) {
+  const k = c + ':' + s.id; const o = new Option((CHAMPION_MODELS[k] ? '★ ' : '') + k, k); who.add(o);
+}
+who.add(new Option('— all weapons —', 'weapons'));
+await loadHeroAssets();
+const first = Object.keys(CHAMPION_MODELS)[0]; if (first) who.value = first;
+
+let chars = [], rack = null;
+function build() {
+  for (const c of chars) scene.remove(c.root);
+  if (rack) { scene.remove(rack); rack = null; }
+  if (who.value === 'weapons') {
+    chars = []; rack = new THREE.Group(); let tris = 0, draws = 0;
+    WEAPONS.forEach(([k, l], i) => {
+      const w = makeWeapon(k, { glow: 0x7fd0ff, ...(l || {}) }); w.position.set((i % 11 - 5) * 0.62, i < 11 ? 0.9 : -0.9, 0);
+      w.traverse(o => { if (o.isMesh) { draws++; tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; } });
+      w.userData.kind = k; rack.add(w);
+    });
+    rack.position.y = 1.4; scene.add(rack); info.textContent = `${WEAPONS.length} weapons · ${Math.round(tris)} triangles · ${draws} meshes`;
+    return;
+  }
+  const [cls, spec] = who.value.split(':');
+  const a = new Character(cls, spec); chars = [a];
+  if (cmp.checked && a.generated) {
+    // the old code-built champion for comparison: temporarily hide the generated model
+    DISABLED.add(who.value);
+    try { const b = new Character(cls, spec); chars.push(b); } finally { DISABLED.delete(who.value); }
+  }
+  chars.forEach((c, i) => { c.root.position.x = chars.length > 1 ? (i ? 1.1 : -1.1) : 0; scene.add(c.root); });
+  let tris = 0, draws = 0; a.root.traverse(o => { if (o.isMesh && o.visible) { draws++; tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; } });
+  info.textContent = `${who.value}: ${a.generated ? 'generated' : 'code-built'} · ${Math.round(tris)} triangles · ${draws} meshes · weapons: ${Object.keys(a.weapons).join(', ') || '–'}`;
+}
+who.onchange = cmp.onchange = build; build();
+window.__viewer = { get chars() { return chars; }, get rack() { return rack; }, build, scene, cam, ctl };
+
+let last = performance.now(), actT = 0;
+renderer.setAnimationLoop(() => {
+  const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const m = anim.value; actT -= dt;
+  if (['attack', 'finisher', 'bash'].includes(m) && actT <= 0) { for (const c of chars) c.play(m, 0.8); actT = 1.3; }
+  if (m === 'hit' && actT <= 0) { for (const c of chars) c.hit(1); actT = 1.0; }
+  const st = { speed: m === 'walk' ? 0.8 : m === 'sprint' ? 1.5 : 0, casting: m === 'cast', dead: m === 'dead' };
+  for (const c of chars) c.update(dt, st);
+  ctl.update(); renderer.render(scene, cam);
+});
+window.__viewerTick = (dt = 1 / 30) => { const m = anim.value; const st = { speed: m === 'walk' ? 0.8 : m === 'sprint' ? 1.5 : 0, casting: m === 'cast', dead: m === 'dead' }; for (const c of chars) c.update(dt, st); renderer.render(scene, cam); };
+</script>
+</body>
+</html>

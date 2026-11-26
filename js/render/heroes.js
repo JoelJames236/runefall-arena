@@ -15,6 +15,8 @@ import { makeMaterials, makeClassWeapon, equipArmor } from './armory.js';
 import { makeFormModel } from './minions.js';
 import { applyRace, RACES, RACE_OF } from './races.js';
 import { consolidate } from './consolidate.js';
+import { CHAMPION_MODELS, championModel, loadChampion, setRetargetSource, analyse, retargetClip } from './champions.js';
+import { validSpec } from '../data/classes.js';
 
 // Rim light for champions: a cheap view-dependent fresnel glow added to the emissive term of any
 // material that defines USE_RIM, so every silhouette reads clearly against the arena at any distance.
@@ -29,6 +31,7 @@ const GL = {};        // loaded glTFs by name
 const CLIPS = {};     // clip name -> { full, upper, lower }
 let TEX = null;       // shared PBR textures for procedural weapons
 let ready = false;
+let LOWER = null;     // lower-body bone names (for the upper / lower clip split)
 
 // ------------------------------------------------------------------ class looks
 // Every class has a fixed race (races.js bakes its proportions and face); every spec has its own
@@ -39,13 +42,13 @@ const ORC_SKIN = [0.42, 0.62, 0.3], ELF_SKIN = [1.0, 0.88, 0.8], DWARF_SKIN = [1
 const LOOKS = {
   // Sun Elf magisters: slender, long platinum hair, glowing eyes
   mage: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: ['Hair_Long'], hairTint: [0.92, 0.88, 0.74], hide: ['Head_Hood', 'Acc_Pauldron'],
-    tint: [0.12, 0.18, 0.48], tintAmt: 0.82, skinTint: ELF_SKIN, scale: 1.0, weapons: ['archstaff'], idle: 'Idle_Loop', glow: 0x7fd0ff },
+    tint: [0.12, 0.18, 0.48], tintAmt: 0.82, skinTint: ELF_SKIN, scale: 1.0, weapons: ['frostwand', 'tome'], idle: 'Idle_Loop', glow: 0x7fd0ff },
   // Human rogue: hooded black leathers
   rogue: { outfit: 'Female_Ranger', head: 'Superhero_Female_FullBody', hair: [], hide: ['Head_Hood', 'Acc_Pauldron'],
     tint: [0.12, 0.1, 0.15], tintAmt: 0.85, skinTint: [0.95, 0.86, 0.8], scale: 0.98, weapons: ['fang', 'fangL'], idle: 'Crouch_Idle_Loop' },
   // Orc warrior: green skin, heavy black-iron plate, cleaver and spiked round shield
   warrior: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: ['Head_Hood', 'Acc_Pauldron'],
-    tint: [0.2, 0.17, 0.15], tintAmt: 0.75, skinTint: ORC_SKIN, scale: 1.08, weapons: ['cleaver', 'orcshield'], idle: 'Idle_Shield_Loop' },
+    tint: [0.2, 0.17, 0.15], tintAmt: 0.75, skinTint: ORC_SKIN, scale: 1.08, weapons: ['orcaxe', 'orcshield'], idle: 'Idle_Shield_Loop' },
   // Dwarf berserker: bare-chested slayer with a blazing crest and beard
   berserker: { outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], hair: [], hairTint: [0.86, 0.32, 0.07], hide: [],
     tint: [0.22, 0.16, 0.12], tintAmt: 0.65, skinTint: DWARF_SKIN, scale: 1.0, weapons: ['warAxe', 'warAxeL'], idle: 'Sword_Idle', weaponScale: 1.0, axeTint: [0.5, 0.48, 0.46] },
@@ -57,7 +60,7 @@ const LOOKS = {
     tint: [0.9, 0.85, 0.72], tintAmt: 0.72, skinTint: [1, 0.96, 0.94], scale: 1.0, weapons: ['sunmace'], idle: 'Idle_Loop', halo: true, glow: 0xffd98a },
   // Orc shaman: brown-green skin, long black hair, fur and bone
   shaman: { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: ['Hair_Long'], hairTint: [0.08, 0.06, 0.05], hide: ['Arms_1'],
-    tint: [0.4, 0.3, 0.2], tintAmt: 0.6, skinTint: [0.5, 0.6, 0.32], scale: 1.06, weapons: ['stormaxe', 'fireOrb'], idle: 'Idle_Loop', glow: 0x4ad8ff },
+    tint: [0.4, 0.3, 0.2], tintAmt: 0.6, skinTint: [0.5, 0.6, 0.32], scale: 1.06, weapons: ['stormmace', 'relic'], idle: 'Idle_Loop', glow: 0x4ad8ff },
   // Jungle troll hunter: tall, blue-green skin
   hunter: { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: ['Head_Hood', 'Acc_Pauldron'],
     tint: [0.28, 0.3, 0.22], tintAmt: 0.6, skinTint: [0.42, 0.62, 0.66], scale: 1.1, weapons: ['bow'], idle: 'Idle_Loop', hairTint: [0.62, 0.12, 0.08] },
@@ -69,14 +72,14 @@ const LOOKS = {
     tint: [0.3, 0.24, 0.14], tintAmt: 0.6, skinTint: [0.52, 0.36, 0.24], scale: 1.12, weapons: ['druidstaff'], idle: 'Idle_Loop', glow: 0x8ad86a, hairTint: [0.18, 0.11, 0.07] },
 };
 // spec looks ("class:spec"): overrides on top of the class look
-LOOKS['mage:fire'] = { ...LOOKS.mage, tint: [0.44, 0.1, 0.06], hairTint: [0.95, 0.62, 0.3], weapons: ['flamestaff'], glow: 0xff7a2a };
+LOOKS['mage:fire'] = { ...LOOKS.mage, tint: [0.44, 0.1, 0.06], hairTint: [0.95, 0.62, 0.3], weapons: ['firewand', 'tome'], glow: 0xff7a2a };
 LOOKS['rogue:assassination'] = { ...LOOKS.rogue, hair: ['Hair_Buns'], hairTint: [0.32, 0.08, 0.05], tint: [0.1, 0.18, 0.08], tintAmt: 0.85 };
-LOOKS['warrior:arms'] = { ...LOOKS.warrior, outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], hide: [], weapons: ['greatsword'], idle: 'Sword_Idle', tint: [0.3, 0.2, 0.16] };
+LOOKS['warrior:arms'] = { ...LOOKS.warrior, outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], hide: [], weapons: ['greatAxe'], axeStyle: 'orc', idle: 'Sword_Idle', tint: [0.3, 0.2, 0.16] };
 LOOKS['berserker:executioner'] = { ...LOOKS.berserker, hairTint: [0.1, 0.08, 0.07], beardLen: 0.42, weapons: ['greatAxe'], weaponScale: 1.0, tint: [0.14, 0.12, 0.11], tintAmt: 0.75, castPose: 'Sword_Block' }; // castPose: Skullsplitter wind-up
 LOOKS['paladin:protection'] = { ...LOOKS.paladin, weapons: ['holysword', 'towershield'], idle: 'Idle_Shield_Loop', tint: [0.3, 0.36, 0.52] };
 LOOKS['priest:shadow'] = { ...LOOKS.priest, hair: [], tint: [0.26, 0.14, 0.36], tintAmt: 0.82, halo: false, glow: 0xa060ff, voidOrb: true };
 LOOKS['shaman:enhancement'] = { ...LOOKS.shaman, hair: [], weapons: ['stormaxe', 'stormaxeL'], idle: 'Sword_Idle', tint: [0.3, 0.34, 0.4], glow: 0x9ae8ff };
-LOOKS['hunter:sharpshooter'] = { ...LOOKS.hunter, weapons: ['crossbow'], idle: 'Pistol_Idle_Loop', tint: [0.24, 0.2, 0.16] };
+LOOKS['hunter:sharpshooter'] = { ...LOOKS.hunter, weapons: ['longbow'], idle: 'Idle_Loop', tint: [0.24, 0.2, 0.16] };
 LOOKS['necromancer:curser'] = { ...LOOKS.necromancer, tint: [0.15, 0.1, 0.2], glow: 0xb070ff };
 LOOKS['druid:feral'] = { ...LOOKS.druid, weapons: [] };
 // undead summons (minions)
@@ -116,7 +119,7 @@ function cleanClip(clip) {
 }
 function splitClip(clip, lowerSet) {
   const lower = [], upper = [];
-  for (const t of clip.tracks) { const bone = t.name.slice(0, t.name.lastIndexOf('.')); (lowerSet.has(bone) ? lower : upper).push(t); }
+  for (const t of clip.tracks) { const bone = t.name.slice(0, t.name.lastIndexOf('.')); (lowerSet.has(bone) || lowerSet.has(bone.toLowerCase()) ? lower : upper).push(t); }
   return { full: clip, upper: new THREE.AnimationClip(clip.name + '_U', clip.duration, upper), lower: new THREE.AnimationClip(clip.name + '_L', clip.duration, lower) };
 }
 
@@ -134,12 +137,16 @@ export async function loadHeroAssets(onProgress = () => {}) {
     loadGLTF(loader, M + 'UAL2.glb').then(g => { GL.UAL2 = g; }),
   ];
   await Promise.all(jobs);
+  // generated champion models (champions.js): retargeted from the UAL-skinned base body; a failed file falls back
+  setRetargetSource(GL.Male_Ranger.scene);
+  await Promise.all(Object.keys(CHAMPION_MODELS).map(k => loadChampion(loader, k)));
   // lower-body bone set (pelvis and both legs, recursively)
   const lowerSet = new Set();
   GL.Male_Ranger.scene.traverse(o => { if (o.isBone && LOWER_ROOTS.includes(o.name)) o.traverse(c => { if (c.isBone && !c.name.startsWith('spine') ) lowerSet.add(c.name); }); });
   // spine chain must not be classified lower even though it's under pelvis
   GL.Male_Ranger.scene.traverse(o => { if (o.isBone && o.name === 'spine_01') o.traverse(c => lowerSet.delete(c.name)); });
-  for (const clip of [...GL.UAL1.animations, ...GL.UAL2.animations]) CLIPS[clip.name] = splitClip(cleanClip(clip), lowerSet);
+  for (const clip of [...GL.UAL1.animations, ...GL.UAL2.animations]) { const c = cleanClip(clip); CLIPS[clip.name] = splitClip(c, lowerSet); CLIPS[clip.name].clean = c; }
+  LOWER = new Set([...lowerSet, ...[...lowerSet].map(n => n.toLowerCase())]);
   const tl = new THREE.TextureLoader(manager);
   TEX = { wood: texSet(tl, 'weathered_planks', 0.6), metal: texSet(tl, 'rusty_metal_02', 0.5) };
   prepareHeads();
@@ -204,7 +211,7 @@ function propClone(name, gradeTint) {
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.material = gradeTint ? gradeMaterial(o.material, gradeTint, 0.55) : o.material.clone(); } });
   return g;
 }
-function makeWeapon(kind, look) {
+export function makeWeapon(kind, look) {
   if (ARMORY_KINDS.has(kind)) return makeClassWeapon(kind, makeMaterials(TEX), look);
   const g = new THREE.Group();
   let tip = new THREE.Object3D();
@@ -257,7 +264,7 @@ function makeWeapon(kind, look) {
 // How each weapon is held, in WORLD terms at the idle pose of a champion facing +Z:
 //   dir  = where the weapon's +Y (blade / shaft) points,  side = where its +X points,
 //   palm = offset from the bone toward the fingers (m),   up/fwd = extra world offsets.
-const ARMORY_KINDS = new Set(['sunhammer', 'holysword', 'towershield', 'cleaver', 'orcshield', 'flamestaff', 'runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'greatsword', 'stormaxeL', 'bow', 'crossbow', 'bonestaff', 'druidstaff', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
+export const ARMORY_KINDS = new Set(['orcaxe', 'longbow', 'frostwand', 'firewand', 'tome', 'stormmace', 'relic', 'sunhammer', 'holysword', 'towershield', 'cleaver', 'orcshield', 'flamestaff', 'runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'greatsword', 'stormaxeL', 'bow', 'crossbow', 'bonestaff', 'druidstaff', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
 const GRIP = {
   sword: { bone: 'hand_r', dir: [0, 0.55, 1], side: [-1, 0, 0], palm: 0.085 },
   axe: { bone: 'hand_r', dir: [0, 0.35, 1], side: [-1, 0, 0], palm: 0.085 },
@@ -278,9 +285,49 @@ Object.assign(GRIP, { runesword: GRIP.sword, kiteshield: GRIP.shield, holysword:
   greatAxe: { bone: 'hand_r', dir: [0, 0.92, 0.3], side: [-1, 0, 0.35], palm: 0.085 },
   greatsword: { bone: 'hand_r', dir: [0, 0.92, 0.3], side: [-1, 0, 0.35], palm: 0.085 },
   stormaxeL: { bone: 'hand_l', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 },
-  bow: { bone: 'hand_l', dir: [0, 1, 0.08], side: [0, 0, 1], palm: 0.07 }, crossbow: { bone: 'hand_r', dir: [0, 0.05, 1], side: [-1, 0, 0], palm: 0.07 },
+  frostwand: { bone: 'hand_r', dir: [0, 0.6, 0.8], side: [-1, 0, 0], palm: 0.075 }, firewand: { bone: 'hand_r', dir: [0, 0.6, 0.8], side: [-1, 0, 0], palm: 0.075 },
+  tome: { bone: 'hand_l', dir: [0, 1, 0.1], side: [1, 0, 0.25], palm: 0.06 }, relic: { bone: 'hand_l', dir: [0, 1, 0.2], side: [1, 0, 0], palm: 0.07 },
+  stormmace: { bone: 'hand_r', dir: [0, 0.8, 0.6], side: [-1, 0, 0], palm: 0.085 },
+  bow: { bone: 'hand_l', dir: [0, 1, 0.08], side: [0, 0, 1], palm: 0.07 }, longbow: { bone: 'hand_l', dir: [0, 1, 0.08], side: [0, 0, 1], palm: 0.07 }, orcaxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 }, crossbow: { bone: 'hand_r', dir: [0, 0.05, 1], side: [-1, 0, 0], palm: 0.07 },
   bonestaff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 }, druidstaff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 } });
 export const GRIPS = GRIP; // exposed for tuning
+// generated champions (champions.js) have their own sculpted forearms and gauntlets: shields are fitted to
+// the measured arm instead of a fixed grip (fitShield)
+const SHIELDS = new Set(['shield', 'orcshield', 'kiteshield', 'towershield']);
+const GRIP_GEN = {};
+
+// Strap a shield along the OUTER side of the left forearm, held by the fist behind it: measure the skinned
+// forearm + hand + fingers in the rest pose, then place the shield's back just outside that surface.
+function fitShield(ch, wp) {
+  const B = ch.bones, el = B.lowerarm_l, wr = B.hand_l; if (!el || !wr) return null;
+  const E = el.getWorldPosition(new THREE.Vector3()), W = wr.getWorldPosition(new THREE.Vector3());
+  const a = W.clone().sub(E), len = a.length(); a.normalize();
+  const C = (B.spine_03 || B.spine_02 || B.pelvis).getWorldPosition(new THREE.Vector3());
+  const n = E.clone().lerp(W, 0.5).sub(C); n.addScaledVector(a, -n.dot(a)).normalize(); // away from the body
+  let t = 0.04;
+  const ARM = /^(lowerarm|hand|index|middle|ring|pinky|thumb)(_twist_\d+)?(_\d+|_metacarpal)?_l$/i;
+  ch.body.traverse(o => {
+    if (!o.isSkinnedMesh) return;
+    const set = new Set(o.skeleton.bones.map((b, i) => ARM.test(b.name) ? i : -1).filter(i => i >= 0)); if (!set.size) return;
+    const si = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight, p = new THREE.Vector3();
+    for (let v = 0; v < si.count; v++) {
+      let w = 0; for (let k = 0; k < 4; k++) if (set.has(si.getComponent(v, k))) w += sw.getComponent(v, k);
+      if (w < 0.5) continue;
+      o.getVertexPosition(v, p); p.applyMatrix4(o.matrixWorld).sub(E);
+      const ax = p.dot(a); if (ax < -0.1 * len || ax > 1.6 * len) continue;
+      t = Math.max(t, p.addScaledVector(a, -ax).dot(n));
+    }
+  });
+  const box = new THREE.Box3().setFromObject(wp), back = Math.max(0.01, -box.min.z); // shield face is local +Z
+  const centre = E.clone().addScaledVector(a, len * 0.82).addScaledVector(n, t + back + 0.012);
+  const y = a.clone(), z = n.clone(), x = new THREE.Vector3().crossVectors(y, z).normalize();
+  y.crossVectors(z, x).normalize();
+  const worldQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  wp.quaternion.copy(el.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(worldQ));
+  wp.position.copy(el.worldToLocal(centre));
+  const s = el.getWorldScale(new THREE.Vector3()); wp.scale.set(1 / s.x, 1 / s.y, 1 / s.z);
+  return el;
+}
 
 const _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 function solveGrip(wp, bone, gp, bones) {
@@ -312,12 +359,19 @@ export class Character {
     this.cls = cls; this.spec = spec; this.lookKey = lookKey; this.look = look;
     this.act = null; this.opacity = 1; this.time = Math.random() * 10; this.side = 0;
     this.root = new THREE.Group();
-    const body = SkeletonUtils.clone(GL[look.outfit].scene);
+    // a generated model for this spec (champions.js) replaces body, race and code armor
+    let ck = null; try { ck = cls + ':' + validSpec(cls, spec); } catch (e) { ck = null; }
+    const champ = ck && championModel(ck);
+    this.race = look.race || RACE_OF[cls] || 'human'; this.raceDef = RACES[this.race] || RACES.human;
+    this.materials = [];
+    let body;
+    if (champ) body = this.buildGenerated(champ, look);
+    else {
+    body = SkeletonUtils.clone(GL[look.outfit].scene);
     body.scale.setScalar(look.scale);
     this.body = body; this.root.add(body);
     this.bones = {};
     body.traverse(o => { if (o.isBone) this.bones[o.name] = o; });
-    this.materials = [];
     const skinMats = new Map();
     const skin = m => { if (!skinMats.has(m)) { const c = m.clone(); c.color.setRGB(...look.skinTint); skinMats.set(m, c); this.skinMat = this.skinMat || c; } return skinMats.get(m); };
     const gradedMats = new Map(); // one graded copy per source material, so the pieces can merge into one draw
@@ -349,19 +403,19 @@ export class Character {
     });
     for (const hn of look.hair) GL[hn].scene.traverse(o => { if (o.isSkinnedMesh) { const mat = o.material.clone(); if (look.hairTint) mat.color.setRGB(...look.hairTint); attach(o, o.geometry, mat); } });
     // RACE: bake the race's proportions and face into this champion's bind pose (see races.js)
-    this.race = look.race || RACE_OF[cls] || 'human'; this.raceDef = RACES[this.race] || RACES.human;
     const { lift } = applyRace(this, this.race, look.outfit);
     if (lift) body.position.y -= lift * look.scale;
+    }
     // weapons: grips are solved from the hand's pose in the idle clip, so a weapon points
     // the intended world direction at rest and then simply follows the hand bone.
     this.weapons = {};
     this.mixer0 = new THREE.AnimationMixer(body);
-    const rest = this.mixer0.clipAction(CLIPS[look.idle].full); rest.play(); this.mixer0.update(0.01);
+    const rest = this.mixer0.clipAction(this.clip(look.idle).full); rest.play(); this.mixer0.update(0.01);
     this.root.updateMatrixWorld(true);
     for (const w of look.weapons) {
-      const wp = makeWeapon(w, look), gp = GRIP[w];
-      const bone = this.bones[gp.bone] || this.bones.hand_r;
-      solveGrip(wp, bone, gp, this.bones);
+      const wp = makeWeapon(w, look), gp = (this.generated && GRIP_GEN[w]) || GRIP[w];
+      let bone = (this.generated && SHIELDS.has(w)) ? fitShield(this, wp) : null;
+      if (!bone) { bone = this.bones[gp.bone] || this.bones.hand_r; solveGrip(wp, bone, gp, this.bones); }
       if (look.weaponScale) wp.scale.multiplyScalar(look.weaponScale);
       // static weapon parts fold into the champion mesh (consolidate.js); pulsing / spinning parts stay separate
       const U = wp.userData; if (U.fire) U.noMerge = true; else for (const p of [U.pulse, U.crystal, U.spin, U.drop]) if (p) p.userData.noMerge = true;
@@ -369,7 +423,7 @@ export class Character {
       this.weapons[w] = wp;
     }
     // class armor, fitted to this body in the same rest pose
-    this.armor = look.noArmor ? null : equipArmor(this, cls, makeMaterials(TEX), spec);
+    this.armor = (look.noArmor || champ) ? null : equipArmor(this, cls, makeMaterials(TEX), spec);
     rest.stop(); this.mixer0.uncacheRoot(body); this.mixer0 = null;
     if (look.halo) {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.008, 6, 40), glowMat(0xffe2a0, 2.5));
@@ -388,18 +442,52 @@ export class Character {
     this.cur = null;   // active one-shot { kind, name, t, dur, full, weight }
     this.deadT = 0; this.vic = false; this.hitT = 0; this.hitBig = 0;
     const W = this.weapons, tipOf = k => W[k] && (W[k].userData.tip || W[k]);
-    this.focus = ['archstaff', 'flamestaff', 'sunhammer', 'holysword', 'cleaver', 'sunmace', 'fireOrb', 'bonestaff', 'druidstaff', 'crossbow', 'bow', 'stormaxe', 'runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
-    this.tipR = ['runesword', 'sunhammer', 'holysword', 'cleaver', 'greatsword', 'warAxe', 'greatAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
+    this.focus = ['frostwand', 'firewand', 'stormmace', 'relic', 'archstaff', 'flamestaff', 'sunhammer', 'holysword', 'cleaver', 'sunmace', 'fireOrb', 'bonestaff', 'druidstaff', 'crossbow', 'bow', 'longbow', 'orcaxe', 'stormaxe', 'runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
+    this.tipR = ['orcaxe', 'frostwand', 'firewand', 'stormmace', 'runesword', 'sunhammer', 'holysword', 'cleaver', 'greatsword', 'warAxe', 'greatAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
     this.tipL = (W.fangL || W.warAxeL || W.stormaxeL)?.userData.tip;
     this.tmpQ = new THREE.Quaternion(); this.tmpE = new THREE.Euler();
     this.setLoco(look.idle, 0);
+  }
+
+  // generated champion: clone the rigged GLB, fit it to the base body's height and analyse its rest pose once
+  buildGenerated(champ, look) {
+    const body = SkeletonUtils.clone(champ.scene);
+    if (!champ.fit) {
+      const h = new THREE.Box3().setFromObject(champ.scene).getSize(new THREE.Vector3()).y;
+      const hs = new THREE.Box3().setFromObject(GL.Male_Ranger.scene).getSize(new THREE.Vector3()).y;
+      champ.fit = hs / Math.max(0.01, h);
+    }
+    this.body = body; this.root.add(body);
+    this.bones = {};
+    body.traverse(o => {
+      if (o.isBone) this.bones[o.name] = o;
+      if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true; }
+    });
+    if (!champ.A) champ.A = analyse(body); // rest-pose frames are scale-free (relative to the body)
+    // gameplay code addresses bones by the base skeleton's names (hand_r, spine_03, Head …): alias them
+    const byLc = {}; for (const [n, b] of Object.entries(this.bones)) byLc[n.toLowerCase()] = b;
+    for (const [s, t] of Object.entries(champ.A.map)) { const b = byLc[t]; if (b) { this.bones[s] = b; if (s === 'head') this.bones.Head = b; } }
+    if (byLc.head) this.bones.Head = byLc.head;
+    body.scale.setScalar(champ.fit * look.scale);
+    this.retarget = champ.A; this.clipCache = champ.clips;
+    this.generated = true;
+    return body;
+  }
+
+  // clip set { full, upper, lower } for this champion (retargeted + cached per generated model)
+  clip(name) {
+    if (!this.retarget) return CLIPS[name];
+    const cache = this.clipCache;
+    if (name in cache) return cache[name];
+    const src = CLIPS[name];
+    return (cache[name] = src ? splitClip(retargetClip(src.clean, this.retarget), LOWER) : null);
   }
 
   // get (or create) an action for clip `name`, part = 'full' | 'upper' | 'lower'
   action(name, part) {
     const key = name + ':' + part;
     if (this.actions[key]) return this.actions[key];
-    const c = CLIPS[name]; if (!c) return null;
+    const c = this.clip(name); if (!c) return null;
     const a = this.mixer.clipAction(c[part]);
     a.enabled = true; a.setEffectiveWeight(0); a.play();
     this.actions[key] = a;
@@ -407,10 +495,10 @@ export class Character {
   }
 
   setLoco(name, fade = 0.18) {
-    if (this.loco.name === name || !CLIPS[name]) return;
+    if (this.loco.name === name || !this.clip(name)) return;
     this.loco.prev = this.loco.name; this.loco.name = name; this.loco.fade = fade > 0 ? 0 : 1; this.loco.fadeDur = fade;
     const lo = this.action(name, 'lower'), up = this.action(name, 'upper');
-    lo.time = up.time = (this.loco.prev && this.actions[this.loco.prev + ':lower']) ? (this.actions[this.loco.prev + ':lower'].time / CLIPS[this.loco.prev].full.duration) * CLIPS[name].full.duration : 0;
+    lo.time = up.time = (this.loco.prev && this.actions[this.loco.prev + ':lower']) ? (this.actions[this.loco.prev + ':lower'].time / this.clip(this.loco.prev).full.duration) * this.clip(name).full.duration : 0;
   }
 
   play(kind, dur = 0.5) {
@@ -419,7 +507,7 @@ export class Character {
     const list = spec[this.lookKey] || spec[this.cls] || spec.any; if (!list) return;
     this.side = 1 - this.side;
     const name = list[this.side % list.length];
-    const clip = CLIPS[name]; if (!clip) return;
+    const clip = this.clip(name); if (!clip) return;
     if (this.cur) { this.cur.out = true; }
     const full = !!spec.full;
     const a = this.action(name, full ? 'full' : 'upper');
@@ -444,7 +532,7 @@ export class Character {
       const a = this.action(name, 'upper'); if (!a) return;
       a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.timeScale = 1.4; a.play();
       if (this.cur) this.cur.out = true;
-      this.cur = { kind: 'hit', name, t: 0, len: CLIPS[name].full.duration / 1.4, a, fullA: null, full: false, w: 0 };
+      this.cur = { kind: 'hit', name, t: 0, len: this.clip(name).full.duration / 1.4, a, fullA: null, full: false, w: 0 };
     }
   }
 
@@ -573,6 +661,9 @@ export class Character {
   addRot(bone, x, y, z) {
     if (!bone) return;
     this.tmpE.set(x, y, z); this.tmpQ.setFromEuler(this.tmpE);
+    // procedural offsets are authored in the base skeleton's bone axes: convert for a generated rig
+    const R = this.retarget, n = R && bone.name.toLowerCase();
+    if (R && R.postT[n]) this.tmpQ.premultiply(R.postTInv[n]).multiply(R.postT[n]);
     bone.quaternion.multiply(this.tmpQ);
   }
 
