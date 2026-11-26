@@ -86,9 +86,9 @@ export class HUD {
     this.slots = CM.abilities.map((ab, i) => {
       const s = document.createElement('div'); s.className = 'slot';
       const meta = [ab.cost ? `${ab.cost} ${RES_NAME[CM.resType]}` : 'No cost', ab.cast ? `${ab.cast}s cast` : 'Instant', ab.cd ? `${ab.cd}s cooldown` : '', ab.range ? `${ab.range} yd` : ''].filter(Boolean).join(' · ');
-      s.innerHTML = `${iconHTML(ab)}<div class="cd"></div><div class="cdtext"></div><div class="key">${i + 1}</div><div class="cost">${ab.cost || ''}</div>${tip(ab, meta)}`;
+      s.innerHTML = `${iconHTML(ab)}<div class="cd"></div><div class="cdtext"></div><div class="key">${i + 1}</div><div class="cost">${ab.cost || ''}</div>${ab.charges ? '<div class="chg"></div>' : ''}${tip(ab, meta)}`;
       bar.appendChild(s);
-      return { el: s, cd: s.querySelector('.cd'), txt: s.querySelector('.cdtext'), ab, wasCd: false };
+      return { el: s, cd: s.querySelector('.cd'), txt: s.querySelector('.cdtext'), chg: s.querySelector('.chg'), ab, wasCd: false };
     });
     const pips = () => Array.from({ length: RULES.winsNeeded }, () => '<div class="pip"></div>').join('');
     $('pipsA').innerHTML = pips(); $('pipsB').innerHTML = pips();
@@ -157,7 +157,10 @@ export class HUD {
     }
     this.slots && this.slots.forEach((s, i) => {
       const ab = s.ab;
-      const cd = me.cds[i];
+      // charges (e.g. 2 blinks): usable while any charge is left; the badge shows how many
+      const chN = ab.charges ? (me.ch?.[i] ?? ab.charges) : 0;
+      if (s.chg) setText(s.chg, String(chN));
+      const cd = ab.charges && chN > 0 ? 0 : me.cds[i];
       let rem = cd, tot = ab.cd;
       if (ab.gcd && me.gcd > cd) { rem = me.gcd; tot = RULES.gcd; }
       if (rem > 0.05 && tot > 0) {

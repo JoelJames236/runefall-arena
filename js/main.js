@@ -723,7 +723,7 @@ function onSnapshot(s) {
   S.lastSnap = s; S.lastSnapT = now;
   const me = s.f[S.myId], L = S.local;
   if (!me || !L) return;
-  L.buffs = me.buffs; L.alive = me.alive; L.locked = me.locked;
+  L.buffs = me.buffs; L.alive = me.alive; L.locked = me.locked; L.cast = me.cast; // cast: moving casts slow you
   // server-forced movement (blinks, charges, round resets) overrides our prediction
   if (me.forceSeq !== S.ack || me.locked) {
     L.x = me.x; L.y = me.y; L.z = me.z; L.vy = 0;

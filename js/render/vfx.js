@@ -19,6 +19,9 @@ const PROJ_STYLE = {
   holy_spark: { color: 0xffe680, core: 0xffffff, size: 0.34, trail: 0xfff0b0, caster: true, rays: true, halo: true },
   static_bolt: { color: 0x7ae0ff, core: 0xeaffff, size: 0.32, trail: 0x4ad8ff, caster: true, zap: true, arc: true },
   axe_throw: { color: 0x9a8a7a, core: 0xb8b0a8, size: 0.42, trail: 0x6a5a4a, axe: true, small: true },
+  fire_bolt: { color: 0xff8a3a, core: 0xfff0b0, size: 0.32, trail: 0xff5a10, caster: true, smoke: true },
+  fireball: { color: 0xff6a1a, core: 0xffe0a0, size: 0.62, trail: 0xff4a0a, smoke: true, rays: true },
+  frostbite: { color: 0xa8e4ff, core: 0xeaffff, size: 0.3, trail: 0x7ac8ff, stretch: 2.2, shard: true },
 };
 const SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff7a2a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff, phys: 0xffffff };
 const CAST_SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff8a3a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff };
@@ -345,6 +348,17 @@ export class VFX {
         m.userData.edge.material.opacity = 0.6 + Math.sin(z.t * 20) * 0.3 * u;
         m.userData.totem.position.y = Math.min(0, -1.5 + z.t * 8);
         if (Math.random() < 0.35) this.smoke.emit({ x: z.x + (Math.random() - 0.5) * z.r * 1.6, y: 0.1, z: z.z + (Math.random() - 0.5) * z.r * 1.6, vy: 0.8 + Math.random(), life: 0.7, size: 0.8, color: 0x7a6a50, grow: 1, gravity: 1, alpha: 0.5 });
+      } else if (z.type === 'meteor') {
+        // telegraph fills up while the meteor falls from the sky toward the circle
+        const U = m.userData;
+        U.fill.scale.setScalar(Math.max(0.01, z.r * u));
+        U.fill.material.opacity = 0.2 + u * 0.4;
+        U.edge.material.opacity = 0.6 + Math.sin(z.t * 24) * 0.3 * u;
+        const h = 26 * (1 - u) * (1 - u) + 0.6;
+        U.rock.position.set(-6 * (1 - u), h, -3 * (1 - u)); U.rock.rotation.x += dt * 6; U.rock.rotation.z += dt * 4;
+        const wx = z.x + U.rock.position.x, wy = (z.y || 0) + h, wz = z.z + U.rock.position.z;
+        for (let k = 0; k < 3; k++) this.glow.emit({ x: wx + (Math.random() - 0.5) * 0.8, y: wy + (Math.random() - 0.5) * 0.8, z: wz + (Math.random() - 0.5) * 0.8, vy: 1, life: 0.6, size: 1.4, color: k % 2 ? 0xff5a1a : 0xffc060, grow: -0.6, drag: 1 });
+        if (Math.random() < 0.6) this.smoke.emit({ x: wx, y: wy, z: wz, vy: 0.5, life: 1.2, size: 1.6, color: 0x2a1a14, grow: 1.4, drag: 1, alpha: 0.5 });
       } else if (z.type === 'stoneskin') {
         m.userData.dome.material.opacity = 0.1 + Math.sin(z.t * 4) * 0.03;
         m.userData.ring.rotation.z += dt * 0.5;
@@ -378,8 +392,18 @@ export class VFX {
       fill.rotation.x = -Math.PI / 2; fill.position.y = 0.07; g.add(fill);
       const totem = this.makeTotem(0x8a6a4a, 0xffa040); g.add(totem);
       g.userData = { fill, edge, totem };
+    } else if (z.type === 'meteor') {
+      const col = hostile ? 0xff3a1a : 0xff9a3a;
+      const edge = new THREE.Mesh(this.G.plane, this.addMat(col, 0.9, { map: this.teleTexture }));
+      edge.scale.setScalar(z.r); edge.rotation.x = -Math.PI / 2; edge.position.y = 0.06; g.add(edge);
+      const fill = new THREE.Mesh(new THREE.CircleGeometry(1, 40), this.addMat(col, 0.3));
+      fill.rotation.x = -Math.PI / 2; fill.position.y = 0.07; g.add(fill);
+      const rock = new THREE.Mesh(this.G.rock, new THREE.MeshStandardMaterial({ color: 0x3a2010, emissive: 0xff4a0a, emissiveIntensity: 1.8, flatShading: true }));
+      rock.scale.setScalar(0.9); const halo = new THREE.Mesh(this.G.sphereLo, this.addMat(0xff7a2a, 0.45)); halo.scale.setScalar(1.6); rock.add(halo);
+      g.add(rock);
+      g.userData = { fill, edge, rock };
     } else if (z.type === 'stoneskin') {
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(z.r, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), this.addMat(hostile ? 0xd07050 : 0x9ad070, 0.1));
+      const dome =new THREE.Mesh(new THREE.SphereGeometry(z.r, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), this.addMat(hostile ? 0xd07050 : 0x9ad070, 0.1));
       g.add(dome);
       const ring = new THREE.Mesh(this.G.plane, this.addMat(hostile ? 0xd07050 : 0x9ad070, 0.7, { map: this.teleTexture }));
       ring.scale.setScalar(z.r); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring);
@@ -594,7 +618,7 @@ export class VFX {
         if (ev.fx === 'shadow_leap') { this.smokeBurst(ev.x0, 1, ev.z0, 0x140a20, 14, 2, 0.9, 1.0, 0.7); this.smokeBurst(ev.x1, 1, ev.z1, 0x140a20, 14, 2, 0.9, 1.0, 0.7); }
         for (let i = 0; i < 20; i++) { const u = i / 20; this.glow.emit({ x: ev.x0 + (ev.x1 - ev.x0) * u, y: 1 + Math.random() * 0.6, z: ev.z0 + (ev.z1 - ev.z0) * u, life: 0.4, size: 0.4, color: c }); }
         break; }
-      case 'dash': { const P = at(ev.id); this.groundRing(P.x, P.z, ev.fx === 'bull_rush' ? 0xffb04a : 0xc8fff0, 0.3, 2.2, 0.35); this.smokeBurst(P.x, 0.3, P.z, 0x8a7a60, 8, 2, 0.6, 0.8, 0.4); break; }
+      case 'dash': { const P = at(ev.id); if (ev.fx === 'blazing_step') { this.burst(P.x, P.y + 0.8, P.z, [0xff7a1a, 0xffd080], 26, 4, 0.5, 0.45, { up: 1 }); this.flash(P.x, P.y + 1, P.z, 0xff7a1a, 25, 0.3); this.groundRing(P.x, P.z, 0xff7a1a, 0.3, 2.4, 0.35, (P.y || 0) + 0.08); break; } this.groundRing(P.x, P.z, ev.fx === 'bull_rush' ? 0xffb04a : 0xc8fff0, 0.3, 2.2, 0.35); this.smokeBurst(P.x, 0.3, P.z, 0x8a7a60, 8, 2, 0.6, 0.8, 0.4); break; }
       case 'interrupted': { const P = at(ev.id); this.burst(P.x, P.y + 1.8, P.z, [0xff4a3a, 0xffffff], 22, 4, 0.5, 0.35); this.groundRing(P.x, P.z, 0xff4a3a, 0.5, 2, 0.3); break; }
       case 'castfail': { const P = at(ev.id); this.burst(P.x, P.y + 1.5, P.z, 0x888888, 8, 2, 0.4, 0.25); break; }
       case 'death': {
@@ -652,12 +676,12 @@ export class VFX {
         this.flash(ev.x, ev.y + 1, ev.z, 0xb46aff, 70, 0.5); this.pillar(ev.x, ev.z, 0xc07aff, 9, 0.7, 0.45);
         this.smokeBurst(ev.x, 0.5, ev.z, 0x2a1a40, 16, 4, 1.1, 1.6, 0.5); this.shards(ev.x, 0.6, ev.z, 0x9a6aff, 10, 6, 1.2, 0.25);
         break;
-      case 'frost_lance':
+      case 'frost_lance': case 'frostbite':
         this.burst(ev.x, ev.y, ev.z, [0x8fd8ff, 0xffffff], 28, 6, 0.5, 0.4, { gravity: 6 }); this.flash(ev.x, ev.y, ev.z, 0x8fd8ff, 25, 0.25);
         this.shards(ev.x, ev.y, ev.z, 0xbfefff, 7, 5, 0.9, 0.18); this.smokeBurst(ev.x, ev.y, ev.z, 0xcfe8ff, 6, 1.5, 0.9, 0.9, 0.3);
         break;
-      case 'flame_burst': case 'magma_burst': case 'spirit_bolt': {
-        const big = ev.kind !== 'spirit_bolt';
+      case 'flame_burst': case 'magma_burst': case 'spirit_bolt': case 'fireball': case 'fire_bolt': {
+        const big = ev.kind !== 'spirit_bolt' && ev.kind !== 'fire_bolt';
         this.burst(ev.x, ev.y, ev.z, [0xff7a1a, 0xffd080, 0xff3a0a], big ? 40 : 16, big ? 7 : 4, 0.55, big ? 0.6 : 0.4, { up: 1.5 });
         this.sphereFlash(ev.x, ev.y, ev.z, 0xff8a2a, 0.2, big ? 1.8 : 1, 0.3, 0.6);
         if (big) { this.smokeBurst(ev.x, ev.y, ev.z, 0x2a1a14, 10, 2, 1.2, 1.2, 0.55); this.burst(ev.x, ev.y, ev.z, 0xffb040, 12, 6, 0.9, 0.12, { gravity: 9, drag: 0.5, grow: 0 }); }
@@ -679,7 +703,9 @@ export class VFX {
     const P = at(ev.id), T = ev.tid >= 0 ? at(ev.tid) : null;
     const hp = handPos(ev.id);
     switch (ev.ab) {
-      case 'flame_burst': this.burst(hp.x, hp.y, hp.z, [0xff7a1a, 0xffd080], 16, 4, 0.35, 0.4); this.smokeBurst(hp.x, hp.y, hp.z, 0x2a1a14, 4, 1, 0.6, 0.5, 0.4); break;
+      case 'flame_burst': case 'fireball': this.burst(hp.x, hp.y, hp.z, [0xff7a1a, 0xffd080], 16, 4, 0.35, 0.4); this.smokeBurst(hp.x, hp.y, hp.z, 0x2a1a14, 4, 1, 0.6, 0.5, 0.4); break;
+      case 'meteor': this.burst(hp.x, hp.y, hp.z, [0xff5a1a, 0xffd080], 30, 5, 0.5, 0.5, { up: 2 }); this.flash(hp.x, hp.y, hp.z, 0xff5a1a, 35, 0.4); this.pillar(P.x, P.z, 0xff6a1a, 6, 0.6, 0.5); break;
+      case 'frostbite': this.burst(hp.x, hp.y, hp.z, 0xa8e4ff, 12, 3, 0.3, 0.3); break;
       case 'mana_ward': this.sphereFlash(P.x, P.y + 1.1, P.z, 0x6aa8ff, 0.5, 1.6, 0.4); this.ringBurst(P.x, P.y + 1, P.z, 0x9ac8ff, 24, 4, 0.5, 0.35); break;
       case 'arcane_comet': this.burst(hp.x, hp.y, hp.z, [0xc07aff, 0xffffff], 40, 6, 0.6, 0.6); this.flash(hp.x, hp.y, hp.z, 0xc07aff, 40, 0.4); this.groundRing(P.x, P.z, 0xc07aff, 0.5, 4, 0.5); break;
       case 'frost_lance': this.burst(hp.x, hp.y, hp.z, 0x8fd8ff, 14, 3, 0.35, 0.35); break;
@@ -738,6 +764,21 @@ export class VFX {
         this.flash(ev.x, 1, ev.z, 0xff9a4a, 70, 0.5);
         this.shards(ev.x, 0.3, ev.z, 0x6a5a4a, 12, 8, 1.3, 0.45);
         break;
+      case 'flame_ring': {
+        const P = at(ev.id), y = P.y || 0;
+        this.groundRing(ev.x, ev.z, 0xff7a1a, 0.5, 8, 0.5, y + 0.08);
+        for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; this.burst(ev.x + Math.sin(a) * 2.5, y + 0.4, ev.z + Math.cos(a) * 2.5, [0xff7a1a, 0xffd080], 3, 6, 0.5, 0.45, { up: 2 }); }
+        this.flash(ev.x, y + 1, ev.z, 0xff7a1a, 45, 0.4);
+        break; }
+      case 'meteor_impact': {
+        const y = ev.y || 0;
+        this.groundRing(ev.x, ev.z, 0xff6a1a, 0.5, 6.5, 0.6, y + 0.08);
+        this.burst(ev.x, y + 0.4, ev.z, [0xff5a1a, 0xffc060, 0x5a2a10], 90, 13, 0.9, 0.7, { up: 5, gravity: 14 });
+        this.sphereFlash(ev.x, y + 0.8, ev.z, 0xff7a2a, 0.5, 4, 0.4, 0.6);
+        this.smokeBurst(ev.x, y + 0.3, ev.z, 0x3a2418, 26, 7, 1.6, 2.2, 0.65);
+        this.shards(ev.x, y + 0.3, ev.z, 0x3a2010, 14, 9, 1.3, 0.4);
+        this.flash(ev.x, y + 1.5, ev.z, 0xff6a1a, 90, 0.6); this.pillar(ev.x, ev.z, 0xff8a3a, 7, 0.5, 0.5);
+        break; }
       case 'ground_breaker': { // a fan of shattered ground in front of the executioner
         const fy = ev.yaw ?? 0;
         for (let i = 0; i < 7; i++) {

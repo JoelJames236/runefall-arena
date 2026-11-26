@@ -211,8 +211,44 @@ export const CLASSES = {
 // class screen but not playable yet. See docs/CLASSES_AND_SPECS.md.
 export const SPECS = {
   mage: [
-    { id: 'frost', name: 'Frost', icon: '❄', color: '#8fd8ff', tag: 'Hard-hitting caster · roots, blink, comet' },
-    { id: 'fire', name: 'Fire', icon: '🔥', color: '#ff7a2a', tag: 'Mobile burst · casts on the move', soon: true },
+    {
+      id: 'frost', name: 'Frost', icon: '❄', color: '#8fd8ff', tag: 'Turret caster · big crits, 2 blinks',
+      role: 'Frost Battle-Mage',
+      desc: 'Stands its ground and hits hardest of all casters. Long casts, roots and slows, and crits that shatter frozen foes. Passive — Shatter: +20% critical strike chance against rooted targets, and your critical hits deal +60% damage. Arcane Shift has 2 charges.',
+      passive: { name: 'Shatter', critVsRooted: 0.2, critMult: 1.6 },
+      abilities: {
+        1: { id: 'frostbite', name: 'Frostbite', glyph: '❆', color: '#a8e4ff', school: 'frost', cost: 60, cd: 10, gcd: true, cast: 0, range: 30, target: true,
+          desc: 'Instantly bite the target with frost for 60 damage and slow them by 50% for 4 sec.',
+          exec(sim, c, t) { sim.spawnProjectile(c, t, 'frostbite', 52, () => { sim.damage(c, t, 60, { school: 'frost', ab: 'frostbite' }); sim.addBuff(t, 'slow', 4, { value: 0.5, src: c.id, name: 'Frostbitten', icon: '❆' }); }); } },
+        3: { id: 'arcane_shift', name: 'Arcane Shift', glyph: '➶', color: '#c69bff', school: 'arcane', cost: 40, cd: 14, charges: 2, gcd: false, cast: 0, range: 0, target: false, allowRooted: true,
+          desc: 'Teleport 13 yards in your movement direction, breaking free of roots and slows. 2 charges (one recharges every 14 sec).',
+          exec(sim, c, t, o) { sim.cleanse(c, ['root', 'slow']); const d = o.dir || sim.forward(c); sim.blink(c, d.x, d.z, 13, 'arcane_shift'); } },
+      },
+    },
+    {
+      id: 'fire', name: 'Fire', icon: '🔥', color: '#ff7a2a', tag: 'Mobile burst · casts on the move',
+      role: 'Fire Battle-Mage', look: 'fire',
+      desc: 'Never stands still: Fireball and Meteor can be cast while moving (at 65% speed), and enemies keep burning while you run. Less control than Frost. Passive — Kindling: Fire Bolts, Fireball and Meteor set the target Burning, stacking up to 3 times (25 damage over 4 sec per stack).',
+      weapon: 'Ashwood staff crowned by a burning crystal', armor: 'Crimson robes with ember-rune discs',
+      rating: { health: 2, damage: 4, mobility: 5, defense: 1 },
+      passive: { name: 'Kindling' },
+      auto: { name: 'Fire Bolt', dmg: 22, speed: 1.6, range: 30, ranged: true, school: 'fire', proj: 'fire_bolt', projSpeed: 46, glyph: '🔥', color: '#ff8a3a', burn: true,
+        desc: 'Basic attack: a quick bolt of fire (22 damage, 30 yd, every 1.6 sec) that adds a stack of Burning. Usable while moving.' },
+      abilities: {
+        0: { id: 'fireball', name: 'Fireball', glyph: '☀', color: '#ff7a2a', school: 'fire', cost: 50, cd: 0, gcd: true, cast: 1.5, moveCast: true, range: 30, target: true,
+          desc: 'Hurl a fireball for 100 fire damage and a stack of Burning. Can be cast while moving (you move 35% slower while casting).',
+          exec(sim, c, t) { sim.spawnProjectile(c, t, 'fireball', 34, () => { sim.damage(c, t, 100, { school: 'fire', ab: 'fireball' }); sim.kindle(c, t); }); } },
+        2: { id: 'flame_ring', name: 'Flame Ring', glyph: '◎', color: '#ff8a3a', school: 'fire', cost: 70, cd: 16, gcd: true, cast: 0, range: 0, target: false,
+          desc: 'Erupt in a ring of fire: 45 damage to all enemies within 8 yards, slowing them by 60% for 3 sec and adding a stack of Burning.',
+          exec(sim, c) { sim.event({ e: 'fx', fx: 'flame_ring', id: c.id, x: c.x, z: c.z }); for (const f of sim.enemiesOf(c)) if (sim.dist(c, f) <= 8) { sim.damage(c, f, 45, { school: 'fire', ab: 'flame_ring' }); sim.addBuff(f, 'slow', 3, { value: 0.6, src: c.id, name: 'Scorched', icon: '◎' }); sim.kindle(c, f); } } },
+        3: { id: 'blazing_step', name: 'Blazing Step', glyph: '≫', color: '#ffb04a', school: 'fire', cost: 30, cd: 12, gcd: false, cast: 0, range: 0, target: false, allowRooted: true,
+          desc: 'Dash 11 yards in your movement direction in a burst of flame, breaking roots and slows.',
+          exec(sim, c, t, o) { sim.cleanse(c, ['root', 'slow']); const d = o.dir || sim.forward(c); sim.dashDir(c, d.x, d.z, 11, 0.22, 'blazing_step'); } },
+        5: { id: 'meteor', name: 'Meteor', glyph: '☄', color: '#ff5a1a', school: 'fire', cost: 150, cd: 30, gcd: true, cast: 1.0, moveCast: true, range: 34, target: true, signature: true,
+          desc: 'SIGNATURE — Call a meteor onto the target\'s position. It lands 1.4 sec later: 170 fire damage to all enemies within 5 yards, a 1 sec knockdown and a stack of Burning. Can be cast while moving; the target can dodge it.',
+          exec(sim, c, t) { sim.spawnZone({ type: 'meteor', owner: c.id, x: t.x, z: t.z, yRef: t.id, r: 5, dur: 1.4, data: { dmg: 170, burn: true } }); } },
+      },
+    },
   ],
   rogue: [
     { id: 'subtlety', name: 'Subtlety', icon: '🗡', color: '#a36bff', tag: 'Stealth, shadow leap, big finishers' },

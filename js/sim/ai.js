@@ -122,7 +122,8 @@ export class AI {
     }
 
     // ---- movement
-    const casting = !!me.cast || inp.abilities.some(a => kitOf(me).abilities[a.i].cast > 0);
+    // standing still to cast (moveCast spells, e.g. Fire Mage, are cast on the move)
+    const casting = (!!me.cast && !kitOf(me).abilities[me.cast.idx]?.moveCast) || inp.abilities.some(a => { const ab = kitOf(me).abilities[a.i]; return ab.cast > 0 && !ab.moveCast; });
     let wantX = 0, wantZ = 0;
     const toX = (foe.x - me.x) / (dist || 1), toZ = (foe.z - me.z) / (dist || 1);
     const thX = (threat.x - me.x) / (td || 1), thZ = (threat.z - me.z) / (td || 1);
@@ -191,7 +192,7 @@ export class AI {
       for (const z of sim.zones) {
         const owner = sim.fighters[z.owner];
         const dx = me.x - z.x, dz = me.z - z.z, d = Math.hypot(dx, dz);
-        if (z.type === 'quake' && owner.team !== me.team && d < z.r + 1 && Math.random() < this.d.dodge + 0.05) { wantX = dx / (d || 1) * 2; wantZ = dz / (d || 1) * 2; }
+        if ((z.type === 'quake' || z.type === 'meteor') && owner.team !== me.team && d < z.r + 1 && Math.random() < this.d.dodge + 0.05) { wantX = dx / (d || 1) * 2; wantZ = dz / (d || 1) * 2; }
         if (z.type === 'stoneskin' && owner.team === me.team && !melee && d > z.r - 2 && d < z.r + 6) { wantX -= dx / d * 1.2; wantZ -= dz / d * 1.2; }
       }
     }
@@ -309,15 +310,26 @@ export class AI {
     const freeCast = !threatMelee || td > 9 || isStunned(threat) || (!hasBuff(threat, 'root') && this.closeT > 3);
     let p = null;
     switch (me.cls) {
-      case 'mage':
+      case 'mage': {
+        const fire = me.spec === 'fire', step = fire ? 'blazing_step' : 'arcane_shift';
         if (def && hp < 0.55 && (p = use('mana_ward'))) return p;
         if (near(8) && !threatCC && (p = use('glacial_nova'))) return p;
-        if (def && td < 5 && threatMelee && !threatCC && (p = use('arcane_shift', { dir: away() }))) return p;
-        if (hasBuff(me, 'root') && td < 8 && (p = use('arcane_shift', { dir: away() }))) return p;
+        if (def && td < 5 && threatMelee && !threatCC && (p = use(step, { dir: away() }))) return p;
+        if (hasBuff(me, 'root') && td < 8 && (p = use(step, { dir: away() }))) return p;
+        if (fire) {
+          // everything casts on the move; the meteor is saved for a target that can't walk out of it
+          if (near(8) && (p = use('flame_ring'))) return p;
+          if (visible && (foeCC || foe.cast) && (p = use('meteor'))) return p;
+          if (visible && (p = use('flame_burst'))) return p;
+          if (visible && (p = use('fireball'))) return p;
+          return null;
+        }
         if (visible && (dist > 9 || foeCC) && freeCast && (p = use('arcane_comet'))) return p;
-        if (visible && (p = use('flame_burst'))) return p;
+        if (visible && !hasBuff(foe, 'slow') && (p = use('frostbite'))) return p;
         if (visible && freeCast && (p = use('frost_lance'))) return p;
+        if (visible && (p = use('frostbite'))) return p;
         return null;
+      }
       case 'rogue':
         if (def && hp < 0.35 && (p = use('fade'))) return p;
         if (!visible) return null;

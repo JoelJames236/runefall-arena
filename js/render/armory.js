@@ -504,28 +504,29 @@ export function equipArmor(ch, cls, M, spec) {
       greaves(M.darkleather, M.blacksteel);
       break; }
     case 'mage': {
-      // arcane high-collar mantle with rune-etched shoulder discs and a long robe skirt
-      shoulders({ r: 0.13, plates: 2, mat: M.royal, trim: M.gold, spikes: 0 });
+      // arcane high-collar mantle with rune-etched shoulder discs and a long robe skirt (Fire: crimson robes, ember runes)
+      const fire = spec === 'fire', robe = fire ? M.crimson : M.royal, runeC = fire ? 0xff7a2a : 0x9a7aff, moteC = fire ? 0xff9a3a : 0xb08aff;
+      shoulders({ r: 0.13, plates: 2, mat: robe, trim: M.gold, spikes: 0 });
       for (const [p, bone, s] of [[L.lsh, 'clavicle_l', 1], [L.rsh, 'clavicle_r', -1]]) {
-        const disc = mesh(new THREE.CircleGeometry(0.055 * k, 24), M.rune(0x9a7aff, 1.6), false);
+        const disc = mesh(new THREE.CircleGeometry(0.055 * k, 24), M.rune(runeC, 1.6), false);
         put(bone, disc, p.clone().add(V(s * 0.13 * k, 0.04 * k, 0)), { yaw: s * PI / 2 });
       }
-      const collar = mesh(cyl(0.12 * k, 0.15 * k, 0.16 * k, 20, true), M.royal); collar.scale.z = 0.9;
+      const collar = mesh(cyl(0.12 * k, 0.15 * k, 0.16 * k, 20, true), robe); collar.scale.z = 0.9;
       const colTrim = mesh(tor(0.12 * k, 0.01, 6, 30), M.gold, false); colTrim.rotation.x = PI / 2; colTrim.position.y = 0.08 * k;
       const cg = new THREE.Group(); cg.add(collar, colTrim); put('spine_03', cg, L.neck.clone().add(V(0, 0.0, -0.02)));
-      const skirt = mesh(new THREE.LatheGeometry([V(0.17 * k, 0), V(0.21 * k, -0.2 * k), V(0.28 * k, -0.55 * k), V(0.33 * k, -0.82 * k)], 22), M.royal);
+      const skirt = mesh(new THREE.LatheGeometry([V(0.17 * k, 0), V(0.21 * k, -0.2 * k), V(0.28 * k, -0.55 * k), V(0.33 * k, -0.82 * k)], 22), robe);
       skirt.scale.z = 0.9; put('pelvis', skirt, L.pelvis.clone().add(V(0, 0.04 * k, 0)));
       const hem = mesh(tor(0.33 * k, 0.012, 6, 36), M.gold, false); hem.rotation.x = PI / 2; hem.scale.y = 0.9; put('pelvis', hem, L.pelvis.clone().add(V(0, -0.78 * k, 0)));
       belt(M.leather, M.gold, 0.18);
-      const tome = new THREE.Group(); tome.add(mesh(box(0.11 * k, 0.14 * k, 0.04 * k), M.leather)); const clasp = mesh(box(0.02, 0.05 * k, 0.045 * k), M.gold); clasp.position.x = 0.055 * k; tome.add(clasp); const rune = mesh(new THREE.CircleGeometry(0.025 * k, 12), M.rune(0x9a7aff, 2), false); rune.position.z = 0.021 * k; tome.add(rune);
+      const tome = new THREE.Group(); tome.add(mesh(box(0.11 * k, 0.14 * k, 0.04 * k), M.leather)); const clasp = mesh(box(0.02, 0.05 * k, 0.045 * k), M.gold); clasp.position.x = 0.055 * k; tome.add(clasp); const rune = mesh(new THREE.CircleGeometry(0.025 * k, 12), M.rune(runeC, 2), false); rune.position.z = 0.021 * k; tome.add(rune);
       put('pelvis', tome, L.pelvis.clone().add(V(0.2 * k, -0.04, 0.02)), { yaw: PI / 2 });
-      gauntlets(M.royal, M.gold, 1.25);
+      gauntlets(robe, M.gold, 1.25);
       // orbiting arcane motes around the champion
       const orbit = new THREE.Group();
-      for (let i = 0; i < 3; i++) { const s = mesh(new THREE.OctahedronGeometry(0.03, 0), M.gem(0xb08aff), false); s.position.set(Math.sin(i * 2.1) * 0.45, 0, Math.cos(i * 2.1) * 0.45); orbit.add(s); }
+      for (let i = 0; i < 3; i++) { const s = mesh(new THREE.OctahedronGeometry(0.03, 0), M.gem(moteC), false); s.position.set(Math.sin(i * 2.1) * 0.45, 0, Math.cos(i * 2.1) * 0.45); orbit.add(s); }
       const op = new THREE.Group(); op.add(orbit); put('spine_03', op, L.chest.clone().add(V(0, 0.1 * k, 0)));
       animated.spinners.push(orbit);
-      cape(M.royal, 0.44, 1.05, { trim: M.gold });
+      cape(robe, 0.44, 1.05, { trim: M.gold });
       break; }
     case 'priest': {
       // radiant battle-cleric: gilded winged pauldrons, white-gold breastplate, long vestment skirt

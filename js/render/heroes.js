@@ -35,6 +35,7 @@ const LOOKS = {
     tint: [0.42, 0.3, 0.2], tintAmt: 0.6, skinTint: [0.86, 0.72, 0.62], scale: 1.03, weapons: ['stormaxe', 'fireOrb'], idle: 'Idle_Loop', glow: 0x4ad8ff },
 };
 // spec looks ("class:spec"): overrides on top of the class look
+LOOKS['mage:fire'] = { ...LOOKS.mage, tint: [0.44, 0.11, 0.07], tintAmt: 0.82, glow: 0xff7a2a }; // crimson robes, burning staff crystal
 LOOKS['berserker:executioner'] = { ...LOOKS.berserker, weapons: ['greatAxe'], weaponScale: 1.08, tint: [0.14, 0.12, 0.11], tintAmt: 0.75, castPose: 'Sword_Block' }; // castPose: Skullsplitter wind-up
 
 // one-shot actions: kind -> per-class clip list (alternated) + whether it should use the full body

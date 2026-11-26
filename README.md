@@ -90,7 +90,7 @@ The spec shows on unit frames, nameplates and in the lobby.
 
 | Class | Spec 1 (original kit) | Spec 2 |
 | --- | --- | --- |
-| Mage | ❄ Frost | 🔥 Fire *(coming soon)* |
+| Mage | ❄ **Frost**: turret caster, *Shatter* (+20% crit vs rooted, crits +60%), Frostbite, Arcane Shift with 2 charges | 🔥 **Fire**: Fireball and Meteor cast on the move (at 65% speed), *Kindling* Burning stacks, Flame Ring, Blazing Step, Meteor (delayed AoE knockdown) |
 | Rogue | 🗡 Subtlety | 🐍 Assassination *(coming soon)* |
 | Warrior | 🛡 Protection | ⚔ Arms *(coming soon)* |
 | Berserker | 🪓 Fury: two axes, fast flurries | 💀 **Executioner**: one great axe, slow swings, big crits (*Heavy Hands*: +12% crit chance, crits +80%); Skullsplitter, Ground Breaker, Iron Hide, Headtaker |
@@ -104,8 +104,8 @@ Design of all specs and the planned new classes: [`docs/CLASSES_AND_SPECS.md`](d
 Open <http://localhost:8080/balance.html> to run headless AI-vs-AI simulations: a 1v1 win-rate matrix, or
 every 2v2 team composition against every other. It measures the AI's play rather than expert human play,
 so use it as a guide. Every playable spec is its own entry (e.g. `berserker:fury`, `berserker:executioner`).
-Latest runs (hard AI, with the bridge): **1v1**: classes and specs between 41% and 64% overall;
-**2v2**: between 39% (both Berserker specs) and 58%, strongest composition Rogue + Priest (~77%).
+Latest runs (hard AI, with the bridge): **1v1**: classes and specs between 38% and 67% overall (Frost ~55%, Fire ~51%);
+**2v2**: between 41% (Berserker Executioner) and 58%; Frost and Fire Mage both 48%; strongest composition Rogue + Priest (~77%).
 
 ## Project layout
 

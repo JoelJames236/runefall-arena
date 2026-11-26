@@ -10,7 +10,8 @@ export const PILLARS = [0, 1, 2, 3].map(i => {
 });
 export const RULES = { winsNeeded: 4, countdown: 3.5, roundEnd: 4.0, dampStart: 60, dampRate: 1.2, gcd: 1.0, critChance: 0.08, critMult: 1.5, backMult: 1.1 };
 export const FIGHTER_R = 0.6;
-const MOVE_ABS = new Set(['arcane_shift', 'shadow_leap', 'bull_rush', 'gale_dash', 'skull_leap']);
+export const MOVE_CAST_SPEED = 0.65;
+const MOVE_ABS = new Set(['arcane_shift', 'shadow_leap', 'bull_rush', 'gale_dash', 'skull_leap', 'blazing_step']);
 // Berserker passive: up to +60% damage as health drops (linear with missing health)
 export const bloodrage = f => f.cls === 'berserker' ? 1 + (CLASSES.berserker.passive.maxBonus) * (1 - Math.max(0, f.hp) / f.maxHp) : 1;
 const STUNLIKE = ['stun', 'disorient'];
@@ -169,6 +170,7 @@ export function moveFighter(f, inp, dt, others, canAct = true) {
   if (len > 1) { mx /= len; mz /= len; }
   let speed = kitOf(f).speed * speedMult(f);
   if (hasBuff(f, 'tempest')) speed *= 0.8;
+  if (f.cast && kitOf(f).abilities[f.cast.idx]?.moveCast) speed *= MOVE_CAST_SPEED; // casting on the move (Fire Mage) is slower
   const wantsSprint = inp.sprint && mz > 0.2 && len > 0 && canAct && !stunned && !rooted;
   if (wantsSprint && f.stamina > 0.5) { speed *= 1.3; f.stamina = Math.max(0, f.stamina - 30 * dt); f.sprinting = true; }
   else { f.sprinting = false; if (!inp.sprint || len === 0) f.stamina = Math.min(100, f.stamina + 15 * dt); }
@@ -208,7 +210,7 @@ function makeFighter(id, spec) {
     id, cls: spec.cls, spec: sid, team: spec.team, name: spec.name || C.name, bot: !!spec.bot,
     x: 0, y: 0, z: 0, vy: 0, yaw: 0, hp: C.hp, maxHp: C.hp,
     res: C.resStart ?? C.res, maxRes: C.res, resType: C.resType,
-    cds: [0, 0, 0, 0, 0, 0], gcd: 0, cast: null, buffs: [], cp: 0, stamina: 100, alive: true,
+    cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [], cp: 0, stamina: 100, alive: true,
     moving: false, sprinting: false, autoT: 0, autoOn: false, forceSeq: 0, forceYaw: 0, locked: false, dash: null,
     target: -1, friend: -1, dr: {}, queued: null, moveDir: null,
     stats: freshStats(),
@@ -251,7 +253,7 @@ export class Sim {
     for (const f of this.fighters) {
       const C = kitOf(f);
       Object.assign(f, {
-        hp: C.hp, maxHp: C.hp, res: C.resStart ?? C.res, maxRes: C.res, cds: [0, 0, 0, 0, 0, 0], gcd: 0, cast: null, buffs: [],
+        hp: C.hp, maxHp: C.hp, res: C.resStart ?? C.res, maxRes: C.res, cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [],
         cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, autoOn: false,
         target: this.defaultTarget(f), friend: -1,
       });
@@ -413,7 +415,7 @@ export class Sim {
     if (hasBuff(f, 'silence') && ab.school !== 'phys') return 'You are silenced';
     if (hasBuff(f, 'root') && MOVE_ABS.has(ab.id) && !ab.allowRooted) return 'You are rooted';
     if (ab.cast > 0 && airborne(f)) return "You can't cast while jumping";
-    if (f.cds[idx] > 0) return 'Ability not ready yet';
+    if (ab.charges ? f.ch[idx] <= 0 : f.cds[idx] > 0) return 'Ability not ready yet';
     if (ab.gcd && f.gcd > 0 && !ignoreGcd) return 'GCD';
     if (ab.cost > f.res) return `Not enough ${RES_NAME[f.resType]}`;
     if (ab.needsCp && f.cp < 1) return 'No combo points';
@@ -466,7 +468,8 @@ export class Sim {
   execute(f, idx, t, opts) {
     const ab = kitOf(f).abilities[idx];
     f.res -= ab.cost;
-    f.cds[idx] = ab.cd;
+    if (ab.charges) { f.ch[idx]--; if (f.cds[idx] <= 0) f.cds[idx] = ab.cd; } // charges refill one at a time
+    else f.cds[idx] = ab.cd;
     if (!ab.keepStealth) this.removeBuff(f, 'stealth');
     this.event({ e: 'ab', id: f.id, ab: ab.id, tid: t ? t.id : -1 });
     ab.exec(this, f, t || f, opts || {});
@@ -518,7 +521,7 @@ export class Sim {
     f.autoT = A.speed / (hasBuff(f, 'berserk') ? 1.3 : 1);
     this.removeBuff(f, 'stealth');
     this.event({ e: 'auto', id: f.id, tid: t.id, ranged: !!A.ranged });
-    if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true }));
+    if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => { this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true }); if (A.burn) this.kindle(f, t); });
     else this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
   }
 
@@ -527,7 +530,11 @@ export class Sim {
     if (!f.alive) return;
     const C = kitOf(f);
     f.gcd = Math.max(0, f.gcd - dt);
-    for (let i = 0; i < 6; i++) f.cds[i] = Math.max(0, f.cds[i] - dt);
+    for (let i = 0; i < 6; i++) {
+      f.cds[i] = Math.max(0, f.cds[i] - dt);
+      const mx = C.abilities[i]?.charges; // recharge: one charge per cooldown, then restart while not full
+      if (mx && f.cds[i] <= 0 && f.ch[i] < mx) { f.ch[i]++; if (f.ch[i] < mx) f.cds[i] = C.abilities[i].cd; }
+    }
     f.res = Math.min(f.maxRes, f.res + C.regen * dt);
     // queued ability
     if (f.queued) {
@@ -537,7 +544,7 @@ export class Sim {
     }
     // casting
     if (f.cast) {
-      if (f.moving || airborne(f)) { this.cancelCast(f, false); }
+      if ((f.moving && !C.abilities[f.cast.idx].moveCast) || airborne(f)) { this.cancelCast(f, false); } // moveCast: castable on the move
       else if (isStunned(f) || hasBuff(f, 'silence')) { this.cancelCast(f, true); }
       else {
         f.cast.t += dt;
@@ -657,7 +664,7 @@ export class Sim {
     const back = src !== tgt && !o.dot && isBehind(src, tgt);
     if (back) amt *= RULES.backMult;
     const SP = kitOf(src).passive || {}; // e.g. Executioner "Heavy Hands": more and bigger crits
-    const crit = direct && !o.noCrit && (o.forceCrit || Math.random() < RULES.critChance + (SP.critBonus || 0));
+    const crit = direct && !o.noCrit && (o.forceCrit || Math.random() < RULES.critChance + (SP.critBonus || 0) + (SP.critVsRooted && hasBuff(tgt, 'root') ? SP.critVsRooted : 0)); // Frost Shatter
     if (crit) { amt *= SP.critMult || RULES.critMult; src.stats.crits++; }
     amt *= bloodrage(src);
     const bz = getBuff(src, 'berserk'); if (bz) amt *= 1 + bz.value;
@@ -747,6 +754,15 @@ export class Sim {
     return b;
   }
 
+  // Fire Mage passive Kindling: a stacking Burning DoT (max 3 stacks, 25 damage over 4 sec per stack)
+  kindle(src, tgt) {
+    if (!tgt.alive) return;
+    const find = () => tgt.buffs.find(x => x.type === 'dot' && x.name === 'Burning' && x.src === src.id);
+    const n = Math.min(3, (find()?.data.stacks || 0) + 1);
+    this.addDot(src, tgt, 'Burning', 25 * n, 4, 'fire', '🔥');
+    const b = find(); if (b) b.data.stacks = n;
+  }
+
   addDot(src, tgt, name, total, dur, school, icon) {
     const ticks = Math.round(dur);
     this.addBuff(tgt, 'dot', dur + 0.05, { src: src.id, name, icon, data: { acc: 0, ticks, per: total / ticks, school } });
@@ -796,7 +812,8 @@ export class Sim {
   spawnZone(z) {
     const zone = { id: NEXT_ID++, t: 0, data: {}, ...z };
     const o = this.fighters[zone.owner];
-    if (zone.y === undefined) zone.y = floorAt(zone.x, zone.z, o ? o.y : 0); // totems sit on the level they were dropped on
+    const yr = zone.yRef !== undefined ? this.fighters[zone.yRef] : o; // yRef: sits on that fighter's level (e.g. Meteor on its target)
+    if (zone.y === undefined) zone.y = floorAt(zone.x, zone.z, yr ? yr.y : 0); // totems sit on the level they were dropped on
     this.zones.push(zone);
     this.event({ e: 'zone', zone: { id: zone.id, type: zone.type, x: zone.x, y: zone.y, z: zone.z, r: zone.r, dur: zone.dur, owner: zone.owner } });
   }
@@ -814,6 +831,14 @@ export class Sim {
           this.damage(owner, f, 35, { school: 'nature', ab: 'quake_totem' });
           this.interrupt(f, owner);
           this.addBuff(f, 'stun', 1.75, { src: owner.id, cc: 'cc', name: 'Quaked', icon: '⛰' });
+        }
+      } else if (z.type === 'meteor' && z.t >= z.dur) {
+        // Fire Mage signature: the meteor lands where the target stood when it was called
+        this.event({ e: 'fx', fx: 'meteor_impact', id: z.owner, x: z.x, y: z.y, z: z.z });
+        for (const f of this.enemiesOf(owner)) if (this.inZone(f, z)) {
+          this.damage(owner, f, z.data.dmg || 170, { school: 'fire', ab: 'meteor', big: true });
+          this.addBuff(f, 'stun', 1, { src: owner.id, cc: 'cc', name: 'Meteor Strike', icon: '☄' });
+          if (z.data.burn) this.kindle(owner, f);
         }
       } else if (z.type === 'stoneskin') {
         z.data.acc = (z.data.acc || 0) + dt;
@@ -914,7 +939,7 @@ export class Sim {
       f: this.fighters.map(f => ({
         id: f.id, cls: f.cls, spec: f.spec, team: f.team, name: f.name, bot: f.bot,
         x: r(f.x), y: r(f.y), z: r(f.z), yaw: r(f.yaw), hp: Math.round(f.hp), maxHp: f.maxHp, res: Math.round(f.res), maxRes: f.maxRes, resType: f.resType,
-        cds: f.cds.map(r), gcd: r(f.gcd), cast: f.cast ? { idx: f.cast.idx, t: r(f.cast.t), dur: f.cast.dur, tid: f.cast.tid } : null,
+        cds: f.cds.map(r), ch: f.ch, gcd: r(f.gcd), cast: f.cast ? { idx: f.cast.idx, t: r(f.cast.t), dur: f.cast.dur, tid: f.cast.tid } : null,
         buffs: f.buffs.map(b => ({ type: b.type, t: r(b.t), dur: r(b.dur), value: r(b.value), name: b.name, icon: b.icon, src: b.src, fx: b.fx })),
         cp: f.cp, alive: f.alive, forceSeq: f.forceSeq, forceYaw: f.forceYaw, locked: f.locked, target: f.target, friend: f.friend,
         autoOn: f.autoOn, autoT: r(f.autoT), moving: f.moving, sprinting: f.sprinting, stamina: Math.round(f.stamina),

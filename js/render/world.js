@@ -46,6 +46,7 @@ const AB_ANIM = {
   lightning_lash: 'release', magma_burst: 'release', quake_totem: 'slam', gale_dash: 'dash', stoneskin_totem: 'slam', fire_spirit: 'raise',
   rending_axes: 'slash', headtaker: 'finisher', axe_throw: 'slam', undying_rage: 'raise', berserk: 'raise',
   skullsplitter: 'finisher', ground_breaker: 'slam', iron_hide: 'raise',
+  fireball: 'release', frostbite: 'release', blazing_step: 'dash', meteor: 'raise', flame_ring: 'slam',
 };
 export { AB_ANIM };
 
