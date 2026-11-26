@@ -25,7 +25,7 @@
 // Dev tool: inspect a champion (generated or code-built) with its weapons and animations side by side.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadHeroAssets, Character, makeWeapon } from './js/render/heroes.js';
+import { loadHeroAssets, preloadChampions, Character, makeWeapon } from './js/render/heroes.js';
 // every weapon a champion carries (class / spec looks in heroes.js)
 const WEAPONS = [['orcaxe', 0], ['orcshield', 0], ['greatAxe', { axeStyle: 'orc' }], ['greatAxe', 0], ['warAxe', 0], ['fang', 0], ['frostwand', { glow: 0x7fd0ff }], ['tome', { glow: 0x7fd0ff }], ['firewand', { glow: 0xff7a2a }], ['tome', { glow: 0xff7a2a }], ['stormmace', 0], ['relic', 0],
   ['sunhammer', { glow: 0xffe08a }], ['holysword', 0], ['towershield', 0], ['sunmace', { glow: 0xffd98a }], ['stormaxe', { glow: 0x4ad8ff }], ['bow', 0], ['longbow', 0], ['bonestaff', { glow: 0x7aff6a }], ['druidstaff', { glow: 0x8ad86a }]];
@@ -52,7 +52,7 @@ for (const c of CLASS_ORDER) for (const s of specsOf(c).filter(s => !s.soon)) {
   const k = c + ':' + s.id; const o = new Option((CHAMPION_MODELS[k] ? '★ ' : '') + k, k); who.add(o);
 }
 who.add(new Option('— all weapons —', 'weapons'));
-await loadHeroAssets();
+await loadHeroAssets(); await preloadChampions();
 const first = Object.keys(CHAMPION_MODELS)[0]; if (first) who.value = first;
 
 let chars = [], rack = null;

@@ -15,7 +15,7 @@ import { makeMaterials, makeClassWeapon, equipArmor } from './armory.js';
 import { makeFormModel } from './minions.js';
 import { applyRace, RACES, RACE_OF } from './races.js';
 import { consolidate } from './consolidate.js';
-import { CHAMPION_MODELS, championModel, loadChampion, setRetargetSource, analyse, retargetClip } from './champions.js';
+import { CHAMPION_MODELS, RACE_HEIGHT, championModel, loadChampion, setRetargetSource, analyse, retargetClip } from './champions.js';
 import { validSpec } from '../data/classes.js';
 
 // Rim light for champions: a cheap view-dependent fresnel glow added to the emissive term of any
@@ -139,7 +139,7 @@ export async function loadHeroAssets(onProgress = () => {}) {
   await Promise.all(jobs);
   // generated champion models (champions.js): retargeted from the UAL-skinned base body; a failed file falls back
   setRetargetSource(GL.Male_Ranger.scene);
-  await Promise.all(Object.keys(CHAMPION_MODELS).map(k => loadChampion(loader, k)));
+  LOADER = new GLTFLoader(); // champion GLBs stream in afterwards (preloadChampions), so startup stays fast
   // lower-body bone set (pelvis and both legs, recursively)
   const lowerSet = new Set();
   GL.Male_Ranger.scene.traverse(o => { if (o.isBone && LOWER_ROOTS.includes(o.name)) o.traverse(c => { if (c.isBone && !c.name.startsWith('spine') ) lowerSet.add(c.name); }); });
@@ -153,6 +153,15 @@ export async function loadHeroAssets(onProgress = () => {}) {
   ready = true;
 }
 export const heroesReady = () => ready;
+let LOADER = null;
+// Stream the generated champion models in the background, one at a time, `first` keys first. A champion
+// whose model has not arrived yet is built the old way for that match.
+export async function preloadChampions(first = []) {
+  if (!LOADER) return;
+  const keys = [...new Set([...first.filter(k => CHAMPION_MODELS[k]), ...Object.keys(CHAMPION_MODELS)])];
+  for (const k of keys) await loadChampion(LOADER, k);
+}
+export const loadChampionNow = key => (LOADER ? loadChampion(LOADER, key) : Promise.resolve(null));
 
 // Base-body heads: keep only triangles skinned to the neck/head so the head can sit on any outfit.
 const HEADS = {};
@@ -429,7 +438,16 @@ export class Character {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.008, 6, 40), glowMat(0xffe2a0, 2.5));
       const glowR = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.03, 6, 40), addGlow(0xffd27a, 0.22));
       const h = new THREE.Group(); h.add(ring, glowR); h.position.set(0, 0.26, -0.06); h.rotation.x = Math.PI / 2 - 0.25;
-      this.bones.Head.add(h); this.halo = h; h.userData.noMerge = true;
+      const head = this.bones.Head;
+      if (this.generated) { // generated rigs: different bone axes and scale — place the ring in world terms above the head
+        this.root.updateMatrixWorld(true);
+        const hp = head.getWorldPosition(new THREE.Vector3()), top = hp.clone().add(new THREE.Vector3(0, 0.27 * look.scale, -0.05));
+        const wq = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2 - 0.25, 0, 0));
+        h.quaternion.copy(head.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(wq));
+        h.position.copy(head.worldToLocal(top));
+        const s = head.getWorldScale(new THREE.Vector3()); h.scale.set(1 / s.x, 1 / s.y, 1 / s.z);
+      }
+      head.add(h); this.halo = h; h.userData.noMerge = true;
     }
     // fold the body, outfit, head, hair and rigid armor into one skinned mesh per material (draw calls)
     this.drawGroups = consolidate(this);
@@ -468,7 +486,7 @@ export class Character {
     const byLc = {}; for (const [n, b] of Object.entries(this.bones)) byLc[n.toLowerCase()] = b;
     for (const [s, t] of Object.entries(champ.A.map)) { const b = byLc[t]; if (b) { this.bones[s] = b; if (s === 'head') this.bones.Head = b; } }
     if (byLc.head) this.bones.Head = byLc.head;
-    body.scale.setScalar(champ.fit * look.scale);
+    body.scale.setScalar(champ.fit * look.scale * (RACE_HEIGHT[this.race] || 1));
     this.retarget = champ.A; this.clipCache = champ.clips;
     this.generated = true;
     return body;

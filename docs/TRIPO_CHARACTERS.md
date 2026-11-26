@@ -17,6 +17,12 @@ rigged model per spec, without losing anything the game already does and without
 6. Add the key to `CHAMPION_MODELS` in `js/render/champions.js` and check it in `viewer.html`
    (side-by-side with the old champion, every animation, triangle and mesh count).
 
+**Status: all 20 specs generated, rigged and in the game** (9.2–10.2 k triangles each, 1.5–2.0 MB per GLB,
+streamed in the background after the menu loads — your own class first). A 2v2 with four generated champions renders
+with 234 draw calls and 614 k triangles vs 334 / 817 k with the code-built champions, at the same frame time.
+Dwarves get a height factor (`RACE_HEIGHT` in champions.js) because Tripo normalises every model to the same height.
+The Arms orc used Tripo's one free P2 "Smart Mesh" generation (already low-poly, then textured); all others are H3.5.
+
 **Pilot result (Warrior — Protection, orc):** 9,901 triangles; walk / run / shield idle / attacks / hits retarget
 correctly; war axe + orcish shield sit in the hands. A 2v2 with two generated orcs renders with fewer draw calls
 (258 vs 290) and fewer triangles (677 k vs 740 k) than with two code-built warriors, at the same frame time.

@@ -5,7 +5,7 @@
 //         host     — you host a room (1v1 or 2v2; empty slots can be bots); authoritative sim
 //         guest    — you joined a room; inputs go to the host, state comes back as snapshots
 import { World } from './render/world.js';
-import { loadHeroAssets } from './render/heroes.js';
+import { loadHeroAssets, preloadChampions } from './render/heroes.js';
 import { HUD, iconHTML, emblemStyle } from './ui/hud.js';
 import { Input } from './input.js';
 import { Audio, AB_SOUND, HIT_SOUND, CAST_SOUND } from './audio.js';
@@ -115,6 +115,7 @@ loadHeroAssets(p => { if (!assetsReady) $('loadmsg').textContent = `Summoning th
   .catch(() => {})
   .finally(() => {
     assetsReady = true;
+    preloadChampions([S.myCls + ':' + mySpec()]).catch(() => {});
     world.showMenuScene();
     $('loadmsg').textContent = inviteMsg;
     $('splash').querySelector('.enter').style.visibility = '';

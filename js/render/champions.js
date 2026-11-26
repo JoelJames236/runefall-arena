@@ -17,7 +17,29 @@ import * as THREE from 'three';
 // spec key -> GLB (relative to assets/models/champions/). Missing / failed files fall back to the old champion.
 export const CHAMPION_MODELS = {
   'warrior:protection': 'warrior_protection.glb',
+  'warrior:arms': 'warrior_arms.glb',
+  'berserker:fury': 'berserker_fury.glb',
+  'berserker:executioner': 'berserker_executioner.glb',
+  'paladin:crusader': 'paladin_crusader.glb',
+  'paladin:protection': 'paladin_protection.glb',
+  'mage:frost': 'mage_frost.glb',
+  'mage:fire': 'mage_fire.glb',
+  'rogue:subtlety': 'rogue_subtlety.glb',
+  'rogue:assassination': 'rogue_assassination.glb',
+  'priest:discipline': 'priest_discipline.glb',
+  'priest:shadow': 'priest_shadow.glb',
+  'shaman:elemental': 'shaman_elemental.glb',
+  'shaman:enhancement': 'shaman_enhancement.glb',
+  'hunter:beastmaster': 'hunter_beastmaster.glb',
+  'hunter:sharpshooter': 'hunter_sharpshooter.glb',
+  'necromancer:summoner': 'necromancer_summoner.glb',
+  'necromancer:curser': 'necromancer_curser.glb',
+  'druid:feral': 'druid_feral.glb',
+  'druid:restoration': 'druid_restoration.glb',
 };
+// Tripo normalises every model to the same height: races that should stand shorter / taller get a factor
+// (applied on top of the class look's scale)
+export const RACE_HEIGHT = { dwarf: 0.8 };
 const DIR = 'assets/models/champions/';
 
 const loaded = {};   // key -> { scene, clips, A, fit } once loaded, null if failed
