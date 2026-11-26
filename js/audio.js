@@ -280,6 +280,7 @@ export const AB_SOUND = {
   rending_axes: 'melee_heavy', headtaker: 'mark_pop', axe_throw: 'swing', skull_leap: 'warcry', undying_rage: 'mark', berserk: 'warcry',
   skullsplitter: 'melee_heavy', ground_breaker: 'quake', iron_hide: 'mark',
   fireball: 'flame_burst', frostbite: 'frost_lance', blazing_step: 'gale', meteor: 'arcane_comet', flame_ring: 'magma',
+  stormstrike: 'lightning', lava_lash: 'magma', healing_surge: 'heal', earthbind_totem: 'totem', spirit_wolf: 'warcry',
   envenom: 'melee_heavy', crippling_poison: 'dagger', plague_cloud: 'stealth', die_by_the_sword: 'shield', execute: 'melee_heavy', bladestorm: 'tempest',
   shadow_word_pain: 'shadow', mind_blast: 'mark', psychic_scream: 'blinding', void_eruption: 'mark_pop',
   sacred_bolt: 'holy_bolt', mend: 'heal', divine_aegis: 'aegis', seraph_step: 'seraph', blinding_light: 'blinding', halo_judgment: 'halo',

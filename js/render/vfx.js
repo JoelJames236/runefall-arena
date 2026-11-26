@@ -350,6 +350,10 @@ export class VFX {
         m.userData.edge.material.opacity = 0.6 + Math.sin(z.t * 20) * 0.3 * u;
         m.userData.totem.position.y = Math.min(0, -1.5 + z.t * 8);
         if (Math.random() < 0.35) this.smoke.emit({ x: z.x + (Math.random() - 0.5) * z.r * 1.6, y: 0.1, z: z.z + (Math.random() - 0.5) * z.r * 1.6, vy: 0.8 + Math.random(), life: 0.7, size: 0.8, color: 0x7a6a50, grow: 1, gravity: 1, alpha: 0.5 });
+      } else if (z.type === 'earthbind') {
+        m.userData.ring.rotation.z -= dt * 0.8;
+        m.userData.totem.position.y = Math.min(0, -1.5 + z.t * 8);
+        if (Math.random() < 0.3) { const a = Math.random() * 6.28, r = Math.random() * z.r; this.smoke.emit({ x: z.x + Math.sin(a) * r, y: (z.y || 0) + 0.1, z: z.z + Math.cos(a) * r, vy: 0.4, life: 0.8, size: 0.7, color: 0x7a6a50, grow: 1, alpha: 0.4 }); }
       } else if (z.type === 'plague') {
         m.userData.ring.rotation.z += dt * 0.6;
         const fade = Math.min(1, (z.dur - z.t) * 2);
@@ -400,8 +404,13 @@ export class VFX {
       fill.rotation.x = -Math.PI / 2; fill.position.y = 0.07; g.add(fill);
       const totem = this.makeTotem(0x8a6a4a, 0xffa040); g.add(totem);
       g.userData = { fill, edge, totem };
+    } else if (z.type === 'earthbind') {
+      const ring = new THREE.Mesh(this.G.plane, this.addMat(hostile ? 0xd0a060 : 0xb0a070, 0.7, { map: this.teleTexture }));
+      ring.scale.setScalar(z.r); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring);
+      const totem = this.makeTotem(0x6a5a40, 0xd0b070); g.add(totem);
+      g.userData = { ring, totem };
     } else if (z.type === 'plague') {
-      const ring = new THREE.Mesh(this.G.plane, this.addMat(hostile ? 0x7aff3a : 0x9be36a, 0.75, { map: this.teleTexture }));
+      const ring =new THREE.Mesh(this.G.plane, this.addMat(hostile ? 0x7aff3a : 0x9be36a, 0.75, { map: this.teleTexture }));
       ring.scale.setScalar(z.r); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring);
       const fill = new THREE.Mesh(new THREE.CircleGeometry(z.r, 40), this.addMat(0x4a9a2a, 0.18)); fill.rotation.x = -Math.PI / 2; fill.position.y = 0.07; g.add(fill);
       g.userData = { ring, fill };
@@ -601,6 +610,10 @@ export class VFX {
     const at = id => F[id] ? new THREE.Vector3(F[id].x, F[id].y, F[id].z) : new THREE.Vector3();
     const handPos = id => ctx.focus(id);
     switch (ev.e) {
+      case 'summon': { const col = { wolf: 0x9ae8ff, cat: 0xffc060, ghoul: 0x7aff6a, abomination: 0x7aff6a }[ev.kind] || 0xffffff;
+        this.burst(ev.x, 0.6, ev.z, [col, 0xffffff], 40, 4, 0.7, 0.45, { up: 2 }); this.groundRing(ev.x, ev.z, col, 0.3, 2.6, 0.5); this.smokeBurst(ev.x, 0.3, ev.z, 0x2a2a3a, 10, 2, 0.9, 1.0, 0.5); break; }
+      case 'minionDie': this.smokeBurst(ev.x, 0.5, ev.z, 0x2a2a3a, 14, 2.5, 1.0, 1.2, 0.6); this.burst(ev.x, 0.6, ev.z, 0xbbbbbb, 16, 3, 0.5, 0.3); break;
+      case 'minionHit': this.burst(ev.x, (ev.y || 0) + 0.7, ev.z, 0xff6a4a, 8, 2.5, 0.35, 0.25); break;
       case 'caststart': {
         const p = handPos(ev.id);
         const c = { frost_lance: 0x8fd8ff, arcane_comet: 0xc07aff, sacred_bolt: 0xffe070, mend: 0x8aff9a, lightning_lash: 0x7ae0ff }[ev.ab] || 0xffffff;

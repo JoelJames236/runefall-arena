@@ -683,7 +683,7 @@ $('endMenu').addEventListener('click', () => {
 function currentView() {
   if (S.mode === 'guest') return buildGuestView();
   const sim = S.sim;
-  return { fighters: sim.fighters, projectiles: sim.projectiles, zones: sim.zones, state: sim.state, stateT: sim.stateT, round: sim.round, score: sim.score, fightT: sim.fightT, damp: sim.damp, lastWinner: S.lastWinner };
+  return { fighters: sim.fighters, projectiles: sim.projectiles, zones: sim.zones, minions: sim.minions, state: sim.state, stateT: sim.stateT, round: sim.round, score: sim.score, fightT: sim.fightT, damp: sim.damp, lastWinner: S.lastWinner };
 }
 
 function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
@@ -713,7 +713,7 @@ function buildGuestView() {
   const projectiles = b.s.p.map(p => { const q = pa.get(p.id); return q ? { ...p, x: q.x + (p.x - q.x) * u, y: q.y + (p.y - q.y) * u, z: q.z + (p.z - q.z) * u } : p; });
   const age = (performance.now() - S.lastSnapT) / 1000;
   const zones = last.z.map(z => ({ ...z, t: Math.min(z.dur, z.t + age) }));
-  return { fighters, projectiles, zones, state: last.s, stateT: last.st - age, round: last.r, score: last.sc, fightT: last.ft + (last.s === 'fight' ? age : 0), damp: last.dp, lastWinner: S.lastWinner };
+  return { fighters, projectiles, zones, minions: last.m || [], state: last.s, stateT: last.st - age, round: last.r, score: last.sc, fightT: last.ft + (last.s === 'fight' ? age : 0), damp: last.dp, lastWinner: S.lastWinner };
 }
 
 function onSnapshot(s) {

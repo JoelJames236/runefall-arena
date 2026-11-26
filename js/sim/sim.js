@@ -227,6 +227,7 @@ export class Sim {
     this.teamSize = [0, 1].map(t => this.fighters.filter(f => f.team === t).length);
     this.projectiles = [];
     this.zones = [];
+    this.minions = []; // pets & summons (max 1 per player)
     this.events = [];
     this.score = [0, 0];
     this.round = 0;
@@ -249,7 +250,7 @@ export class Sim {
 
   startRound() {
     this.round++;
-    this.projectiles = []; this.zones = [];
+    this.projectiles = []; this.zones = []; this.minions = [];
     for (const f of this.fighters) {
       const C = kitOf(f);
       Object.assign(f, {
@@ -323,6 +324,7 @@ export class Sim {
     for (const f of this.fighters) this.updateFighter(f, dt);
     this.updateProjectiles(dt);
     this.updateZones(dt);
+    this.updateMinions(dt);
     this.checkDeaths();
   }
 
@@ -522,7 +524,11 @@ export class Sim {
     this.removeBuff(f, 'stealth');
     this.event({ e: 'auto', id: f.id, tid: t.id, ranged: !!A.ranged });
     if (A.ranged) this.spawnProjectile(f, t, A.proj, A.projSpeed, () => { this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true }); if (A.burn) this.kindle(f, t); });
-    else { this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true }); if (A.poison) this.poison(f, t); }
+    else {
+      this.damage(f, t, A.dmg, { school: A.school, ab: 'auto', auto: true });
+      if (A.poison) this.poison(f, t); // Assassination: Venom Mastery
+      if (A.zap && Math.random() < A.zap) this.damage(f, t, 24, { school: 'nature', ab: 'maelstrom' }); // Enhancement: Maelstrom
+    }
   }
 
   // ------------------------------------------------------------ per-tick fighter logic
@@ -582,6 +588,7 @@ export class Sim {
         b.data.tick -= dt;
         if (b.data.tick <= 0) {
           b.data.tick += 0.5;
+          this.aoeMinions(f, f.x, f.z, 6, b.data.dmg || 38);
           for (const e of this.enemiesOf(f)) if (this.dist(f, e) <= 6) this.damage(f, e, b.data.dmg || 38, { school: 'phys', ab: b.data.ab || 'steel_tempest', tick: true });
         }
       } else if (b.type === 'spirit') {
@@ -837,7 +844,7 @@ export class Sim {
       z.t += dt;
       const owner = this.fighters[z.owner];
       if (z.type === 'quake' && z.t >= z.dur) {
-        this.event({ e: 'fx', fx: 'quake_erupt', id: z.owner, x: z.x, z: z.z });
+        this.event({ e: 'fx', fx: 'quake_erupt', id: z.owner, x: z.x, z: z.z }); this.aoeMinions(owner, z.x, z.z, z.r, 35);
         for (const f of this.enemiesOf(owner)) if (this.inZone(f, z) && f.y - z.y < 1.5) {
           this.damage(owner, f, 35, { school: 'nature', ab: 'quake_totem' });
           this.interrupt(f, owner);
@@ -845,16 +852,22 @@ export class Sim {
         }
       } else if (z.type === 'meteor' && z.t >= z.dur) {
         // Fire Mage signature: the meteor lands where the target stood when it was called
-        this.event({ e: 'fx', fx: 'meteor_impact', id: z.owner, x: z.x, y: z.y, z: z.z });
+        this.event({ e: 'fx', fx: 'meteor_impact', id: z.owner, x: z.x, y: z.y, z: z.z }); this.aoeMinions(owner, z.x, z.z, z.r, z.data.dmg || 170);
         for (const f of this.enemiesOf(owner)) if (this.inZone(f, z)) {
           this.damage(owner, f, z.data.dmg || 170, { school: 'fire', ab: 'meteor', big: true });
           this.addBuff(f, 'stun', 1, { src: owner.id, cc: 'cc', name: 'Meteor Strike', icon: '☄' });
           if (z.data.burn) this.kindle(owner, f);
         }
+      } else if (z.type === 'earthbind') {
+        // Enhancement totem: enemies inside are slowed by 50%
+        for (const e of this.enemiesOf(owner)) if (this.inZone(e, z)) {
+          const s = e.buffs.find(b => b.type === 'slow' && b.name === 'Earthbind');
+          if (s) s.t = 0.3; else this.addBuff(e, 'slow', 0.3, { value: 0.5, src: owner.id, name: 'Earthbind', icon: '⛓' });
+        }
       } else if (z.type === 'plague') {
         // Assassination signature: every second, enemies inside take damage and gain a Deadly Poison stack
         z.data.acc = (z.data.acc || 0) + dt;
-        if (z.data.acc >= 1) { z.data.acc -= 1; for (const e of this.enemiesOf(owner)) if (this.inZone(e, z)) { this.damage(owner, e, 16, { school: 'nature', ab: 'plague_cloud', tick: true }); this.poison(owner, e); } }
+        if (z.data.acc >= 1) { z.data.acc -= 1; this.aoeMinions(owner, z.x, z.z, z.r, 16); for (const e of this.enemiesOf(owner)) if (this.inZone(e, z)) { this.damage(owner, e, 16, { school: 'nature', ab: 'plague_cloud', tick: true }); this.poison(owner, e); } }
       } else if (z.type === 'stoneskin') {
         z.data.acc = (z.data.acc || 0) + dt;
         const tick = z.data.acc >= 1; if (tick) z.data.acc -= 1;
@@ -870,6 +883,70 @@ export class Sim {
         }
       }
       if (z.t >= z.dur) { this.zones.splice(i, 1); this.event({ e: 'zoneEnd', id: z.id }); }
+    }
+  }
+
+  // ------------------------------------------------------------ minions (pets & summons)
+  // Max one per player. A minion chases its owner's target (or the nearest visible enemy), attacks in
+  // melee and follows the bridge rules. It can't be targeted, but enemy area damage hurts it
+  // (aoeMinions), its lifetime can run out, and it dies with its owner.
+  // o: { hp, dmg, atkSpeed, speed, life, range, aoeTaken, onHit(sim, m, target) }
+  summon(owner, kind, o = {}) {
+    this.minions = this.minions.filter(m => { if (m.owner === owner.id) { this.event({ e: 'minionDie', id: m.id, x: m.x, z: m.z, kind: m.kind }); return false; } return true; });
+    const fw = this.forward(owner);
+    const m = { id: NEXT_ID++, kind, owner: owner.id, team: owner.team, x: owner.x + fw.z * 1.2, y: owner.y, z: owner.z - fw.x * 1.2, yaw: owner.yaw,
+      hp: o.hp || 300, maxHp: o.hp || 300, dmg: o.dmg || 20, atkSpeed: o.atkSpeed || 1.5, atkT: 0.4, speed: o.speed || 8, life: o.life ?? Infinity,
+      range: o.range || 2.2, aoeTaken: o.aoeTaken ?? 1, onHit: o.onHit || null, moving: false, atkFlash: 0 };
+    if (!this.validSpot(m.x, m.z, m.y)) { m.x = owner.x; m.z = owner.z; }
+    this.minions.push(m);
+    this.event({ e: 'summon', id: m.id, owner: owner.id, kind, x: m.x, z: m.z });
+    return m;
+  }
+  minionOf(owner) { return this.minions.find(m => m.owner === owner.id) || null; }
+  killMinion(m) { m.hp = 0; }
+  // enemy area damage also hits minions inside the area
+  aoeMinions(src, x, z, r, amt) {
+    for (const m of this.minions) if (m.team !== src.team && m.hp > 0 && Math.hypot(m.x - x, m.z - z) <= r) {
+      const d = Math.round(amt * m.aoeTaken); m.hp -= d;
+      this.event({ e: 'minionHit', id: m.id, amt: d, x: m.x, y: m.y, z: m.z });
+    }
+  }
+  updateMinions(dt) {
+    for (let i = this.minions.length - 1; i >= 0; i--) {
+      const m = this.minions[i], owner = this.fighters[m.owner];
+      m.life -= dt; m.atkT = Math.max(0, m.atkT - dt); m.atkFlash = Math.max(0, m.atkFlash - dt);
+      if (m.hp <= 0 || m.life <= 0 || !owner.alive || this.state !== 'fight') {
+        this.minions.splice(i, 1); this.event({ e: 'minionDie', id: m.id, x: m.x, z: m.z, kind: m.kind }); continue;
+      }
+      // target: the owner's hostile target, else the nearest visible enemy within 30 yards
+      let t = this.fighters[owner.target];
+      if (!t || t.team === m.team || !this.visibleTo(t, owner)) {
+        t = null; let best = 30;
+        for (const e of this.enemiesOf(owner)) { if (!this.visibleTo(e, owner)) continue; const d = Math.hypot(e.x - m.x, e.z - m.z); if (d < best) { best = d; t = e; } }
+      }
+      m.moving = false;
+      const ox = m.x, oz = m.z;
+      if (t) {
+        const dx = t.x - m.x, dz = t.z - m.z, d = Math.hypot(dx, dz), dy = Math.abs(floorAt(t.x, t.z, t.y) - floorAt(m.x, m.z, m.y));
+        m.yaw = Math.atan2(dx, dz);
+        if (d > m.range * 0.8 || dy > 1.2) {
+          const step = Math.min(d, m.speed * speedMult(owner) * dt);
+          m.x += dx / (d || 1) * step; m.z += dz / (d || 1) * step; m.moving = true;
+        } else if (m.atkT <= 0) {
+          m.atkT = m.atkSpeed; m.atkFlash = 0.35;
+          this.event({ e: 'minionAtk', id: m.id, tid: t.id });
+          this.damage(owner, t, m.dmg, { school: 'phys', ab: 'pet_' + m.kind, pet: true });
+          if (m.onHit) m.onHit(this, m, t);
+        }
+      } else if (Math.hypot(owner.x - m.x, owner.z - m.z) > 3) { // no enemy: heel at the owner's side
+        const dx = owner.x - m.x, dz = owner.z - m.z, d = Math.hypot(dx, dz), step = Math.min(d - 2.5, m.speed * dt);
+        m.x += dx / d * step; m.z += dz / d * step; m.yaw = Math.atan2(dx, dz); m.moving = true;
+      }
+      // walls, pillars and the bridge: same rules as fighters
+      if (solidAt(m.x, m.z, m.y)) { if (!solidAt(ox, m.z, m.y)) m.x = ox; else if (!solidAt(m.x, oz, m.y)) m.z = oz; else { m.x = ox; m.z = oz; } }
+      for (const p of PILLARS) { const px = m.x - p.x, pz = m.z - p.z, pd = Math.hypot(px, pz), min = p.r + 0.5; if (pd < min) { m.x += px / pd * (min - pd); m.z += pz / pd * (min - pd); } }
+      const rr = Math.hypot(m.x, m.z), mx = ARENA_R - 0.6; if (rr > mx) { m.x *= mx / rr; m.z *= mx / rr; }
+      const fl = floorAt(m.x, m.z, m.y); if (fl > m.y || m.y - fl < 0.6) m.y = fl; else m.y = Math.max(fl, m.y - 12 * dt);
     }
   }
 
@@ -961,6 +1038,7 @@ export class Sim {
         stats: f.stats,
       })),
       p: this.projectiles.map(p => ({ id: p.id, kind: p.kind, x: r(p.x), y: r(p.y), z: r(p.z), owner: p.owner })),
+      m: this.minions.map(m => ({ id: m.id, kind: m.kind, owner: m.owner, team: m.team, x: r(m.x), y: r(m.y), z: r(m.z), yaw: r(m.yaw), hp: Math.round(m.hp), maxHp: m.maxHp, moving: m.moving, atk: m.atkFlash > 0 })),
       z: this.zones.map(z => ({ id: z.id, type: z.type, x: z.x, y: z.y, z: z.z, r: z.r, t: r(z.t), dur: z.dur, owner: z.owner })),
     };
   }

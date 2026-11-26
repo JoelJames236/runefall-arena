@@ -38,12 +38,13 @@ const LOOKS = {
 LOOKS['rogue:assassination'] = { ...LOOKS.rogue, tint: [0.1, 0.2, 0.1], tintAmt: 0.85 }; // dark green poisoner leathers
 LOOKS['warrior:arms'] = { ...LOOKS.warrior, weapons: ['greatsword'], idle: 'Sword_Idle', tint: [0.36, 0.2, 0.18] }; // two-handed greatsword, no shield
 LOOKS['priest:shadow'] = { ...LOOKS.priest, tint: [0.26, 0.14, 0.36], tintAmt: 0.82, halo: false, glow: 0xa060ff, voidOrb: true }; // violet vestments, void glow
+LOOKS['shaman:enhancement'] = { ...LOOKS.shaman, weapons: ['stormaxe', 'stormaxeL'], idle: 'Sword_Idle', tint: [0.3, 0.34, 0.4], glow: 0x9ae8ff }; // two storm axes, wolf-pelt
 LOOKS['mage:fire'] = { ...LOOKS.mage, tint: [0.44, 0.11, 0.07], tintAmt: 0.82, glow: 0xff7a2a }; // crimson robes, burning staff crystal
 LOOKS['berserker:executioner'] = { ...LOOKS.berserker, weapons: ['greatAxe'], weaponScale: 1.08, tint: [0.14, 0.12, 0.11], tintAmt: 0.75, castPose: 'Sword_Block' }; // castPose: Skullsplitter wind-up
 
 // one-shot actions: kind -> per-class clip list (alternated) + whether it should use the full body
 const ACTIONS = {
-  attack: { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'] },
+  attack: { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], 'shaman:enhancement': ['Sword_Regular_A', 'Sword_Regular_B'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'] },
   slash: { any: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Cross'] },
   stab: { any: ['Punch_Cross', 'Punch_Jab'] },
   finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'], berserker: ['Sword_Regular_C'], 'berserker:executioner': ['Sword_Attack'], 'warrior:arms': ['Sword_Attack'] },
@@ -215,7 +216,7 @@ function makeWeapon(kind, look) {
 // How each weapon is held, in WORLD terms at the idle pose of a champion facing +Z:
 //   dir  = where the weapon's +Y (blade / shaft) points,  side = where its +X points,
 //   palm = offset from the bone toward the fingers (m),   up/fwd = extra world offsets.
-const ARMORY_KINDS = new Set(['runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'greatsword', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
+const ARMORY_KINDS = new Set(['runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'greatsword', 'stormaxeL', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
 const GRIP = {
   sword: { bone: 'hand_r', dir: [0, 0.55, 1], side: [-1, 0, 0], palm: 0.085 },
   axe: { bone: 'hand_r', dir: [0, 0.35, 1], side: [-1, 0, 0], palm: 0.085 },
@@ -233,7 +234,8 @@ Object.assign(GRIP, { runesword: GRIP.sword, kiteshield: GRIP.shield, fang: GRIP
   stormaxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 },
   // two-handed executioner axe: haft up through the fist, blade turned outward so its crescent reads
   greatAxe: { bone: 'hand_r', dir: [0, 0.92, 0.3], side: [-1, 0, 0.35], palm: 0.085 },
-  greatsword: { bone: 'hand_r', dir: [0, 0.92, 0.3], side: [-1, 0, 0.35], palm: 0.085 } });
+  greatsword: { bone: 'hand_r', dir: [0, 0.92, 0.3], side: [-1, 0, 0.35], palm: 0.085 },
+  stormaxeL: { bone: 'hand_l', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 } });
 export const GRIPS = GRIP; // exposed for tuning
 
 const _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
@@ -334,7 +336,7 @@ export class Character {
     const W = this.weapons, tipOf = k => W[k] && (W[k].userData.tip || W[k]);
     this.focus = ['archstaff', 'sunmace', 'fireOrb', 'stormaxe', 'runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
     this.tipR = ['runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
-    this.tipL = (W.fangL || W.warAxeL)?.userData.tip;
+    this.tipL = (W.fangL || W.warAxeL || W.stormaxeL)?.userData.tip;
     this.tmpQ = new THREE.Quaternion(); this.tmpE = new THREE.Euler();
     this.setLoco(look.idle, 0);
   }

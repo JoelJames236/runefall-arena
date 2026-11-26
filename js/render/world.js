@@ -29,10 +29,13 @@ const GradeShader = {
 };
 import { createArena } from './arenas.js';
 import { VFX } from './vfx.js';
+import { makeMinion } from './minions.js';
 import { Character as ProcCharacter } from './characters.js';
 import { Character as HeroCharacter, heroesReady } from './heroes.js';
 // realistic rigged champions when their assets loaded, procedural fallback otherwise
 const makeChar = (cls, spec) => heroesReady() ? new HeroCharacter(cls, spec) : new ProcCharacter(cls);
+// undead summons (ghoul, abomination) are rigged champions with a minion look; null until assets load
+const makeHumanoidMinion = kind => { if (!heroesReady()) return null; try { const c = new HeroCharacter(kind); return { root: c.root, update: (dt, m) => c.update(dt, { speed: m.moving ? 0.6 : 0, attackPulse: m.atk }) , char: c }; } catch { return null; } };
 import { PILLARS, BRIDGE, archY, floorAt, hasBuff, angleDiff } from '../sim/sim.js';
 // height for ground rings: on a sloped ramp lift them so the flat ring isn't half buried
 const ringY = (x, z, y, off) => { const fl = floorAt(x, z, y); return fl + (fl > 0.01 && fl < BRIDGE.H - 0.01 ? 0.42 : off); };
@@ -47,6 +50,7 @@ const AB_ANIM = {
   rending_axes: 'slash', headtaker: 'finisher', axe_throw: 'slam', undying_rage: 'raise', berserk: 'raise',
   skullsplitter: 'finisher', ground_breaker: 'slam', iron_hide: 'raise',
   fireball: 'release', frostbite: 'release', blazing_step: 'dash', meteor: 'raise', flame_ring: 'slam',
+  stormstrike: 'finisher', lava_lash: 'slash', healing_surge: 'raise', earthbind_totem: 'slam', spirit_wolf: 'raise',
   envenom: 'finisher', crippling_poison: 'stab', plague_cloud: 'release', die_by_the_sword: 'raise', execute: 'finisher', bladestorm: 'charge',
   shadow_word_pain: 'release', mind_blast: 'release', psychic_scream: 'raise', void_eruption: 'release',
 };
@@ -160,10 +164,32 @@ export class World {
   }
 
   // ------------------------------------------------------------------ characters
+  // pets & summons: create / move / animate / remove models to match the sim's minion list
+  syncMinions(list, dt, myTeam) {
+    if (!this.minionModels) this.minionModels = new Map();
+    const seen = new Set();
+    for (const m of list) {
+      seen.add(m.id);
+      let mm = this.minionModels.get(m.id);
+      if (!mm) {
+        const model = makeMinion(m.kind, m.team !== myTeam, makeHumanoidMinion);
+        model.root.position.set(m.x, m.y, m.z); model.root.rotation.y = m.yaw;
+        this.scene.add(model.root); mm = { model }; this.minionModels.set(m.id, mm);
+      }
+      const r = mm.model.root, k = 1 - Math.exp(-dt * 14);
+      r.position.x += (m.x - r.position.x) * k; r.position.y += (m.y - r.position.y) * k; r.position.z += (m.z - r.position.z) * k;
+      r.rotation.y += angleDiff(r.rotation.y, m.yaw) * (1 - Math.exp(-dt * 10));
+      mm.model.update(dt, { moving: m.moving, atk: m.atk ?? m.atkFlash > 0, hp: m.hp, maxHp: m.maxHp }, this.camera);
+    }
+    for (const [id, mm] of this.minionModels) if (!seen.has(id)) { this.scene.remove(mm.model.root); mm.model.dispose(); this.minionModels.delete(id); }
+  }
+
   clearChars() {
     for (const c of this.chars) if (c) this.scene.remove(c.root);
     for (const r of this.rings || []) this.scene.remove(r);
     this.chars = []; this.rings = [];
+    for (const [, mm] of this.minionModels || []) { this.scene.remove(mm.model.root); mm.model.dispose(); }
+    this.minionModels = new Map();
     if (this.preview.char) { this.scene.remove(this.preview.char.root); this.preview.char = null; }
     this.vfx.clearAll();
   }
@@ -324,6 +350,7 @@ export class World {
 
     this.vfx.syncProjectiles(view.projectiles, dt);
     this.vfx.syncZones(view.zones, dt, myTeam, F);
+    this.syncMinions(view.minions || [], dt, myTeam);
     // stealth: never reveal an invisible enemy through their buff effects
     this.vfx.syncCasts(F, this.chars, f => kitOf(f).abilities[f.cast.idx]?.school, dt, this.time);
     this.vfx.syncBuffs(F.map(f => (f.team !== myTeam && hasBuff(f, 'stealth')) ? { ...f, buffs: [] } : f), this.chars, dt, this.time);

@@ -95,7 +95,7 @@ The spec shows on unit frames, nameplates and in the lobby.
 | Warrior | 🛡 Protection | ⚔ **Arms**: two-handed greatsword, *Battle Trance* (+35% vs targets below 30%), Execute, Die by the Sword, Bladestorm leap |
 | Berserker | 🪓 Fury: two axes, fast flurries | 💀 **Executioner**: one great axe, slow swings, big crits (*Heavy Hands*: +12% crit chance, crits +80%); Skullsplitter, Ground Breaker, Iron Hide, Headtaker |
 | Priest | ✦ Discipline | 🌑 **Shadow**: *Shadowform* (+15% shadow damage, 15% less taken), Shadow Word: Pain, Mind Blast (self-heal), Psychic Scream, Void Eruption |
-| Shaman | ⚡ Elemental | 🐺 Enhancement *(coming soon)* |
+| Shaman | ⚡ Elemental | 🐺 **Enhancement**: melee with two storm axes, *Maelstrom* (lightning procs), Stormstrike, Lava Lash, Healing Surge, Earthbind Totem, Spirit Wolf pet |
 
 Design of all specs and the planned new classes: [`docs/CLASSES_AND_SPECS.md`](docs/CLASSES_AND_SPECS.md).
 

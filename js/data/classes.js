@@ -29,7 +29,7 @@ export const CLASSES = {
         exec(sim, c, t) { sim.spawnProjectile(c, t, 'flame_burst', 55, () => { sim.damage(c, t, 100, { school: 'fire', ab: 'flame_burst' }); sim.addDot(c, t, 'Ignite', 45, 3, 'fire', '🔥'); }); } },
       { id: 'glacial_nova', name: 'Glacial Nova', glyph: '✳', color: '#bfefff', school: 'frost', cost: 90, cd: 20, gcd: true, cast: 0, range: 0, target: false,
         desc: 'Blast frost outward, dealing 30 damage and freezing all enemies within 8 yards in place for 3 sec.',
-        exec(sim, c) { sim.event({ e: 'fx', fx: 'glacial_nova', id: c.id, x: c.x, z: c.z });
+        exec(sim, c) { sim.event({ e: 'fx', fx: 'glacial_nova', id: c.id, x: c.x, z: c.z }); sim.aoeMinions(c, c.x, c.z, 8, 30);
           for (const f of sim.enemiesOf(c)) if (sim.dist(c, f) <= 8) { sim.damage(c, f, 30, { school: 'frost', ab: 'glacial_nova' }); sim.addBuff(f, 'root', 3, { src: c.id, cc: 'root', name: 'Frozen', icon: '✳' }); } } },
       { id: 'arcane_shift', name: 'Arcane Shift', glyph: '➶', color: '#c69bff', school: 'arcane', cost: 40, cd: 14, gcd: false, cast: 0, range: 0, target: false, allowRooted: true,
         desc: 'Teleport 13 yards in your movement direction, breaking free of roots and slows.',
@@ -126,7 +126,7 @@ export const CLASSES = {
       { id: 'skull_leap', name: 'Skull-Splitter Leap', glyph: '⤴', color: '#ffb070', school: 'phys', cost: 0, cd: 20, gcd: false, cast: 0, range: 30, minRange: 6, target: true,
         desc: 'Leap through the air onto an enemy 6–30 yards away. On landing, deal 40 damage to enemies within 5 yards and slow them by 40% for 3 sec.',
         exec(sim, c, t) { sim.charge(c, t, () => {
-          sim.event({ e: 'fx', fx: 'skull_leap_land', id: c.id, x: c.x, z: c.z });
+          sim.event({ e: 'fx', fx: 'skull_leap_land', id: c.id, x: c.x, z: c.z }); sim.aoeMinions(c, c.x, c.z, 5, 40);
           for (const e of sim.enemiesOf(c)) if (sim.dist(c, e) <= 5) { sim.damage(c, e, 40, { school: 'phys', ab: 'skull_leap' }); sim.addBuff(e, 'slow', 3, { value: 0.4, src: c.id, name: 'Shaken', icon: '⤴' }); }
           c.res = Math.min(c.maxRes, c.res + 15);
         }, { fx: 'skull_leap', arc: 4.5, speed: 30 }); } },
@@ -240,7 +240,7 @@ export const SPECS = {
           exec(sim, c, t) { sim.spawnProjectile(c, t, 'fireball', 34, () => { sim.damage(c, t, 100, { school: 'fire', ab: 'fireball' }); sim.kindle(c, t); }); } },
         2: { id: 'flame_ring', name: 'Flame Ring', glyph: '◎', color: '#ff8a3a', school: 'fire', cost: 70, cd: 16, gcd: true, cast: 0, range: 0, target: false,
           desc: 'Erupt in a ring of fire: 45 damage to all enemies within 8 yards, slowing them by 60% for 3 sec and adding a stack of Burning.',
-          exec(sim, c) { sim.event({ e: 'fx', fx: 'flame_ring', id: c.id, x: c.x, z: c.z }); for (const f of sim.enemiesOf(c)) if (sim.dist(c, f) <= 8) { sim.damage(c, f, 45, { school: 'fire', ab: 'flame_ring' }); sim.addBuff(f, 'slow', 3, { value: 0.6, src: c.id, name: 'Scorched', icon: '◎' }); sim.kindle(c, f); } } },
+          exec(sim, c) { sim.event({ e: 'fx', fx: 'flame_ring', id: c.id, x: c.x, z: c.z }); sim.aoeMinions(c, c.x, c.z, 8, 45); for (const f of sim.enemiesOf(c)) if (sim.dist(c, f) <= 8) { sim.damage(c, f, 45, { school: 'fire', ab: 'flame_ring' }); sim.addBuff(f, 'slow', 3, { value: 0.6, src: c.id, name: 'Scorched', icon: '◎' }); sim.kindle(c, f); } } },
         3: { id: 'blazing_step', name: 'Blazing Step', glyph: '≫', color: '#ffb04a', school: 'fire', cost: 30, cd: 12, gcd: false, cast: 0, range: 0, target: false, allowRooted: true,
           desc: 'Dash 11 yards in your movement direction in a burst of flame, breaking roots and slows.',
           exec(sim, c, t, o) { sim.cleanse(c, ['root', 'slow']); const d = o.dir || sim.forward(c); sim.dashDir(c, d.x, d.z, 11, 0.22, 'blazing_step'); } },
@@ -317,7 +317,7 @@ export const SPECS = {
         2: { id: 'ground_breaker', name: 'Ground Breaker', glyph: '⛰', color: '#d8b070', school: 'phys', cost: 20, cd: 18, gcd: true, cast: 0, range: 0, target: false,
           desc: 'Slam the axe into the ground: enemies within 7 yards in front of you take 50 damage, are knocked down (stunned) for 0.8 sec and slowed by 50% for 3 sec after.',
           exec(sim, c) {
-            sim.event({ e: 'fx', fx: 'ground_breaker', id: c.id, x: c.x, z: c.z, yaw: c.yaw });
+            sim.event({ e: 'fx', fx: 'ground_breaker', id: c.id, x: c.x, z: c.z, yaw: c.yaw }); sim.aoeMinions(c, c.x + Math.sin(c.yaw) * 3, c.z + Math.cos(c.yaw) * 3, 4, 50);
             for (const e of sim.enemiesOf(c)) if (sim.dist(c, e) <= 7 && Math.abs(angleDiffD(c.yaw, Math.atan2(e.x - c.x, e.z - c.z))) <= 1.05) {
               sim.damage(c, e, 50, { school: 'phys', ab: 'ground_breaker' }); sim.interrupt(e, c);
               sim.addBuff(e, 'stun', 0.8, { src: c.id, cc: 'cc', name: 'Knocked Down', icon: '⛰' }); sim.addBuff(e, 'slow', 3.8, { value: 0.5, src: c.id, name: 'Shaken Ground', icon: '⛰' });
@@ -364,7 +364,35 @@ export const SPECS = {
   ],
   shaman: [
     { id: 'elemental', name: 'Elemental', icon: '⚡', color: '#7ae0ff', tag: 'Lightning, magma and totems' },
-    { id: 'enhancement', name: 'Enhancement', icon: '🐺', color: '#c8fff0', tag: 'Two weapons in melee · spirit wolf', soon: true },
+    {
+      id: 'enhancement', name: 'Enhancement', icon: '🐺', color: '#c8fff0', tag: 'Two weapons in melee · spirit wolf',
+      role: 'Stormblade Shaman', melee: true,
+      desc: 'Charges into melee with two storm axes, heals itself between blows and calls a spectral wolf to hunt with it. Passive — Maelstrom: each basic attack has a 30% chance to crackle with lightning for 24 extra nature damage.',
+      weapon: 'Two short storm axes crackling with lightning', armor: 'Wolf-pelt cloak over mail',
+      defense: 0.1, speed: 7.3,
+      rating: { health: 4, damage: 4, mobility: 4, defense: 3 },
+      passive: { name: 'Maelstrom' },
+      auto: { name: 'Storm Strikes', dmg: 30, speed: 1.5, range: 4.5, ranged: false, school: 'phys', glyph: '⚡', color: '#c8fff0', zap: 0.3,
+        desc: 'Basic attack: alternating axe strikes (30 damage every 1.5 sec). Melee range. Maelstrom: 30% chance for +24 lightning damage.' },
+      abilities: {
+        0: { id: 'stormstrike', name: 'Stormstrike', glyph: '⚡', color: '#7ae0ff', school: 'nature', cost: 45, cd: 5, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
+          desc: 'Strike twice with both storm axes: 2 × 50 nature damage.',
+          exec(sim, c, t) { sim.damage(c, t, 50, { school: 'nature', ab: 'stormstrike' }); sim.damage(c, t, 50, { school: 'nature', ab: 'stormstrike' }); } },
+        1: { id: 'lava_lash', name: 'Lava Lash', glyph: '♨', color: '#ff7a2a', school: 'fire', cost: 40, cd: 8, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
+          desc: 'Lash the target with a molten axe for 70 fire damage plus 48 over 4 sec.',
+          exec(sim, c, t) { sim.damage(c, t, 70, { school: 'fire', ab: 'lava_lash' }); sim.addDot(c, t, 'Lava Burn', 48, 4, 'fire', '♨'); } },
+        2: { id: 'healing_surge', name: 'Healing Surge', glyph: '✚', color: '#8aff9a', school: 'nature', cost: 90, cd: 2, gcd: true, cast: 1.2, range: 30, ally: true,
+          desc: 'A surge of healing water: heals a friendly target for 145 (yourself if you have no friendly target).',
+          exec(sim, c, t) { sim.heal(c, t, 145, 'healing_surge'); } },
+        4: { id: 'earthbind_totem', name: 'Earthbind Totem', glyph: '⛓', color: '#b0a070', school: 'nature', cost: 60, cd: 24, gcd: true, cast: 0, range: 0, target: false,
+          desc: 'Plant a totem for 8 sec: enemies within 9 yards are slowed by 50%.',
+          exec(sim, c) { sim.spawnZone({ type: 'earthbind', owner: c.id, x: c.x, z: c.z, r: 9, dur: 8 }); } },
+        5: { id: 'spirit_wolf', name: 'Spirit Wolf', glyph: '🐺', color: '#9ae8ff', school: 'nature', cost: 120, cd: 45, gcd: true, cast: 0, range: 0, target: false, signature: true,
+          desc: 'SIGNATURE — Summon a spectral wolf for 12 sec. It hunts your target: 28 damage every 1.1 sec, each bite slowing by 30%. It has 400 health and only takes damage from area attacks.',
+          exec(sim, c) { sim.summon(c, 'wolf', { hp: 400, dmg: 28, atkSpeed: 1.1, speed: 10, life: 12,
+            onHit: (s, m, t) => s.addBuff(t, 'slow', 2, { value: 0.3, src: c.id, name: 'Wolf Bite', icon: '🐺' }) }); } },
+      },
+    },
   ],
 };
 function angleDiffD(a, b) { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; }
@@ -383,7 +411,7 @@ export function kit(cls, spec) {
   if (k) return k;
   const C = CLASSES[cls], S = specsOf(cls).find(s => s.id === sid) || {};
   k = { ...C, spec: sid, specName: S.name, specIcon: S.icon, specColor: S.color, look: S.look || null };
-  for (const f of ['role', 'desc', 'weapon', 'armor', 'hp', 'defense', 'speed', 'res', 'resStart', 'regen', 'rating', 'auto']) if (S[f] !== undefined) k[f] = S[f];
+  for (const f of ['role', 'desc', 'weapon', 'armor', 'hp', 'defense', 'speed', 'res', 'resStart', 'regen', 'rating', 'auto', 'melee', 'resType']) if (S[f] !== undefined) k[f] = S[f];
   if (S.passive) k.passive = { ...C.passive, ...S.passive };
   if (S.abilities) k.abilities = C.abilities.map((a, i) => S.abilities[i] || a);
   KITS.set(key, k);

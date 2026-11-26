@@ -12,6 +12,8 @@ const DIFF = {
 };
 
 const MELEE_CLASSES = new Set(['rogue', 'warrior', 'berserker']);
+// melee or not: a spec can override its class (e.g. Enhancement Shaman fights in melee)
+const isMelee = f => { const k = kitOf(f); return k.melee ?? MELEE_CLASSES.has(f.cls); };
 const HEALERS = new Set(['priest']);
 const INTERRUPTS = { berserker: [], warrior: ['shield_slam'], rogue: ['skull_crack'], priest: ['blinding_light'], mage: [], shaman: ['quake_totem'] };
 
@@ -42,7 +44,7 @@ export class AI {
     const sim = this.sim;
     if (!sim.visibleTo(e, me)) return Infinity;
     let score = this.effectiveHp(e) / 12;                      // ~83 for a full mage, ~135 for a full warrior
-    score += sim.dist(me, e) * (MELEE_CLASSES.has(me.cls) ? 1.4 : 0.6);
+    score += sim.dist(me, e) * (isMelee(me) ? 1.4 : 0.6);
     if (!sim.los(me, e)) score += 25;                                                  // hiding behind cover: worth switching
     if (HEALERS.has(e.cls)) score -= 15 * this.d.focus;                                // pressure the healer
     if (e.buffs.some(b => b.type === 'stun' || b.type === 'root')) score -= 10;        // free damage
@@ -92,8 +94,8 @@ export class AI {
 
     const visible = sim.visibleTo(foe, me);
     const dist = sim.dist(me, foe);
-    const melee = MELEE_CLASSES.has(me.cls);
-    const threatMelee = MELEE_CLASSES.has(threat.cls);
+    const melee = isMelee(me);
+    const threatMelee = isMelee(threat);
     const foeCC = isStunned(foe) || hasBuff(foe, 'root');
     const threatCC = isStunned(threat) || hasBuff(threat, 'root');
     this.closeT = (td < 7 && threatMelee) ? this.closeT + dt : 0;
@@ -305,7 +307,7 @@ export class AI {
     const away = () => { const L = td || 1; return { x: (me.x - threat.x) / L, z: (me.z - threat.z) / L }; };
     const near = r => living.filter(e => sim.dist(me, e) <= r).length;
     const def = Math.random() < this.d.defensive;
-    const threatMelee = MELEE_CLASSES.has(threat.cls);
+    const threatMelee = isMelee(threat);
     // Hard-cast when safe: run from a melee that is rooted, cast when it is stunned or far.
     const freeCast = !threatMelee || td > 9 || isStunned(threat) || (!hasBuff(threat, 'root') && this.closeT > 3);
     let p = null;
@@ -419,6 +421,19 @@ export class AI {
         if (visible && freeCast && (p = use('sacred_bolt'))) return p;
         return null; }
       case 'shaman':
+        if (me.spec === 'enhancement') {
+          // melee hybrid: wolf + earthbind to stick, heal itself when low, otherwise strike
+          if (def && hp < 0.45 && freeCast && (p = use('healing_surge', { tid: me.id }))) return p;
+          const hurtE = this.hurtFriend(me, allies, 0.45); if (def && hurtE && hurtE !== me && freeCast && (p = use('healing_surge', { tid: hurtE.id }))) return p;
+          if (def && hasBuff(me, 'root') && td < 8 && (p = use('gale_dash', { dir: away() }))) return p;
+          if (!visible) return null;
+          if (dist < 12 && (p = use('spirit_wolf'))) return p;
+          if (dist < 7 && !hasBuff(foe, 'slow') && (p = use('earthbind_totem'))) return p;
+          if (dist > 9 && (p = use('gale_dash', { dir: { x: (foe.x - me.x) / dist, z: (foe.z - me.z) / dist } }))) return p;
+          if ((p = use('stormstrike'))) return p;
+          if ((p = use('lava_lash'))) return p;
+          return null;
+        }
         if (def && (hp < 0.6 || (td < 6 && threatMelee) || allies.some(a => a.hp / a.maxHp < 0.5 && sim.dist(me, a) < 6)) && (p = use('stoneskin_totem'))) return p;
         if (near(6) && !threatCC && (p = use('quake_totem'))) return p;
         if (def && hasBuff(me, 'root') && td < 8 && (p = use('gale_dash', { dir: away() }))) return p;

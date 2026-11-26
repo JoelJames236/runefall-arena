@@ -274,7 +274,7 @@ export function makeClassWeapon(kind, M, look) {
       const top = spike(0.02, 0.09, M.gold); top.position.y = 0.14; head.add(top);
       g.add(head); g.userData.pulse = halo;
       tip.position.y = 0.7; break; }
-    case 'stormaxe': {
+    case 'stormaxe': case 'stormaxeL': {
       // shaman: stormcaller axe with crescent blade, crackling cyan runes, feathers and beads
       g.add(mesh(cyl(0.022, 0.026, 0.88, 10), M.wood).translateY(0.24));
       const head = new THREE.Group(); head.position.y = 0.6;
