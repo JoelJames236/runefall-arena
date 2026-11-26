@@ -77,7 +77,7 @@ Numbers changed over six lab passes (1v1: 20 rounds per pairing, 3,800 rounds; 2
 | Berserker — Executioner, Shaman — Enhancement | slows on you are 35 % weaker |
 | Priest — Shadow | Mind Blast heals for 70 % of its damage (was 40 %) — it fell to 34 % in 1v1 once melee had leeway |
 | Shaman — Elemental | Lightning Lash 68 → 76 |
-| Hunter — Beastmaster | jungle cat damage 17 → 22 |
+| Hunter — Beastmaster | pet damage 17 → 22 (the jungle cat, now a silverback gorilla) |
 | Hunter — Sharpshooter | Aimed Shot 160 → 168 |
 | Necromancer — Curser | health 1150 → 1200 |
 

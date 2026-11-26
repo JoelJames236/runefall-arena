@@ -35,7 +35,7 @@ import { Character as HeroCharacter, heroesReady } from './heroes.js';
 // realistic rigged champions when their assets loaded, procedural fallback otherwise
 const makeChar = (cls, spec) => heroesReady() ? new HeroCharacter(cls, spec) : new ProcCharacter(cls);
 // undead summons (ghoul, abomination) are rigged champions with a minion look; null until assets load
-const makeHumanoidMinion = kind => { if (!heroesReady()) return null; try { const c = new HeroCharacter(kind); let prev = false; return { root: c.root, char: c, update: (dt, m) => { if (m.atk && !prev) c.play('attack', 0.6); prev = m.atk; c.update(dt, { speed: m.moving ? 0.7 : 0 }); } }; } catch (e) { console.warn('minion model', e); return null; } };
+const makeHumanoidMinion = kind => { if (!heroesReady()) return null; try { const c = new HeroCharacter(kind); let prev = false; return { root: c.root, char: c, update: (dt, m) => { if (m.atk && !prev) c.play('attack', 0.6); prev = m.atk; c.update(dt, { speed: m.moving ? (kind === 'gorilla' ? 1.0 : 0.7) : 0 }); } }; } catch (e) { console.warn('minion model', e); return null; } };
 import { PILLARS, BRIDGE, archY, floorAt, hasBuff, angleDiff } from '../sim/sim.js';
 // height for ground rings: on a sloped ramp lift them so the flat ring isn't half buried
 const PREVIEW_Z = 10; // class-screen model stands here (the arena centre is under the bridge)

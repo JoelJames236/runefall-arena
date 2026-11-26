@@ -31,6 +31,14 @@ const WEAPONS = [['orcaxe', 0], ['orcshield', 0], ['greatAxe', { axeStyle: 'orc'
   ['sunhammer', { glow: 0xffe08a }], ['holysword', 0], ['towershield', 0], ['sunmace', { glow: 0xffd98a }], ['stormaxe', { glow: 0x4ad8ff }], ['bow', 0], ['longbow', 0], ['bonestaff', { glow: 0x7aff6a }], ['druidstaff', { glow: 0x8ad86a }]];
 import { CLASS_ORDER, specsOf } from './js/data/classes.js';
 import { CHAMPION_MODELS, DISABLED } from './js/render/champions.js';
+import { makeCreature } from './js/render/creatures.js';
+import { makeBeast } from './js/render/beasts.js';
+// pets / druid forms: generated model next to the code-built creature it replaces
+function creatureChar(m) {
+  let atk = 0;
+  return { root: m.root, weapons: {}, generated: !!m.generated, play() { atk = 0.3; }, hit() {},
+    update(dt, st) { atk -= dt; m.update(dt, (st.speed || 0) > 0.1, atk > 0, { speed: st.speed > 1.2 ? 1.25 : st.speed > 0 ? 1 : 0, dead: st.dead }); } };
+}
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(innerWidth, innerHeight);
@@ -51,6 +59,9 @@ const who = document.getElementById('who'), anim = document.getElementById('anim
 for (const c of CLASS_ORDER) for (const s of specsOf(c).filter(s => !s.soon)) {
   const k = c + ':' + s.id; const o = new Option((CHAMPION_MODELS[k] ? '★ ' : '') + k, k); who.add(o);
 }
+who.add(new Option('★ pet: silverback gorilla', 'pet:gorilla'));
+who.add(new Option('★ druid form: cat', 'form:cat'));
+who.add(new Option('★ druid form: bear', 'form:bear'));
 who.add(new Option('— all weapons —', 'weapons'));
 await loadHeroAssets(); await preloadChampions();
 const first = Object.keys(CHAMPION_MODELS)[0]; if (first) who.value = first;
@@ -70,8 +81,16 @@ function build() {
     return;
   }
   const [cls, spec] = who.value.split(':');
-  const a = new Character(cls, spec); chars = [a];
-  if (cmp.checked && a.generated) {
+  let a;
+  if (cls === 'pet' || cls === 'form') {
+    // generated pet / form, and the code-built creature it replaces
+    const gen = cls === 'pet' ? new Character(spec) : makeCreature(spec);
+    const old = creatureChar(makeBeast(cls === 'pet' ? 'junglecat' : spec));
+    a = gen ? (cls === 'form' ? creatureChar(gen) : gen) : old;
+    if (gen && cls === 'form') a.generated = true;
+    chars = gen && cmp.checked ? [a, old] : [a];
+  } else { a = new Character(cls, spec); chars = [a]; }
+  if (cmp.checked && a.generated && cls !== 'pet' && cls !== 'form') {
     // the old code-built champion for comparison: temporarily hide the generated model
     DISABLED.add(who.value);
     try { const b = new Character(cls, spec); chars.push(b); } finally { DISABLED.delete(who.value); }

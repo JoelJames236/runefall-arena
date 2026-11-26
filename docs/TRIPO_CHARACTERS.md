@@ -36,7 +36,7 @@ About **115 credits per spec**, about **2,300 credits** for all 20.
 | Weapons and shields | `armory.js` / `makeWeapon`, attached to `hand_r` / `hand_l` / `lowerarm_l` via `GRIP` | glowing cores, pulsing halos, weapon trails (`tipR` / `tipL`), cast focus point (`focus`) |
 | Animations | UAL clips in `heroes.js` (`CLIPS`, `ACTIONS`, upper/lower split) | same skeleton names; retargeted to the new rest pose |
 | Spec effects | `halo` (Discipline), `voidOrb` (Shadow), floating frost shards / fire motes, glowing eyes | animated, emissive — cheap as separate small meshes |
-| Druid Cat / Bear forms | `beasts.js` | separate creature models, unchanged |
+| Druid Cat / Bear forms | `creatures.js` (generated) / `beasts.js` (fallback) | separate creature models with a procedural gait (see Creatures below) |
 | Stealth fade, hit flash, rim light | `setOpacity`, `addRim` | work on any material |
 | Minions (ghoul, abomination) | `LOOKS.ghoul` / `LOOKS.abomination` | later, same pipeline |
 
@@ -80,9 +80,30 @@ short capes / robes split for the legs.
 
 ## Creatures (second batch)
 
-These are not humanoids, so the UAL clips do not apply. Each is rigged in Studio with its own body type and
-animated with Tripo's animation presets (walk / run / idle / attack / death where available); the clips ship
-inside the GLB and replace the procedural gait of `beasts.js` / `minions.js` for that creature.
+**Status: Cat form, Bear form and the silverback gorilla are in the game** (385 credits: 3 × 60 generation,
+3 × 35 retopology to 10 k triangles, 5 × 20 rigging including two re-rigs). Ghoul and abomination are still the
+code-built zombies.
+
+| Model | File | Rig | Animation |
+| --- | --- | --- | --- |
+| Silverback gorilla (Beastmaster pet, replaces the jungle cat) | `champions/hunter_gorilla.glb` (10.1 k tris, 1.8 MB) | humanoid, UE5 Mannequin (generated in a T-pose) | the champion UAL clips, retargeted like a champion; `LOOKS.gorilla` adds a deep forward lean and bent knees; punches as attacks |
+| Cat form (black panther) | `creatures/druid_cat.glb` (9.4 k tris, 1.4 MB) | Tripo "other" (four-legged) | procedural gait in `creatures.js` |
+| Bear form (armored cave bear) | `creatures/druid_bear.glb` (10.0 k tris, 1.8 MB) | Tripo "other" (four-legged) | procedural gait in `creatures.js` |
+
+What we learned about Tripo's four-legged rigs:
+- The only animation preset for them is a walk; anything else is a 20-credit AI animation each. So the motion
+  stays procedural: `creatures.js` drives the same walk / gallop / idle / pounce / rear-up maul / death as
+  `beasts.js`, with every rotation given in game-space axes and converted into each bone's rest frame.
+- **Bone names are unreliable** (`tripo1_Right_Limb_*` was the tail, `tripoHead_*` the spine), and a leg can come
+  out as a single bone. The rig is therefore read from its rest-pose geometry (feet = the four lowest leaf bones,
+  junctions where each pair's chains meet, spine between them, neck / head forward, tail backward). A leg with one
+  bone swings as a whole. A rig that can't be read falls back to the code-built creature.
+- Generated poses aren't always straight: the cat was modelled looking over its shoulder, `HEAD_FIX` turns the
+  neck / head back in line.
+- Re-rigging is worth one try (20 credits): the first cat rig had a hind leg ending at the knee, the second was clean;
+  the bear went from "head and one hind leg unrigged" to "one hind leg with a single bone".
+
+Check them in `viewer.html` ("pet: silverback gorilla", "druid form: cat / bear", next to the code-built creature).
 
 | Creature | Used by | Rig type | Needs |
 | --- | --- | --- | --- |

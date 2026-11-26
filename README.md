@@ -125,7 +125,7 @@ Every class has a fixed race; both specs share it, but each spec has its own equ
 | **Paladin** | Human | Mana + Holy Power (3) | Plate-clad holy warrior: builds Holy Power, spends it on a healing Radiant Storm (Crusader) or on Holy Shield (Protection tank with taunts) | Divine Wrath / Guardian's Resolve |
 | Priest | Human | Mana | Sustain: heals and shields (self or ally), disorient, purge | Halo of Judgment / Void Eruption |
 | Shaman | Orc | Mana | Lightning & magma, stun totem, team-protecting totem, wind dash | Fire Spirit / Spirit Wolf |
-| Hunter | Jungle Troll | Focus | Ranged bow / crossbow, stings, traps, disengage; Beastmaster fights with a jungle cat | Bestial Wrath / Piercing Volley |
+| Hunter | Jungle Troll | Focus | Ranged bow / crossbow, stings, traps, disengage; Beastmaster fights with a silverback gorilla | Bestial Wrath / Piercing Volley |
 | Necromancer | Undead | Mana | Ranged only: rot, bone spears, a ghoul servant or stacking curses; fragile in melee | Abomination / Doom |
 | Druid | Bull-folk | Mana / Energy | Feral shapeshifts between panther (damage) and bear (tank); Restoration heals over time and roots | Berserk Instinct / Tree of Life |
 
@@ -146,7 +146,7 @@ The spec shows on unit frames, nameplates and in the lobby.
 | Paladin | ☀ **Crusader**: two-handed sun hammer with holy autos, Holy Strike, Judgment (+15% holy damage taken, speed burst), Radiant Storm (Holy Power spender, AoE + self-heal), Hammer of Light (stun), Divine Shield (immunity), Divine Wrath | 🛡 **Protection**: sword & tower shield tank, *Righteous Vow* (5% less damage taken, Challenge/taunt), Shield Slam, Sentinel's Shield (bouncing silence), Consecration, Holy Shield (Holy Power → damage reduction + heal), Guardian's Resolve |
 | Priest | ✦ Discipline | 🌑 **Shadow**: *Shadowform* (+15% shadow damage, 15% less taken), Shadow Word: Pain, Mind Blast (self-heal), Psychic Scream, Void Eruption |
 | Shaman | ⚡ Elemental | 🐺 **Enhancement**: melee with two storm axes, *Maelstrom* (lightning procs), Stormstrike, Lava Lash, Healing Surge, Earthbind Totem, Spirit Wolf pet |
-| Hunter | 🐾 **Beastmaster**: jungle cat pet, Kill Command, Serpent Sting, Intimidation, Bestial Wrath | 🎯 **Sharpshooter**: no pet, crossbow, *Steady Aim*, Aimed Shot, Freezing Trap, Piercing Volley |
+| Hunter | 🐾 **Beastmaster**: silverback gorilla pet, Kill Command, Serpent Sting, Intimidation, Bestial Wrath | 🎯 **Sharpshooter**: no pet, crossbow, *Steady Aim*, Aimed Shot, Freezing Trap, Piercing Volley |
 | Necromancer | 💀 **Summoner**: ghoul servant that keeps rising, Soul Rot, Corpse Explosion, Abomination | ☠ **Curser**: *Martyr's Curse* (more curses = more damage taken, both ways), Curse of Agony / Weakness, Soul Siphon, Doom |
 | Druid | 🐾 **Feral**: cat form (Rake, Shred, Ferocious Bite) ⇄ bear form (Maul, Thrash, Frenzied Regeneration), Wild Pounce, Berserk Instinct | 🌳 **Restoration**: stacking Rejuvenation, Regrowth, Moonfire, Entangling Roots, Wild Charge, Tree of Life |
 
@@ -202,7 +202,8 @@ js/render/outfits.js     Race anatomy (ears, tusks, beards, horns, hooves) and o
 js/render/consolidate.js Folds a champion into one skinned mesh per material (draw calls)
 js/render/beasts.js      Druid Cat Form / Bear Form: skinned procedural creatures with gait animation
 js/render/armory.js      Materials, armor building blocks and all weapons (built in code)
-js/render/minions.js     Pets & summons (wolf, jungle cat, ghoul hookup) and the treant form; cat / bear come from beasts.js
+js/render/minions.js     Pets & summons (wolf, gorilla, ghoul hookup) and the treant form
+js/render/creatures.js   Generated Cat / Bear form models (Tripo, four-legged rig) with a procedural gait; beasts.js is the fallback
 js/render/characters.js  Procedural fallback champion models
 js/render/vfx.js         Pooled particles (glow + smoke), projectiles, casting circles, spell effects
 js/ui/hud.js             Unit/party/arena frames, action bar, cast bars, nameplates, combat text

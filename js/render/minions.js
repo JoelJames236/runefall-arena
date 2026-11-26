@@ -3,6 +3,8 @@
 // `makeHumanoid`). Also the Druid's treant form. Every pet gets a small health bar.
 import * as THREE from 'three';
 import { makeBeast } from './beasts.js';
+import { championModel } from './champions.js';
+import { makeCreature } from './creatures.js';
 
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.05, ...o });
 
@@ -18,17 +20,19 @@ function hpBar() {
 export function makeMinion(kind, hostile, makeHumanoid) {
   let beast = null, humanoid = null;
   const root = new THREE.Group();
-  if (kind === 'wolf' || kind === 'cat') {
-    // Shaman spirit wolf (spectral) / Hunter jungle cat: the same skinned creature system as the Druid forms
+  // Beastmaster's silverback gorilla: a generated humanoid model with the UAL clips (see LOOKS.gorilla)
+  if (kind === 'gorilla' && championModel('gorilla') && makeHumanoid) { humanoid = makeHumanoid('gorilla'); if (humanoid) root.add(humanoid.root); }
+  if (!humanoid && (kind === 'wolf' || kind === 'cat' || kind === 'gorilla')) {
+    // Shaman spirit wolf (spectral) / the jungle cat (stand-in while the gorilla model is missing): procedural creatures
     beast = makeBeast(kind === 'wolf' ? 'wolf' : 'junglecat');
     beast.root.scale.setScalar(kind === 'wolf' ? 0.95 : 0.8);
     root.add(beast.root);
     if (kind === 'wolf') { const aura = new THREE.Mesh(new THREE.SphereGeometry(0.75, 14, 10), new THREE.MeshBasicMaterial({ color: 0x6ac8ff, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false })); aura.scale.set(0.8, 0.75, 1.4); aura.position.y = 0.85; root.add(aura); }
-  } else if (makeHumanoid) {
+  } else if (!humanoid && makeHumanoid) {
     humanoid = makeHumanoid(kind);
     if (humanoid) root.add(humanoid.root);
   }
-  const bar = hpBar(); bar.g.position.y = kind === 'abomination' ? 3.4 : kind === 'ghoul' ? 2.3 : 1.6; root.add(bar.g);
+  const bar = hpBar(); bar.g.position.y = kind === 'abomination' ? 3.4 : kind === 'ghoul' ? 2.3 : kind === 'gorilla' && humanoid ? 2.2 : 1.6; root.add(bar.g);
   bar.fill.material.color.set(hostile ? 0xff3a2a : 0x5aff7a);
   return {
     root,
@@ -59,7 +63,9 @@ export function makeFormModel(form) {
     let t = 0;
     return { root, update(dt, moving) { t += dt * (moving ? 6 : 1.5); root.rotation.z = Math.sin(t) * (moving ? 0.05 : 0.015); } };
   }
-  // Cat Form / Bear Form: skinned procedural creatures with real anatomy and gait (beasts.js)
+  // Cat Form / Bear Form: the generated model once it has loaded (creatures.js), else the code-built creature (beasts.js)
+  const gen = makeCreature(form === 'bear' ? 'bear' : 'cat');
+  if (gen) { root.add(gen.root); return { root, update: gen.update, dispose: gen.dispose, generated: true }; }
   const beast = makeBeast(form === 'bear' ? 'bear' : 'cat');
   root.add(beast.root);
   return { root, update: (dt, moving, atk, st) => beast.update(dt, moving, atk, st), dispose: beast.dispose };

@@ -16,6 +16,7 @@ import { makeFormModel } from './minions.js';
 import { applyRace, RACES, RACE_OF } from './races.js';
 import { consolidate } from './consolidate.js';
 import { CHAMPION_MODELS, RACE_HEIGHT, championModel, loadChampion, setRetargetSource, analyse, retargetClip } from './champions.js';
+import { preloadCreatures } from './creatures.js';
 import { validSpec } from '../data/classes.js';
 
 // Rim light for champions: a cheap view-dependent fresnel glow added to the emissive term of any
@@ -85,10 +86,13 @@ LOOKS['druid:feral'] = { ...LOOKS.druid, weapons: [] };
 // undead summons (minions)
 LOOKS.ghoul = { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: [], hide: [], tint: [0.2, 0.24, 0.16], tintAmt: 0.8, skinTint: [0.5, 0.6, 0.42], scale: 0.95, weapons: [], idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', noArmor: true, race: 'undead' };
 LOOKS.abomination = { ...LOOKS.ghoul, outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], skinTint: [0.55, 0.66, 0.46], scale: 1.4, race: 'orc' };
+// Beastmaster's silverback gorilla (generated model only; without it the pet falls back to the procedural jungle cat).
+// ape: a deep forward lean and bent knees on top of the human clips (see Character.update)
+LOOKS.gorilla = { outfit: 'Male_Peasant', head: null, hair: [], hide: [], tint: [0.2, 0.2, 0.2], tintAmt: 0.5, skinTint: [0.3, 0.3, 0.3], scale: 1.0, weapons: [], idle: 'Idle_Loop', walk: 'Jog_Fwd_Loop', noArmor: true, race: 'ape', hunch: 0.42, knee: -0.32 };
 
 // one-shot actions: kind -> per-class clip list (alternated) + whether it should use the full body
 const ACTIONS = {
-  attack: { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], paladin: ['TreeChopping_Loop'], 'paladin:protection': ['Sword_Regular_A', 'Sword_Regular_B'], 'shaman:enhancement': ['Sword_Regular_A', 'Sword_Regular_B'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'], hunter: ['Pistol_Shoot'], necromancer: ['Spell_Simple_Shoot'], druid: ['Spell_Simple_Shoot'], ghoul: ['Zombie_Scratch'], abomination: ['Zombie_Scratch'] },
+  attack: { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], paladin: ['TreeChopping_Loop'], 'paladin:protection': ['Sword_Regular_A', 'Sword_Regular_B'], 'shaman:enhancement': ['Sword_Regular_A', 'Sword_Regular_B'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'], hunter: ['Pistol_Shoot'], necromancer: ['Spell_Simple_Shoot'], druid: ['Spell_Simple_Shoot'], ghoul: ['Zombie_Scratch'], abomination: ['Zombie_Scratch'], gorilla: ['Punch_Jab', 'Punch_Cross'] },
   slash: { any: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Cross'] },
   stab: { any: ['Punch_Cross', 'Punch_Jab'] },
   finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'], berserker: ['Sword_Regular_C'], paladin: ['Sword_Regular_C'], 'paladin:protection': ['Sword_Attack'], 'berserker:executioner': ['Sword_Attack'], 'warrior:arms': ['Sword_Attack'] },
@@ -163,8 +167,12 @@ let LOADER = null;
 // whose model has not arrived yet is built the old way for that match.
 export async function preloadChampions(first = []) {
   if (!LOADER) return;
-  const keys = [...new Set([...first.filter(k => CHAMPION_MODELS[k]), ...Object.keys(CHAMPION_MODELS)])];
-  for (const k of keys) await loadChampion(LOADER, k);
+  // your own champion first, then the pet / shapeshift models (small, and needed the moment a fight starts), then the rest
+  const head = first.filter(k => CHAMPION_MODELS[k]);
+  for (const k of head) await loadChampion(LOADER, k);
+  await loadChampion(LOADER, 'gorilla');
+  await preloadCreatures(LOADER); // Druid Cat / Bear form models
+  for (const k of Object.keys(CHAMPION_MODELS)) if (!head.includes(k)) await loadChampion(LOADER, k);
 }
 export const loadChampionNow = key => (LOADER ? loadChampion(LOADER, key) : Promise.resolve(null));
 
@@ -376,7 +384,7 @@ export class Character {
     this.act = null; this.opacity = 1; this.time = Math.random() * 10; this.side = 0;
     this.root = new THREE.Group();
     // a generated model for this spec (champions.js) replaces body, race and code armor
-    let ck = null; try { ck = cls + ':' + validSpec(cls, spec); } catch (e) { ck = null; }
+    let ck = null; try { ck = CHAMPION_MODELS[cls] ? cls : cls + ':' + validSpec(cls, spec); } catch (e) { ck = null; } // pets (gorilla) are keyed by kind
     const champ = ck && championModel(ck);
     this.race = look.race || RACE_OF[cls] || 'human'; this.raceDef = RACES[this.race] || RACES.human;
     this.materials = [];
@@ -605,14 +613,18 @@ export class Character {
     const fk = st.tree ? 'tree' : (st.form || null);
     if (fk !== (this.formKey || null)) {
       this.formKey = fk;
-      if (this.formModel) { this.root.remove(this.formModel.root); this.formModel = null; }
-      if (fk) { this.formModel = makeFormModel(fk); this.root.add(this.formModel.root); }
+      if (this.formModel) { this.root.remove(this.formModel.root); this.formModel.dispose?.(); this.formModel = null; this.formMats = null; }
+      if (fk) {
+        this.formModel = makeFormModel(fk); this.root.add(this.formModel.root);
+        // the hit flash reaches the form too (only materials without a glow of their own: eyes keep theirs)
+        this.formMats = []; this.formModel.root.traverse(o => { const m = o.isMesh && o.material; if (m && m.emissive && !Array.isArray(m) && m.emissive.r + m.emissive.g + m.emissive.b === 0) this.formMats.push(m); });
+      }
       this.body.visible = !fk;
     }
     if (this.formModel) this.formModel.update(dt, (st.speed || 0) > 0.1, !!(this.cur && this.cur.t < 0.35 && this.cur.kind !== 'hit'), st);
     this.time += dt;
     // hit flash: a short warm glow on the body when a blow lands on this champion
-    if (this.flashK > 0) { this.flashK = Math.max(0, this.flashK - dt * 5.5); const k = this.flashK * this.flashK * 0.42; for (const m of this.flashMats || []) m.emissive.setRGB(k, k * 0.82, k * 0.62); }
+    if (this.flashK > 0) { this.flashK = Math.max(0, this.flashK - dt * 5.5); const k = this.flashK * this.flashK * 0.42; for (const m of this.flashMats || []) m.emissive.setRGB(k, k * 0.82, k * 0.62); for (const m of this.formMats || []) m.emissive.setRGB(k, k * 0.82, k * 0.62); }
     // hit-stop: the body holds for a few frames on the moment its weapon connects
     if (this.stopT > 0) { this.stopT -= dt; dt *= 0.06; }
     const speed = st.speed || 0;
@@ -688,13 +700,15 @@ export class Character {
     if (st.casting && b.hand_r) { this.addRot(b.spine_03, -0.05, 0, 0); }
     // orcs, trolls, undead and bull-folk lean into the world; the head stays level. Jungle trolls stoop the most:
     // a deep rounded back, head thrust forward and a loose crouch in the knees.
+    // The silverback gorilla (look.hunch / look.knee) leans further still, on bent knees.
     const troll = this.race === 'troll';
-    const hunch = this.raceDef.hunch * (troll ? 1.7 : 1);
+    const hunch = this.look.hunch ?? this.raceDef.hunch * (troll ? 1.7 : 1);
     if (hunch && !dying) { this.addRot(b.spine_02, hunch * 0.45, 0, 0); this.addRot(b.spine_03, hunch * 0.55, 0, 0); this.addRot(b.neck_01, -hunch * 0.6, 0, 0); this.addRot(b.Head, -hunch * 0.35, 0, 0); }
     if (this.baseY === undefined) this.baseY = this.body.position.y;
-    const crouch = troll && !dying && !st.air;
-    this.body.position.y = this.baseY - (crouch ? 0.2 * -TROLL_KNEE * this.look.scale : 0); // keep the feet on the ground
-    if (crouch) { const k = TROLL_KNEE; this.addRot(b.thigh_l, k, 0, 0); this.addRot(b.thigh_r, k, 0, 0); this.addRot(b.calf_l, -k * 1.6, 0, 0); this.addRot(b.calf_r, -k * 1.6, 0, 0); this.addRot(b.foot_l, k * 0.6, 0, 0); this.addRot(b.foot_r, k * 0.6, 0, 0); }
+    const knee = this.look.knee ?? (troll ? TROLL_KNEE : 0);
+    const crouch = knee && !dying && !st.air;
+    this.body.position.y = this.baseY - (crouch ? 0.2 * -knee * this.look.scale : 0); // keep the feet on the ground
+    if (crouch) { const k = knee; this.addRot(b.thigh_l, k, 0, 0); this.addRot(b.thigh_r, k, 0, 0); this.addRot(b.calf_l, -k * 1.6, 0, 0); this.addRot(b.calf_r, -k * 1.6, 0, 0); this.addRot(b.foot_l, k * 0.6, 0, 0); this.addRot(b.foot_r, k * 0.6, 0, 0); }
     // props
     const T = this.time;
     for (const w of Object.values(this.weapons)) {

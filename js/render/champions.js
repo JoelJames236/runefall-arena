@@ -36,6 +36,8 @@ export const CHAMPION_MODELS = {
   'necromancer:curser': 'necromancer_curser.glb',
   'druid:feral': 'druid_feral.glb',
   'druid:restoration': 'druid_restoration.glb',
+  // pets on the same humanoid rig (UE5 Mannequin) and UAL clips
+  gorilla: 'hunter_gorilla.glb', // Beastmaster's silverback gorilla
 };
 // Tripo normalises every model to the same height: races that should stand shorter / taller get a factor
 // (applied on top of the class look's scale)
