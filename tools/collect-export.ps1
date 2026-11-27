@@ -1,7 +1,7 @@
 # Pick up the newest Tripo Studio export from Downloads (Studio saves it as <uuid>.tmp), check it is a GLB, file it
-# as assets/models/thornwater/src/<Id>.glb and write the optimized game copy assets/models/thornwater/<Id>.glb.
-#   powershell -File tools/collect-export.ps1 -Id S05 [-Max 1024] [-Since 120]
-param([Parameter(Mandatory)][string]$Id, [int]$Max = 1024, [int]$Since = 180, [int]$Wait = 60)
+# as assets/models/<Set>/src/<Id>.glb and write the optimized game copy assets/models/<Set>/<Id>.glb.
+#   powershell -File tools/collect-export.ps1 -Id S05 [-Set thornwater] [-Max 1024] [-Since 120]
+param([Parameter(Mandatory)][string]$Id, [string]$Set = 'thornwater', [int]$Max = 1024, [int]$Since = 180, [int]$Wait = 60)
 $ErrorActionPreference = 'Stop'
 $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
 $root = Split-Path $PSScriptRoot -Parent
@@ -16,7 +16,9 @@ do {
 if (-not $f) { Write-Output "no export found for $Id"; exit 3 }
 $head = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($f.FullName)[0..3])
 if ($head -ne 'glTF') { Write-Output "$($f.Name) is not a GLB ($head)"; exit 4 }
-$src = Join-Path $root "assets\models\thornwater\src\$Id.glb"
+$srcDir = Join-Path $root "assets\models\$Set\src"
+if (-not (Test-Path $srcDir)) { New-Item -ItemType Directory -Force $srcDir | Out-Null }
+$src = Join-Path $srcDir "$Id.glb"
 Move-Item $f.FullName $src -Force
 Set-Location $root
-node tools/glb-optimize.mjs "assets/models/thornwater/src/$Id.glb" "assets/models/thornwater/$Id.glb" --max $Max
+node tools/glb-optimize.mjs "assets/models/$Set/src/$Id.glb" "assets/models/$Set/$Id.glb" --max $Max

@@ -1,0 +1,303 @@
+{
+ "_": "Tripo Studio queue for the Kingsreach Colosseum (docs/COLOSSEUM_REDESIGN.md). style + prompt + tail is the text prompt; tris = retopology target; rig = humanoid auto-rig after retopo (crowd); tpose = generate in T-pose; task = Studio task id; status: queued | generated | retopo | rigged | exported | optimized | in-game.",
+ "style": "Stylized hand-painted fantasy MMO game asset, chunky exaggerated proportions, bold readable silhouette, painterly textures, saturated colors.",
+ "tail": "Single object, centered, no ground, no text.",
+ "assets": [
+  {
+   "id": "G01",
+   "name": "Gold gatehouse",
+   "tris": 9000,
+   "status": "optimized",
+   "prompt": "A monumental arena gatehouse facade, flat back: a tall round stone archway of warm honey sandstone with a raised iron portcullis, framed by two square pilasters and a carved cornice, gilded bronze sun reliefs, a golden lion head keystone, two hanging gold and cream banners, a small crenellated balcony above the arch. Noble royal colosseum style.",
+   "task": "c997927a-0335-4fcf-a668-4c4f9d83a97a"
+  },
+  {
+   "id": "G02",
+   "name": "Crimson gatehouse",
+   "tris": 9000,
+   "status": "optimized",
+   "prompt": "A monumental arena gatehouse facade, flat back: a tall round archway of dark red-brown stone with a raised black iron spiked portcullis, framed by two square pilasters with iron studs, a carved horned skull keystone, two hanging crimson and black banners, a small crenellated balcony above the arch with iron spikes. Fierce colosseum style.",
+   "task": "b370da6f-c722-435b-a9de-0faaf1a9d0f7"
+  },
+  {
+   "id": "B01",
+   "name": "Royal box",
+   "tris": 12000,
+   "status": "optimized",
+   "prompt": "A royal viewing box for a colosseum, flat back: a raised marble balcony with a carved balustrade, a high-backed golden throne and two smaller chairs on a purple carpet, a domed purple velvet canopy with gold fringe held by four slender gilded columns, royal purple and gold banners hanging from the front, two small golden lion statues on the corners. Majestic medieval fantasy.",
+   "task": "340ec20b-4a9d-4441-bb50-ae2a5c457c66"
+  },
+  {
+   "id": "B02",
+   "name": "Herald box with gong",
+   "tris": 9000,
+   "status": "optimized",
+   "prompt": "A herald and judges box for a colosseum, flat back: a raised stone balcony with a wooden railing, a huge round bronze gong in a carved wooden frame, two long brass war horns on stands, a striped teal and cream cloth awning on wooden poles, a lectern with a scroll. Medieval fantasy tournament.",
+   "task": "891712da-4812-42f0-a16f-a18217dcfe97"
+  },
+  {
+   "id": "S01",
+   "name": "Statue warrior",
+   "tris": 8000,
+   "status": "optimized",
+   "prompt": "A heroic statue of an armored warrior knight standing tall, both hands resting on a huge greatsword planted point-down in front of him, flowing cape, horned helmet, carved from weathered bronze with green patina and gold highlights, standing on a small round base. Monument.",
+   "task": "cd1d78fb-8952-4401-985e-2722d7abd220"
+  },
+  {
+   "id": "S02",
+   "name": "Statue sorceress",
+   "tris": 8000,
+   "status": "optimized",
+   "prompt": "A heroic statue of a robed sorceress standing tall, one arm raising a long staff with a crystal orb overhead, the other hand holding an open spellbook, flowing robes and hood, carved from weathered bronze with green patina and gold highlights, standing on a small round base. Monument.",
+   "task": "53e619bd-d234-413d-abe6-1f5d6d123f0f"
+  },
+  {
+   "id": "S03",
+   "name": "Statue ranger",
+   "tris": 8000,
+   "status": "optimized",
+   "prompt": "A heroic statue of a hooded ranger standing tall, drawing a longbow with an arrow aimed upward, quiver on the back, long cloak, carved from weathered bronze with green patina and gold highlights, standing on a small round base. Monument.",
+   "task": "58fbb3c0-18ee-4c9f-b22a-d7108781ff1c"
+  },
+  {
+   "id": "S04",
+   "name": "Statue paladin",
+   "tris": 8000,
+   "status": "optimized",
+   "prompt": "A heroic statue of a paladin in plate armor standing tall, raising a big warhammer to the sky, a large round shield with a sun emblem on the other arm, carved from weathered bronze with green patina and gold highlights, standing on a small round base. Monument.",
+   "task": "e5fa235f-a661-47ce-9a77-ebcf1877de0d"
+  },
+  {
+   "id": "S05",
+   "name": "Griffin statue",
+   "tris": 6000,
+   "status": "optimized",
+   "prompt": "A proud sitting griffin statue with spread wings and raised head, carved from cream marble with gilded wing tips, on a square carved plinth. Monument.",
+   "task": "8032bf0f-51a2-4c3e-a036-c83f2726f539"
+  },
+  {
+   "id": "T01",
+   "name": "Rim watchtower",
+   "tris": 9000,
+   "status": "optimized",
+   "prompt": "A tall square medieval watchtower of warm honey sandstone blocks, very tall and slender, arrow slit windows, a wooden hoarding gallery near the top, crenellations, a steep terracotta tiled pyramid roof with a long crimson and gold pennant flag on a pole. Fortified.",
+   "task": "0517ce3e-0243-473e-b675-734b565b1269"
+  },
+  {
+   "id": "V01",
+   "name": "Vomitorium arch",
+   "tris": 4000,
+   "status": "optimized",
+   "prompt": "A stone tunnel entrance for arena stands: a squat round arch of warm sandstone blocks with a dark passage inside, a carved keystone, an iron torch bracket on each side, a short wooden railing on top. Flat back, chunky.",
+   "task": "174564ef-7284-4051-90ed-498bc447ef62"
+  },
+  {
+   "id": "P01",
+   "name": "Tall brazier",
+   "tris": 2500,
+   "status": "optimized",
+   "prompt": "A tall bronze fire brazier: a wide shallow bowl with glowing coals on top of a tall three-legged ornate stand with lion feet. No flames.",
+   "task": "c59d31f1-6941-4ad1-a4fe-f888c88fecc3"
+  },
+  {
+   "id": "P02",
+   "name": "Gladiator weapon rack",
+   "tris": 3000,
+   "status": "optimized",
+   "prompt": "A wooden arena weapon rack holding tridents, short swords, spears and a fishing net, with two round bronze shields leaning on it. Flat back.",
+   "task": "ef86dfcd-943e-42f1-9365-c50a6237d376"
+  },
+  {
+   "id": "P03",
+   "name": "Barrels and crates",
+   "tris": 3000,
+   "status": "optimized",
+   "prompt": "A small pile of supplies: two wooden barrels, a stack of wooden crates, a sack of sand and a coil of rope. Chunky.",
+   "task": "5d0a922e-e752-491b-b483-19f7979f6871"
+  },
+  {
+   "id": "P04",
+   "name": "Vendor stall",
+   "tris": 4000,
+   "status": "optimized",
+   "prompt": "A small medieval market stall with a striped crimson and cream cloth awning, a wooden counter with bread loaves, apples, roast drumsticks and clay jugs, a hanging lantern. Flat back.",
+   "task": "24daddee-4677-4a68-bdb4-02a16616a1e8"
+  },
+  {
+   "id": "P05",
+   "name": "Sand rake and buckets",
+   "tris": 2000,
+   "status": "optimized",
+   "prompt": "Arena tools leaning together: a wide wooden sand rake, a shovel, two wooden buckets of sand and a broom. Chunky.",
+   "task": "9b2c31e2-2552-47e2-90cf-691b7b6d94a0"
+  },
+  {
+   "id": "P06",
+   "name": "Banner pole",
+   "tris": 2000,
+   "status": "optimized",
+   "prompt": "A tall wooden banner pole with a gold finial and a long hanging cream cloth banner with a gold border. Thin and tall.",
+   "task": "db9bde95-3fe3-4081-99ef-b01fb92a2cd0"
+  },
+  {
+   "id": "O01",
+   "name": "Distant castle on hill",
+   "tris": 9000,
+   "status": "optimized",
+   "prompt": "A grand medieval castle on a rocky hill: tall round towers with blue slate cone roofs, a big keep, curtain walls, pennant flags, warm sandstone walls. Distant landmark.",
+   "task": "d9ae352e-fe3d-4983-86d0-7f9da76d4ba3"
+  },
+  {
+   "id": "O02",
+   "name": "Cathedral",
+   "tris": 9000,
+   "status": "optimized",
+   "prompt": "A gothic cathedral with two tall spired bell towers, a big rose window, flying buttresses, warm sandstone walls and blue slate roofs. Landmark.",
+   "task": "d6ddfc6f-9b2e-42db-9b20-a71b99502376"
+  },
+  {
+   "id": "O03",
+   "name": "Town houses A",
+   "tris": 5000,
+   "status": "optimized",
+   "prompt": "A row of three tall medieval town houses with half-timbered upper floors, cream plaster, dark timber beams, steep terracotta tiled roofs, chimneys, small windows and a flower box. Flat back.",
+   "task": "84ca8f73-9fdf-4b83-bfe7-c2c16731dab3"
+  },
+  {
+   "id": "O04",
+   "name": "Town houses B",
+   "tris": 5000,
+   "status": "optimized",
+   "prompt": "A cluster of medieval stone houses of warm honey sandstone with terracotta tiled roofs, a small round tower with a cone roof, wooden balconies and shutters. Chunky.",
+   "task": "f1f5cb68-93dd-4ccd-b762-084a872a6a8b"
+  },
+  {
+   "id": "O05",
+   "name": "Cypress trees",
+   "tris": 3000,
+   "status": "optimized",
+   "prompt": "A group of three tall slender dark green cypress trees of different heights. Painterly foliage.",
+   "task": "87e1dc84-95d5-4d35-9894-8bcda74747f2"
+  },
+  {
+   "id": "K01",
+   "name": "Spectator human man",
+   "tris": 6000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body medieval townsman spectator in a T-pose: a stocky man with a short beard, a brown hood, a green tunic with a rope belt, brown trousers and leather boots. Character, arms straight out.",
+   "task": "71bca210-951c-40a8-b494-74b54f0eaa8c"
+  },
+  {
+   "id": "K02",
+   "name": "Spectator human woman",
+   "tris": 6000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body medieval townswoman spectator in a T-pose: a woman with braided hair and a headscarf, a long blue dress with a white apron and a laced bodice. Character, arms straight out.",
+   "task": "4db448f7-6ab5-4b00-80a5-48bd7d71c351"
+  },
+  {
+   "id": "K03",
+   "name": "Spectator dwarf",
+   "tris": 6000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body stout dwarf spectator in a T-pose: a huge braided red beard, a leather cap, a mustard yellow tunic, a wide belt with a big buckle, heavy boots. Short and stocky character, arms straight out.",
+   "task": "bb3bfffc-0e29-4d72-a076-968616aa15a8"
+  },
+  {
+   "id": "K04",
+   "name": "Spectator orc",
+   "tris": 6000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body muscular green-skinned orc spectator in a T-pose: small tusks, a topknot, a sleeveless leather vest with fur trim, a red sash, baggy trousers and bracers. Character, arms straight out.",
+   "task": "ce605793-0ba0-460e-908e-6d0590388255"
+  },
+  {
+   "id": "K05",
+   "name": "Spectator elf",
+   "tris": 6000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body slender elf spectator in a T-pose: long pointed ears, long blond hair, an elegant teal and gold robe with a high collar. Graceful character, arms straight out.",
+   "task": "86687858-eaa1-43e0-8f6f-fac0fbd81e53"
+  },
+  {
+   "id": "K06",
+   "name": "Spectator troll",
+   "tris": 6000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body tall lanky blue-skinned jungle troll spectator in a T-pose: long tusks, a tall red mohawk, bone necklaces, a patterned loincloth and wraps. Character, arms straight out.",
+   "task": "a34364cc-f796-41f7-914a-ab8c15e11b95"
+  },
+  {
+   "id": "K07",
+   "name": "Spectator undead",
+   "tris": 6000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body gaunt undead spectator in a T-pose: pale grey skin, glowing yellow eyes, a tattered purple hooded cloak over a ragged tunic, bony hands. Character, arms straight out.",
+   "task": "b7f2c583-db6b-4c1d-8086-dc8063179860"
+  },
+  {
+   "id": "K08",
+   "name": "Spectator bull-folk",
+   "tris": 6000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body huge bull-headed humanoid spectator in a T-pose: brown fur, big curved horns, a nose ring, a beaded leather harness, a woven kilt with tribal patterns, hooves. Character, arms straight out.",
+   "task": "494d0f6f-e284-4e26-a3bf-d8713350e8b7"
+  },
+  {
+   "id": "K09",
+   "name": "Spectator noble lord",
+   "tris": 6000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body medieval noble lord in a T-pose: a neat beard, a velvet crimson doublet with gold embroidery, a fur-trimmed cape, a feathered cap, tall boots. Character, arms straight out.",
+   "task": "ce7bb98b-a903-4b98-bb1e-a7ff03e41bb0"
+  },
+  {
+   "id": "K10",
+   "name": "Spectator noble lady",
+   "tris": 6000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body medieval noble lady in a T-pose: an elegant long purple and gold gown with wide sleeves, a jeweled necklace, hair up with a small tiara. Character, arms straight out.",
+   "task": "f838bb3d-a966-4e76-9028-c92c51df6f80"
+  },
+  {
+   "id": "K11",
+   "name": "King",
+   "tris": 7000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body regal king in a T-pose: a golden crown, a grey beard, a long royal purple robe with an ermine fur collar, a gold chain, rings. Character, arms straight out.",
+   "task": "77106827-095c-4fc7-a07c-2d17369156ac"
+  },
+  {
+   "id": "K12",
+   "name": "Arena guard",
+   "tris": 7000,
+   "rig": true,
+   "tpose": true,
+   "status": "rigged+optimized",
+   "prompt": "A full-body arena guard in a T-pose: a steel kettle helmet, a chainmail shirt under a cream and gold tabard, leather gloves, boots. Soldier character, arms straight out, no weapon.",
+   "task": "65a80d26-49d9-439f-be69-3ccf7557906a"
+  }
+ ]
+}

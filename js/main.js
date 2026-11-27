@@ -26,8 +26,10 @@ const STEP = 1 / 60;
 const rand = a => a[Math.floor(Math.random() * a.length)];
 
 // ------------------------------------------------------------------ settings
-const DEFAULTS = { music: 55, sfx: 80, sens: 100, invert: false, quality: 'high', fps: false, arena: 'runefall', binds: DEFAULT_BINDS, mouseover: true };
+const DEFAULTS = { music: 55, sfx: 80, sens: 100, invert: false, quality: 'high', fps: false, arena: 'kingsreach', binds: DEFAULT_BINDS, mouseover: true };
 let settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('runefall-settings') || '{}') };
+// the Kingsreach Colosseum is the new default: players who were on the old default move over once
+if (!settings.krSeen) { if (settings.arena === 'runefall') settings.arena = 'kingsreach'; settings.krSeen = 1; localStorage.setItem('runefall-settings', JSON.stringify(settings)); }
 if (!Array.isArray(settings.binds) || settings.binds.length !== 6) settings.binds = DEFAULT_BINDS;
 settings.binds = settings.binds.map(l => (Array.isArray(l) ? l : []).filter(c => typeof c === 'string').slice(0, 2));
 function saveSettings() { localStorage.setItem('runefall-settings', JSON.stringify(settings)); applySettings(); }
@@ -745,7 +747,7 @@ function startMatch(roster, mode, myId, bg = false) {
 }
 
 // the arena picked on the main menu (never a battleground map)
-const menuArena = () => (ARENAS.some(a => a.id === settings.arena && !a.battleground) ? settings.arena : 'runefall');
+const menuArena = () => (ARENAS.some(a => a.id === settings.arena && !a.battleground) ? settings.arena : 'kingsreach');
 // where my champion starts (the camera starts behind it): the arena's two sides, or my team's great hall
 function startSpot(roster, myId, bg) {
   const me = roster[myId];

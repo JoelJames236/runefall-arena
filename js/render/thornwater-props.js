@@ -36,10 +36,11 @@ export const PALETTE = [
 const loader = new GLTFLoader();
 const cache = new Map();
 // a model as merged parts (one geometry per material, node transforms baked) plus its bounding box
-export function loadModel(id) {
+export function loadModel(id, dir = MODEL_DIR) {
   if (!id) return Promise.resolve(null);
-  if (!cache.has(id)) cache.set(id, new Promise(res => loader.load(MODEL_DIR + id + '.glb', g => res(prepModelAs(id, g.scene)), undefined, () => res(null))));
-  return cache.get(id);
+  const key = dir + id;
+  if (!cache.has(key)) cache.set(key, new Promise(res => loader.load(dir + id + '.glb', g => res(prepModelAs(id, g.scene)), undefined, () => res(null))));
+  return cache.get(key);
 }
 function prepModel(root) {
   root.updateMatrixWorld(true);

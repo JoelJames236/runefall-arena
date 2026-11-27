@@ -39,6 +39,9 @@ const makeHumanoidMinion = kind => { if (!heroesReady()) return null; try { cons
 import { PILLARS, BRIDGE, archY, floorAt, hasBuff, angleDiff, currentMap, pointBlocked } from '../sim/sim.js';
 // height for ground rings: on a sloped ramp lift them so the flat ring isn't half buried
 const PREVIEW_Z = 10; // class-screen model stands here (the arena centre is under the bridge)
+// default light and air; an arena overrides any of these with arena.env (see World.applyEnv)
+const SUN_POS = new THREE.Vector3(-40, 32, 34);
+const ENV_DEFAULT = { sunColor: 0xffc48a, sunIntensity: 2.9, sky: 0xa8b8e0, ground: 0x4a3828, hemi: 0.8, fog: 0x3e3a48, fogDensity: 0.0038, exposure: 1.16, skyRot: 2.3, skyIntensity: 0.7, envIntensity: 0.55 };
 const ringY = (x, z, y, off) => { const fl = floorAt(x, z, y); return fl + (fl > 0.01 && fl < BRIDGE.H - 0.01 ? 0.42 : off); };
 import { CLASSES, kit, kitOf } from '../data/classes.js';
 
@@ -97,9 +100,10 @@ export class World {
     this.loadSky();
 
     const st = JSON.parse(localStorage.getItem("runefall-settings") || "{}");
-    this.arenaId = new URLSearchParams(location.search).get('arena') || st.arena || 'runefall';
+    this.arenaId = new URLSearchParams(location.search).get('arena') || st.arena || 'kingsreach';
     this.arena = createArena(this.arenaId, this.scene, st.quality || "high");
-    this.arena.camera = this.camera;
+    this.arena.camera = this.camera; this.arena.renderer = this.renderer;
+    this.applyEnv();
     this.vfx = new VFX(this.scene);
 
     // post: MSAA HDR target → bloom → tone map/sRGB → colour grade + vignette
@@ -132,12 +136,33 @@ export class World {
     const old = this.arena;
     this.scene.remove(old.group);
     old.group.traverse(o => { o.geometry?.dispose(); });
+    old.dispose?.(); // render targets and other GPU resources an arena owns (the Kingsreach crowd atlas)
     this.arenaId = id;
     this.arena = createArena(id, this.scene, this.quality || 'high');
     this.arena.camera = this.camera; // maps that fade roofs out when the camera goes inside
+    this.arena.renderer = this.renderer; // arenas that bake textures at load (the Kingsreach crowd)
     // a wide map moves the sun's shadow box with the player (updateGame); an arena puts it back over the middle
-    if (!this.arena.wide) { this.sun.position.set(-40, 32, 34); this.sun.target.position.set(0, 0, 0); }
+    if (!this.arena.wide) { this.sun.position.copy(this.arena.env?.sun || SUN_POS); this.sun.target.position.set(0, 0, 0); }
+    this.applyEnv();
     return this.arena.ready;
+  }
+
+  // An arena can set its own light and air (arena.env, all optional): sun position / colour / intensity, hemisphere
+  // colours, fog colour and density, exposure, sky rotation and brightness. Anything it leaves out is the default.
+  applyEnv() {
+    const E = this.arena.env || {}, D = ENV_DEFAULT;
+    this.sun.position.copy(E.sun || SUN_POS);
+    this.sun.color.set(E.sunColor ?? D.sunColor); this.sun.intensity = E.sunIntensity ?? D.sunIntensity;
+    this.hemi.color.set(E.sky ?? D.sky); this.hemi.groundColor.set(E.ground ?? D.ground); this.hemi.intensity = E.hemi ?? D.hemi;
+    this.scene.fog.color.set(E.fog ?? D.fog); this.scene.fog.density = E.fogDensity ?? D.fogDensity;
+    this.renderer.toneMappingExposure = E.exposure ?? D.exposure;
+    this.skyRot = E.skyRot ?? D.skyRot; this.skyIntensity = E.skyIntensity ?? D.skyIntensity;
+    this.envIntensity = E.envIntensity ?? D.envIntensity;
+    if (this.scene.background?.isTexture) this.scene.environmentIntensity = this.envIntensity;
+    if (this.scene.background?.isTexture) {
+      this.scene.backgroundRotation.set(0, this.skyRot, 0); this.scene.environmentRotation.set(0, this.skyRot, 0);
+      this.scene.backgroundIntensity = this.skyIntensity;
+    }
   }
 
   // Dusk HDRI (Poly Haven, CC0): background sky + image-based lighting for every PBR material.
@@ -146,12 +171,12 @@ export class World {
       tex.mapping = THREE.EquirectangularReflectionMapping;
       const env = this.pmrem.fromEquirectangular(tex).texture;
       this.scene.environment = env;
-      this.scene.environmentIntensity = 0.55;
+      this.scene.environmentIntensity = this.envIntensity ?? 0.55;
       this.scene.background = tex;
-      this.scene.backgroundIntensity = 0.7;
+      this.scene.backgroundIntensity = this.skyIntensity ?? 0.7;
       this.scene.backgroundBlurriness = 0.02;
-      this.scene.backgroundRotation = new THREE.Euler(0, 2.3, 0);
-      this.scene.environmentRotation = new THREE.Euler(0, 2.3, 0);
+      this.scene.backgroundRotation = new THREE.Euler(0, this.skyRot ?? 2.3, 0);
+      this.scene.environmentRotation = new THREE.Euler(0, this.skyRot ?? 2.3, 0);
     }, undefined, e => console.warn('HDRI sky failed to load', e));
   }
 

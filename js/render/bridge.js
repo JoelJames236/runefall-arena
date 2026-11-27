@@ -42,7 +42,9 @@ function worldUV(g, size) {
 const boxAt = (w, h, d, x, y, z, rz = 0) => { const g = new THREE.BoxGeometry(w, h, d); if (rz) g.rotateZ(rz); g.translate(x, y, z); return g; };
 const extrudeZ = (pts, z0, depth) => { const s = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))); const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false, curveSegments: 24 }); g.translate(0, 0, z0); return g; };
 
-export function buildBridge() {
+// skin (optional): { stone, trim, planks, iron } materials that replace the default PBR sets — an arena can dress
+// the shared bridge in its own stone. The shape never changes (it is the collider).
+export function buildBridge(skin = null) {
   const { hx, hz, H, ramp, slab } = BRIDGE, end = hx + ramp, W = hz + 0.25, Hb = H - slab;
   const stone = [], trim = [], planks = [], iron = [];
 
@@ -108,10 +110,10 @@ export function buildBridge() {
     const g = mergeGeometries(geos.map(x => worldUV(x, size)), false);
     const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; group.add(m); return m;
   };
-  add(stone, pbr('medieval_blocks_02', { color: 0xd0c8bc }), 2.2);
-  add(trim, pbr('rock_wall_08', { color: 0xa09a92 }), 1.6);
-  add(planks, pbr('weathered_planks', { color: 0xc8b8a4 }), 1.4);
-  add(iron, pbr('rusty_metal_02', { metal: true, color: 0x8a8078 }), 0.8);
+  add(stone, skin?.stone || pbr('medieval_blocks_02', { color: 0xd0c8bc }), 2.2);
+  add(trim, skin?.trim || pbr('rock_wall_08', { color: 0xa09a92 }), 1.6);
+  add(planks, skin?.planks || pbr('weathered_planks', { color: 0xc8b8a4 }), 1.4);
+  add(iron, skin?.iron || pbr('rusty_metal_02', { metal: true, color: 0x8a8078 }), 0.8);
   for (const f of flames) group.add(f);
   // emblem discs on the keystones (team-neutral gold rune)
   const embl = new THREE.MeshStandardMaterial({ color: 0x8a6a2a, metalness: 1, roughness: 0.35, emissive: 0xffb040, emissiveIntensity: 0.25 });
