@@ -18,7 +18,7 @@ performance `07`, pipeline `08`. All numbers are starting points for the balance
 | Fantasy | a champion who died, was raised by rune magic and now fights for its own ends: cold, relentless, armoured; it drags enemies to it with spectral chains and turns death magic into frost (Frost) or into its own blood (Blood) |
 | Race | **Risen** — a human knight raised from death: pale blue-grey skin, gaunt but strong (not rotting like the Necromancer's Undead), long white hair, dark lips, **glowing eyes** (ice-blue for Frost, crimson for Blood). Upright, imposing posture, no hunch. New entry in `races.js`. Head joint 1.75 m (`02` §1.3) |
 | Role | melee; Frost: burst damage and control; Blood: tank who heals from what he deals and takes |
-| Resource | **Runic Power**, 0–100, starts at 10, +1/s in combat; builders and basic attacks fill it, spenders use it (works like rage) |
+| Resource | **Runic Power** (RP), 0–100, starts at 10, +1 per second; filled by builders, basic attacks (Frost +8, Blood +6) and, for Blood, by damage taken (1 RP per 5 % of max health lost). Unlike rage, dealing damage gives **no** RP (tested: with rage rules the class won 87 % / 78 %) |
 | Class colour | steel grey-blue `#a8b4c8` (no other class is grey); spec accents Frost `#7ad0ff`, Blood `#ff3a4a` |
 | Emblem | ♞ |
 | Shared abilities (both specs) | Grave Chains (pull), Rune Ward (spell shield) |
@@ -27,41 +27,45 @@ performance `07`, pipeline `08`. All numbers are starting points for the balance
 
 ## 2. The specs
 
+All numbers below are **balance-tested** (§8): a prototype of the kit ran in the balance lab against all 20 specs.
+
 ### 2.1 Frost (spec 0, default) — damage
 
 | Stat | Value | Compare |
 |---|---|---|
-| HP / defense / speed | 1300 / 0.12 / 6.9 | Warrior Arms 1350, Fury 1180 |
-| Basic attack | **Frostbound Strikes**: alternating runeblade hits, 34 damage every 1.6 s, melee 4.5, physical, +8 Runic Power | Fury 34 / 1.6 s |
+| HP / defense / speed | 1330 / 0.135 / 6.9 | Warrior Arms 1350, Fury 1180 |
+| Basic attack | **Frostbound Strikes**: alternating runeblade hits, 34 damage every 1.6 s, melee 4.5, physical, +8 RP | Fury 34 / 1.6 s |
 | Rating | health 4 · damage 5 · mobility 3 · defense 3 | |
-| Passive | **Killing Cold**: every 4th basic attack makes the next Glacier Cleave free and a certain critical hit | |
+| Passive | **Killing Cold**: every **5th** basic attack makes the next Glacier Cleave free and a certain critical hit | |
+| Tuning factor | duel 1.00 · team **0.96** (`tuning.js`) | |
 
 | Slot | Id | Name | Cost / cd / gcd / cast | Range | Effect |
 |---|---|---|---|---|---|
-| 0 | `rime_strike` | Rime Strike | 0 RP / 4.5 s / yes / instant | melee | 60 frost damage, applies **Chill** (20 % slow, 3 s), **+25 RP** |
-| 1 | `glacier_cleave` | Glacier Cleave | 40 RP / 0 / yes / instant | melee | 115 frost damage, +25 % critical chance |
-| 2 | `grave_chains` | Grave Chains | 0 / 20 s / no / instant | 5–25 yd | a spectral chain (projectile, 50 m/s) **pulls** the target to 2.5 m in front of the knight over 0.35 s, interrupts casting, then Chill 2 s. Shared |
-| 3 | `winters_howl` | Winter's Howl | 20 RP / 10 s / yes / instant | cone 10 yd, 90° | 50 frost damage and 40 % slow for 3 s to enemies in the cone |
-| 4 | `rune_ward` | Rune Ward | 0 / 40 s / no / instant, usable while stunned | self | absorbs up to 400 **non-physical** damage for 5 s; every 100 absorbed gives 10 RP. Shared |
-| 5 | `heart_of_winter` | Heart of Winter (signature) | 0 / 50 s / no / instant | self | 10 s: +25 % damage, every hit applies Chill, basic attacks 20 % faster, immune to slows and roots (cleanses them) |
+| 0 | `rime_strike` | Rime Strike | 0 RP / 4.5 s / yes / instant | melee | 55 frost damage, applies **Chill** (20 % slow, 3 s), **+25 RP** |
+| 1 | `glacier_cleave` | Glacier Cleave | 40 RP / 0 / yes / instant | melee | 100 frost damage, +25 % critical chance |
+| 2 | `grave_chains` | **Grave Chains** (the pull) | 0 / 20 s / no / instant | 5–25 yd | pulls the enemy to the knight — exact rules in §2.4. Shared |
+| 3 | `winters_howl` | Winter's Howl | 20 RP / 10 s / yes / instant | cone 10 yd, 90° | 40 frost damage and 40 % slow for 3 s to every enemy in the cone |
+| 4 | `rune_ward` | Rune Ward | 0 / 40 s / no / instant, usable while stunned | self | absorbs up to 400 **non-physical** damage for 5 s; every 10 absorbed gives 1 RP. Shared |
+| 5 | `heart_of_winter` | Heart of Winter (signature) | 0 / 50 s / no / instant | self | 10 s: +20 % damage, basic attacks 30 % faster, every hit applies Chill, immune to slows and roots (cleanses them) |
 
 ### 2.2 Blood (spec 1) — tank
 
 | Stat | Value | Compare |
 |---|---|---|
-| HP / defense / speed | 1450 / 0.18 / 6.7 | Paladin Protection 1420, Warrior Protection 1380 / 0.15 |
-| Basic attack | **Sanguine Cleave**: two-handed runeblade, 46 damage every 2.1 s, melee 4.5, physical, +10 RP | Arms 45 / 2.0 s |
+| HP / defense / speed | 1400 / 0.15 / 6.7 | Paladin Protection 1420, Warrior Protection 1380 / 0.15 |
+| Basic attack | **Sanguine Cleave**: two-handed runeblade, 38 damage every 2.1 s, melee 4.5, physical, +6 RP | Arms 45 / 2.0 s |
 | Rating | health 5 · damage 2 · mobility 2 · defense 5 | |
-| Passive | **Blood Bond**: 12 % of all damage you deal heals you; taking damage generates Runic Power (1 RP per 2 % of max health lost) | |
+| Passive | **Blood Bond**: 4 % of all damage you deal heals you; taking damage generates RP (1 RP per 5 % of max health lost) | |
+| Tuning factor | duel 1.00 · team **1.15** (`tuning.js`; the top of today's range, see §8) | |
 
 | Slot | Id | Name | Cost / cd / gcd / cast | Range | Effect |
 |---|---|---|---|---|---|
-| 0 | `crimson_strike` | Crimson Strike | 0 RP / 4 s / yes / instant | melee | 55 damage and **Blood Plague** (36 shadow damage over 6 s), **+25 RP** |
-| 1 | `reaping_strike` | Reaping Strike | 40 RP / 0 / yes / instant | melee | 80 damage; heals the knight for **25 % of the damage taken in the last 5 s** (at least 6 % of max health) |
-| 2 | `grave_chains` | Grave Chains | as Frost (the chain is blood-red) | | Shared |
-| 3 | `sanguine_pulse` | Sanguine Pulse | 15 RP / 8 s / yes / instant | 8 yd around self | 40 shadow damage, spreads Blood Plague, **taunts** every enemy hit for 3 s |
+| 0 | `crimson_strike` | Crimson Strike | 0 RP / 4 s / yes / instant | melee | 42 damage and **Blood Plague** (36 shadow damage over 6 s), **+20 RP** |
+| 1 | `reaping_strike` | Reaping Strike | 40 RP / 0 / yes / instant | melee | 55 damage; heals the knight for **8 % of the damage taken in the last 5 s** (at least 3 % of max health) |
+| 2 | `grave_chains` | **Grave Chains** (the pull) | as Frost (§2.4; the chain is blood-red) | | Shared |
+| 3 | `sanguine_pulse` | Sanguine Pulse | 15 RP / 8 s / yes / instant | 8 yd around self | 30 shadow damage, spreads Blood Plague, **taunts** every enemy hit for 3 s |
 | 4 | `rune_ward` | Rune Ward | as Frost | | Shared |
-| 5 | `sanguine_covenant` | Sanguine Covenant (signature) | 0 / 60 s / no / instant, usable while stunned | self | 8 s: +25 % max health (healed for the gained amount), +30 % healing received, Reaping Strike costs no RP |
+| 5 | `sanguine_covenant` | Sanguine Covenant (signature) | 0 / 60 s / no / instant, usable while stunned | self | 8 s: +15 % max health (healed for the gained amount), +30 % healing received, Reaping Strike costs no RP |
 
 **Counts**: 10 unique abilities (Frost 6, Blood 4 + 2 shared) and 2 basic attacks.
 
@@ -69,13 +73,27 @@ performance `07`, pipeline `08`. All numbers are starting points for the balance
 
 | Mechanic | Used by | Notes |
 |---|---|---|
-| `runic` resource | both | like rage; HUD bar colour per spec (Frost `#7ad0ff`, Blood `#ff3a4a`) |
-| **pull** a target toward a point over a duration (moves the victim like a charge, respects walls / pillars / floor, interrupts, ends at 2.5 m) | Grave Chains | new; emits `pull` / `pullEnd` events for the animation and the chain effect |
+| `runic` resource | both | regen +1/s; **no** gain from damage dealt; Blood gains from damage taken; HUD bar colour per spec (Frost `#7ad0ff`, Blood `#ff3a4a`) |
+| **pull** | Grave Chains | §2.4; the prototype used the sim's existing `dashDir` on the **target** (it already moves a fighter with wall, pillar and floor collision and locks its input), so no new movement code is needed — only a `pull` / `pullEnd` event for the animation and the chain effect |
 | absorb **filtered by school** (ignores `phys`) | Rune Ward | new option on the absorb buff |
 | **damage taken in the last 5 s** per fighter | Reaping Strike | a small ring buffer |
+| heals through `sim.heal` | Blood Bond, Reaping Strike | so tuning, crits and dampening apply like every other heal |
 | Chill (a named slow), cone damage, taunt, DoTs | several | existing building blocks (slow, Ground Breaker's cone, Shield Slam's taunt, `addDot`) |
-| bot logic | both | a kit script for `ai.js`: Frost — pull casters, Howl when 2+ in the cone, Heart of Winter on a low target; Blood — Pulse to taunt, Reaping Strike after burst taken, Covenant under 35 % |
-| balance | both | add the specs to `tuning.js`, run the 1v1 matrix and the 2v2 auto-tune (`docs/BALANCE.md`) |
+| bot logic | both | a kit script for `ai.js` (as prototyped, §8): Frost — pull anyone > 7 yd away or casting, Heart of Winter on a target under 60 %, Howl when the target isn't slowed or 2+ are in the cone, the free Cleave first; Blood — Covenant under 35 %, Rune Ward against casters under 60 %, **pull an enemy that is hitting the partner** (peel), Pulse to taunt, Reaping Strike under 70 % health |
+| balance | both | add the specs and factors to `tuning.js`, re-run the 1v1 matrix and the 2v2 auto-tune with the real code (`docs/BALANCE.md`) |
+
+### 2.4 Grave Chains — the pull, exactly
+
+The class's signature tool, in **both specs** (the role model's "grip"-style pull, with our own name and look).
+
+| Rule | Value |
+|---|---|
+| Use | instant, off the global cooldown, cooldown **20 s**, range **5–25 yd**, needs line of sight |
+| Travel | a chain projectile at 50 m/s; **cover blocks it** (a target that breaks line of sight while it flies is not pulled — the same rule as Arcane Comet) |
+| Effect | the target is **pulled to 2.5 m in front of the knight over 0.35 s** (it can't act during the pull), its **cast is interrupted**, then Chill (20 % slow, 2 s). No damage |
+| Path | the target slides along the ground: walls, pillars and the bridge edge stop it where it hits them |
+| Immune | Divine Shield, crowd-control immunity (Berserk Instinct …), Steel Tempest / Bladestorm, battleground spawn protection — the chain shatters ("Immune") |
+| Value (tested) | without the pull Frost wins only **32 %** and Blood **43 %** of 1v1 duels; with it **50 % / 51 %** — almost all of the gain is against casters and ranged specs. The class is balanced *with* the pull: don't shorten its cooldown or add damage to it without a re-run |
 
 ---
 
@@ -188,3 +206,42 @@ Frost uses the existing **Frost** school (`06` §3).
 
 Order: after phase 3 (champions) and phase 4 (`dw` and `th` sets) of `08` §3, because it reuses those sets.
 Implementation (classes, sim mechanics, AI, HUD, balance) is its own step after the models.
+
+---
+
+## 8. Balance check (2026-11-27)
+
+**Method**: the kit above was prototyped in the balance lab page (in memory only, nothing in the repo changed):
+both specs as class data, the stand-ins for the new mechanics from §2.3, the bot logic from §2.3, hard bots, and the
+game's own Sim and AI for everyone else. Same procedure as `docs/BALANCE.md`.
+
+| Check | Frost | Blood | Today's band (20 specs) |
+|---|---|---|---|
+| 1v1 — every spec, 40 rounds per pairing (800 rounds per spec) | **50.5 %** | **51.4 %** | 46.4–53.0 % |
+| 2v2 — random partner vs 2 random specs | **53.3 %** (800 games) | **50.9 %** (1,000 games) | 47.5–54.6 % |
+| Damage per second on a dummy (40 s) | 73 | 50 | Crusader 63, Enhancement 63, Executioner 50, Prot Warrior 43 |
+| Survival vs a fixed 85 phys + 35 arcane per second | 12.5 s | 28 s | Fury 11.8, Arms 14.8, Prot Paladin 23.5 |
+| 1v1 round length (median) | 18.7 s | 33.1 s | — |
+| Without Grave Chains (1v1) | 32.3 % | 42.7 % | — |
+
+**Counters (1v1)** — as with every spec in this lab, single pairings end near 0 % or 100 % with hard bots:
+- Frost beats casters and ranged specs it can drag in (Discipline, Shadow, Elemental, Summoner 100 %, Fire 90 %), and
+  Arms 89 %, Protection Warrior 88 %, Beastmaster 80 %; it loses to melee that out-trades it (Crusader, Feral 0 %,
+  Executioner 3 %, Restoration 3 %, Protection Paladin 5 %, Fury 8 %).
+- Blood beats melee (Fury, Arms, Protection Warrior, Subtlety, Discipline 100 %, Assassination 95 %, Crusader 90 %)
+  and loses to kiting damage-over-time casters and pets (Frost Mage, Shadow, Curser, Restoration, Enhancement,
+  Beastmaster 0 %, Sharpshooter 3 %) — the same profile as Protection Paladin.
+
+**How it got here** (first draft → tested):
+
+| Change | Why |
+|---|---|
+| Runic Power no longer comes from damage dealt (rage rules) | first draft: **87 % / 78 %** in 1v1 — Glacier Cleave did most of Frost's damage, Reaping Strike was cast every 2.3 s and healed ~900 per fight |
+| Frost: Cleave 115 → 100, Rime 60 → 55, Killing Cold every 4th → 5th hit, Heart +25 → +20 %, Howl 50 → 40, HP 1300 → 1330, defense 0.12 → 0.135 | damage per second 86 → 73 (peers 62–65); it then lost every melee duel, so it got back a little health and armour |
+| Blood: Reaping heal 25 → 8 % of damage taken (min 6 → 3 %), Bond 12 → 4 %, RP per hit 10 → 6, Crimson RP 25 → 20, damage −15–30 %, Covenant +25 → +15 % health, HP 1450 → 1400, defense 0.18 → 0.15 | it won melee duels with 44–74 % health left and survived the bench twice as long as Protection Paladin |
+| Team factors Frost 0.96, Blood 1.15 | 2v2 was 56–58 % / 39–40 % with the 1v1-balanced numbers (the pull and the cone are stronger in team fights; Blood has no partner protection). Blood's bot peels with the pull |
+
+**Watch list**: Blood's team factor (1.15) is at the top of today's range — if it needs more, give Blood partner
+utility (for example Rune Ward castable on the partner) instead of raising the factor. Re-run the whole lab once the
+class is implemented for real: the prototype's stand-ins (pull, filtered absorb, damage window) are close to the
+spec but not the final code.
