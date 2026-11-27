@@ -298,7 +298,7 @@ Column **Clip** refers to `05-animations.md`. "→" = travels to the target. Siz
 | **Claws** (auto, cat) | `ca_atk_1/2` | — | melee | 3 parallel **claw streaks** (atlas) + `melee_hit` | — |
 | **Rake** | `ca_rake` | — | melee | claw streaks + blood | `dot_bleed` (today fire) |
 | **Shred** | `ca_shred` | — | 2 hits | 2 claw-streak sets | — |
-| **Ferocious Bite** | `ca_bite` | — | melee | blood burst, bigger with combo points | — |
+| **Ferocious Bite** | `ca_bite` | — | melee | two puncture flashes at `saber_tip_l/r` + blood burst, bigger with combo points | — |
 | **Wild Pounce** (leap, stun) | `ca_pounce_*` / `be_pounce_*` | — | leaf + dust trail | **landing** dust ring + beast shockwave (today nothing) | `stun` |
 | **Bear Form / Cat Form** | form swap | — | — | shapeshift burst: fur/leaf particles + green flash 0.25 s, covers the swap | — |
 | **Berserk Instinct** (CC immune) | `ca_roar` / `be_roar` | roar ring | — | — | eyes blaze amber, red-amber steam off the back (today nothing) |

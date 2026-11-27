@@ -298,12 +298,12 @@ Colours are `main / second / accent / glow`. "Silhouette" = what must read from 
 | | |
 |---|---|
 | Body | massive bull-folk: bovine head with curved horns, nose ring, hooves, tail |
-| Armour | fur and leather harness, **great-cat pelt over the shoulders**, claw gauntlets (3 blades each — the claws are part of the model), fang belt, leather kilt |
-| Colours | `#6a4a2a` fur / `#2a2a2a` cat pelt / `#c08a3a` / glow `#8ad86a` |
+| Armour | fur and leather harness, **a striped saber-toothed tiger pelt over the shoulders with the tiger's skull and sabers on the left shoulder** (ties the champion to its Cat form, `04` §3.5), claw gauntlets (3 blades each — the claws are part of the model), fang belt, leather kilt |
+| Colours | `#6a4a2a` fur / `#c08a3a` tawny pelt with `#3a2414` stripes / `#f0e2c4` saber ivory / glow `#8ad86a` |
 | Glows | druidic tattoos on the arms |
-| Silhouette | horns + cat pelt |
+| Silhouette | horns + saber-tooth skull on the shoulder |
 | Items | none (claws modelled) · set `dw` idle with `claw` hands; in play the Cat / Bear forms (`04`) |
-| Prompt core | "massive bull-headed humanoid druid with curved horns, a nose ring and hooves, brown fur, a black great-cat pelt draped over the shoulders, leather harness, gauntlets with three claw blades each, a belt of fangs, leather kilt, glowing green tattoos on the arms" |
+| Prompt core | "massive bull-headed humanoid druid with curved horns, a nose ring and hooves, brown fur, a striped tawny saber-toothed tiger pelt draped over the shoulders with the tiger's skull and long sabers on the left shoulder, leather harness, gauntlets with three claw blades each, a belt of fangs, leather kilt, glowing green tattoos on the arms" |
 
 ### Druid — Restoration (Bull-folk) · `druid_restoration`
 

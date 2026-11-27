@@ -50,7 +50,7 @@
 | Shaman | `#4ad8ff` | Elemental fur grey + copper | Enhancement steel + white pelt |
 | Hunter | `#a8d84a` | Beastmaster leather + red mohawk | Sharpshooter coat brown |
 | Necromancer | `#7aff6a` | Summoner rot green `#2a3a24` | Curser violet `#3a2050` |
-| Druid | `#e8a05a` | Feral fur + black pelt | Restoration moss + blossom |
+| Druid | `#e8a05a` | Feral fur + striped saber-tooth pelt (Cat form: tawny saber-toothed tiger) | Restoration moss + blossom |
 
 ## 5. Fit with the arenas
 

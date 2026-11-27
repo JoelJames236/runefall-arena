@@ -56,7 +56,7 @@ and **rejects** rigs that don't meet the minimum:
 | `qd_neck_1`, `qd_neck_2`, `qd_head` | ≥ 2 | |
 | `qd_jaw` | wanted | Tripo doesn't make one: models are sculpted with the mouth **half open in a snarl**; a jaw bone is added only if the rig is ever done by hand |
 | per leg `qd_<fl/fr/bl/br>_1` (shoulder / hip), `_2` (elbow / knee), `_3` (wrist / hock), `_4` (paw) | **≥ 3 per leg** | a one-bone leg (today's bear) → re-rig (20 credits, worth one retry) |
-| `qd_tail_1..n` | cat, wolf ≥ 4 | tail tip must carry weight |
+| `qd_tail_1..n` | wolf ≥ 4, saber-toothed cat ≥ 2 (short tail) | tail tip must carry weight |
 
 Rest pose: standing square, all four feet flat, head straight forward (no "looking over the shoulder", today's cat
 needs `HEAD_FIX`), mouth half open, facing +Z after the fix-up.
@@ -175,35 +175,41 @@ which one produced the motion.
 
 **9 clips.**
 
-### 3.5 Cat form — Druid Feral (default form)
+### 3.5 Cat form — Druid Feral (default form): saber-toothed tiger
 
-WoW's druid cat is a big, sleek predator, clearly larger than a real panther. Ours: a **great black panther with
-bull-folk ornaments** (so it reads as the druid): carved horn cuffs on the forelegs, a leather band with totems
-around the neck, faint green glowing druidic tattoo-stripes, green eyes.
+WoW's druid cat is a big predator, clearly larger than a real big cat. Ours is a **saber-toothed tiger**:
+heavier and more powerful than a panther, built to pin and stab rather than chase. It carries **bull-folk druid
+ornaments** so it reads as the druid: carved horn cuffs on the forelegs, a leather band with small wooden totems
+around the neck, faint green glowing druidic tattoo lines that follow some of its stripes, green eyes.
 
 | | |
 |---|---|
-| Size | **2.0 m** long (body), 0.95 m at the shoulder (today ≈1.33 m long) |
-| Model | Tripo four-legged, retopo **9,000 tris**, 1 material 1024² |
-| Rig | standard four-legged, tail ≥ 5 bones |
+| Look | massive, muscular saber-toothed tiger: thick forelegs and heavy shoulders, a short neck, a deep chest, a lower back that slopes to the hips, a **short thick bobbed tail**; **two long ivory saber fangs**, 0.28 m, reaching below the chin, with a thin gold band and a carved rune near each root; tawny-amber coat with dark brown tiger stripes, cream belly, throat and muzzle |
+| Colours | `#c08a3a` tawny / `#3a2414` stripes / `#f0e2c4` cream / glow `#8ad86a` |
+| Glows | eyes, tattoo lines (≤ 3 % of the texture) |
+| Size | **2.2 m** long (body, without the tail), 1.05 m at the shoulder (today ≈1.33 m long) |
+| Model | Tripo four-legged, retopo **9,000 tris**, 1 material 1024²; the sabers are part of the head mesh, weighted 100 % to `qd_head` so they never bend; mouth sculpted **half open in a snarl** so both sabers show their full length (no jaw bone, `04` §2.1) |
+| Rig | standard four-legged, **tail ≥ 2 bones** (short tail), every leg ≥ 3 bones |
+| Sockets | `mouth`, `saber_tip_l` / `saber_tip_r` (on `qd_head`, at the fang tips: bite impacts), `head_top`, `eyes`, `paw_*`, `tail_tip`, `chest`, `base`, `overhead` |
 | Hitbox | the champion's (unchanged) |
+| Prompt core | "massive muscular saber-toothed tiger with two very long ivory saber fangs reaching below the chin, thick forelegs and heavy shoulders, deep chest, short thick bobbed tail, tawny amber coat with dark brown tiger stripes, cream belly and muzzle, carved horn cuffs on the forelegs, a leather neck band with small wooden totems, faint glowing green tattoo lines along the stripes, green eyes, mouth half open in a snarl, standing square on all four legs, head straight forward" |
 
 | Clip | Len | Markers | Motion | Used by |
 |---|---|---|---|---|
-| `ca_shift_in` | 0.40 | — | lands on all fours out of a leap, tail lashing | Cat Form (and match start) |
-| `ca_idle` | 2.40 loop | — | low prowling stance, tail flicking, ears turning | idle |
-| `ca_walk` | 1.00 loop | stride 1.8 | prowl | speed < 0.5 |
-| `ca_run` | 0.50 loop | stride 4.0 | bounding gallop | moving |
-| `ca_back` | 0.90 loop | stride 1.4 | backing off, low | moving backwards |
+| `ca_shift_in` | 0.40 | — | lands heavily on all fours out of a leap, snarls with the sabers bared | Cat Form (and match start) |
+| `ca_idle` | 2.40 loop | — | low stalking stance, shoulders rolling, short tail twitching, ears turning, head low | idle |
+| `ca_walk` | 1.00 loop | stride 1.8 | heavy prowl, shoulder blades rolling | speed < 0.5 |
+| `ca_run` | 0.50 loop | stride 4.0 | powerful bounding gallop | moving |
+| `ca_back` | 0.90 loop | stride 1.4 | backing off low, head and sabers toward the enemy | moving backwards |
 | `ca_strafe_l` / `ca_strafe_r` | 0.70 loop | stride 2.0 | side-hop trot keeping the head on the enemy | strafing |
 | `ca_atk_1` / `ca_atk_2` | 0.55 | strike 0.16 | right / left forepaw swipe | Claws (basic attack) |
 | `ca_rake` | 0.60 | strike 0.18 | both claws raking down the target | Rake |
 | `ca_shred` | 0.65 | strike 0.16, hit2 0.32 | rapid two-paw shredding | Shred |
-| `ca_bite` | 0.70 | strike 0.22 | lunging bite, head twist, rip | Ferocious Bite |
-| `ca_pounce_start` / `ca_pounce_air` / `ca_pounce_land` | 0.12 / 0.40 loop / 0.40 | launch 0.04; land strike 0.05 | spring, stretched in the air with claws out, land pinning | Wild Pounce |
-| `ca_roar` | 0.90 | release 0.30 | rears its head, roars | Berserk Instinct |
-| `ca_hit` | 0.30 | — | flinch, hiss | damage taken |
-| `ca_stun` | 1.20 loop | — | dazed, swaying | stunned |
+| `ca_bite` | 0.70 | strike 0.24 | rears the head back, then drives both sabers down into the target in a stabbing bite and wrenches the head sideways | Ferocious Bite |
+| `ca_pounce_start` / `ca_pounce_air` / `ca_pounce_land` | 0.12 / 0.40 loop / 0.45 | launch 0.04; land strike 0.05 | spring, stretched in the air with the claws out; lands pinning the target with both forepaws, sabers stabbing down | Wild Pounce |
+| `ca_roar` | 0.90 | release 0.30 | rears its head and roars, sabers bared | Berserk Instinct |
+| `ca_hit` | 0.30 | — | flinch, snarl | damage taken |
+| `ca_stun` | 1.20 loop | — | dazed, swaying, head low | stunned |
 | `ca_death` | 1.60 | — | collapses onto its side; then the humanoid druid's corpse replaces it with a burst of leaves | death |
 
 **19 clips** (`ca_atk_1/2` and `ca_strafe_l/r` count as two each, the pounce as three).
@@ -327,7 +333,7 @@ The cat / bear / tree models also get the champion's material treatment: rim lig
 | Ghoul | 7,000 | ~80 | 1024² | 9 | 1 + shadow |
 | Abomination | 10,000 | ~80 | 1024² | 8 | 1 + shadow |
 | Spirit wolf | 6,000 | ≤ 40 | 512² | 9 | 1 (no shadow: spectral) |
-| Cat form | 9,000 | ≤ 40 | 1024² | 19 | 1 + shadow |
+| Cat form (saber-toothed tiger) | 9,000 | ≤ 40 | 1024² | 19 | 1 + shadow |
 | Bear form | 10,000 | ≤ 40 | 1024² | 18 | 1 + shadow |
 | Tree of Life | 10,000 | ~80 | 1024² | 10 | 1 + shadow |
 | Fire Spirit | 400 | 0 | VFX atlas | — (code) | in the VFX draw |
