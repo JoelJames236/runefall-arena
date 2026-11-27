@@ -154,16 +154,18 @@ which one produced the motion.
 
 | | |
 |---|---|
-| Look | large ghost-wolf made of storm-blue spirit light: translucent body with a bright fresnel rim, white glowing eyes, lightning crackling along the spine and paws, a wispy tail that trails light |
-| Size | 1.05 m at the shoulder, 1.9 m long |
-| Model | Tripo four-legged, retopo **6,000 tris**, 512² texture (most of the look is the shader) |
+| Direction | the classic **ghost-wolf of the role model's shaman**: a large, lean wolf made entirely of pale blue spirit light, clearly see-through, glowing brightest at its outline, with ragged smoke-like fur edges and spirit mist trailing from its paws and tail. Calm, ethereal, no armour, no lightning, no runes. Archetype only — our own model and texture |
+| Look | big timber-wolf build (long legs, deep chest, thick neck ruff, long muzzle, tall ears); fur sculpted as large windswept tufts so the silhouette reads "ragged spirit"; white-blue glowing eyes with no pupils; body colour fading from pale ice-blue `#bfe8ff` on the back to deep spirit blue `#2a6ac8` on the legs and belly |
+| Size | 1.10 m at the shoulder, 2.0 m long — larger than a real wolf |
+| Model | Tripo four-legged, retopo **6,000 tris**, 512² texture (most of the look is the shader); prompt core: "large lean spectral spirit wolf made of pale blue light, long legs, deep chest, thick neck ruff, long muzzle, tall ears, fur sculpted as large ragged windswept tufts, glowing white eyes, mouth half open, standing square on all four legs, head straight forward" |
 | Rig | standard four-legged (§2.1), tail ≥ 4 bones |
-| Material | **spectral**: alpha-hashed transparency (one draw, no sorting), opacity 0.6, cyan fresnel rim (power 2.5, intensity 2), emissive mask = eyes + spine; depth write on |
+| Material | **spectral**: alpha-hashed transparency (one draw, no sorting), body opacity **0.45** (the arena floor shows through), fresnel rim pale blue-white `#dff4ff` (power 2.0, intensity 2.5) so the outline glows strongest; a slow scrolling noise from the VFX atlas modulates the opacity (0.35–0.55) so it shimmers like mist; eyes on the emissive mask at full white; depth write on; no shadow |
+| Effects | spirit mist: 10 alpha particles/s from `paw_*` and `tail_tip` (pale blue, rising, 0.6 s); faint glowing pawprints on the floor (decals, 1.2 s); a soft blue light-glow sprite at `chest` |
 | Sockets | `mouth`, `eyes`, `paw_*`, `tail_tip`, `chest`, `base`, `overhead` |
 
 | Clip | Len | Markers | Motion | Plays on |
 |---|---|---|---|---|
-| `wo_spawn` | 0.80 | — | leaps out of a lightning strike, lands, shakes its fur | summon |
+| `wo_spawn` | 0.80 | — | forms out of a swirl of blue spirit mist beside the shaman, lands, shakes its fur | summon |
 | `wo_idle` | 2.00 loop | — | low stance, hackles raised, panting | idle |
 | `wo_trot` | 0.80 loop | stride 2.4 | trot | speed < 0.6 |
 | `wo_run` | 0.55 loop | stride 4.4 | gallop | moving (10 m/s) |
@@ -171,7 +173,7 @@ which one produced the motion.
 | `wo_atk_2` | 0.60 | strike 0.20 | snapping bite at the leg, head twist | basic attack |
 | `wo_hit` | 0.30 | — | yelp, recoil | damage taken |
 | `wo_stun` | 1.20 loop | — | shaking its head | stunned |
-| `wo_despawn` | 0.80 | — | howls and dissolves upward into sparks (shader fade 0.4 s) | end of life / death |
+| `wo_despawn` | 0.80 | — | howls and dissolves upward into blue spirit mist (shader fade 0.4 s) | end of life / death |
 
 **9 clips.**
 
@@ -188,11 +190,12 @@ around the neck, faint green glowing druidic tattoo lines that follow some of it
 | Colours | `#c08a3a` tawny / `#3a2414` stripes / `#f0e2c4` cream / glow `#8ad86a` |
 | Glows | eyes, tattoo lines (≤ 3 % of the texture) |
 | Size | **2.2 m** long (body, without the tail), 1.05 m at the shoulder (today ≈1.33 m long) |
+| Claws | **every attack is a claw attack** (the sabers are the look, not a weapon): big paws with long curved ivory claws **always extended**, 0.10 m on the forepaws, sculpted spread so each one reads |
 | Model | Tripo four-legged, retopo **9,000 tris**, 1 material 1024²; the sabers are part of the head mesh, weighted 100 % to `qd_head` so they never bend; mouth sculpted **half open in a snarl** so both sabers show their full length (no jaw bone, `04` §2.1) |
-| Rig | standard four-legged, **tail ≥ 2 bones** (short tail), every leg ≥ 3 bones |
-| Sockets | `mouth`, `saber_tip_l` / `saber_tip_r` (on `qd_head`, at the fang tips: bite impacts), `head_top`, `eyes`, `paw_*`, `tail_tip`, `chest`, `base`, `overhead` |
+| Rig | standard four-legged, **tail ≥ 2 bones** (short tail), every leg ≥ 3 bones, a paw bone (`qd_fl_4`, `qd_fr_4`) so the forepaws can spread and curl |
+| Sockets | `claw_fl` / `claw_fr` (on the front paw bones, at the claw tips: claw-trail origin and impact point), `mouth`, `head_top`, `eyes`, `paw_*`, `tail_tip`, `chest`, `base`, `overhead` |
 | Hitbox | the champion's (unchanged) |
-| Prompt core | "massive muscular saber-toothed tiger with two very long ivory saber fangs reaching below the chin, thick forelegs and heavy shoulders, deep chest, short thick bobbed tail, tawny amber coat with dark brown tiger stripes, cream belly and muzzle, carved horn cuffs on the forelegs, a leather neck band with small wooden totems, faint glowing green tattoo lines along the stripes, green eyes, mouth half open in a snarl, standing square on all four legs, head straight forward" |
+| Prompt core | "massive muscular saber-toothed tiger with two very long ivory saber fangs reaching below the chin, thick forelegs and heavy shoulders, deep chest, short thick bobbed tail, tawny amber coat with dark brown tiger stripes, cream belly and muzzle, carved horn cuffs on the forelegs, a leather neck band with small wooden totems, faint glowing green tattoo lines along the stripes, green eyes, big paws with long curved claws extended, mouth half open in a snarl, standing square on all four legs, head straight forward" |
 
 | Clip | Len | Markers | Motion | Used by |
 |---|---|---|---|---|
@@ -202,28 +205,32 @@ around the neck, faint green glowing druidic tattoo lines that follow some of it
 | `ca_run` | 0.50 loop | stride 4.0 | powerful bounding gallop | moving |
 | `ca_back` | 0.90 loop | stride 1.4 | backing off low, head and sabers toward the enemy | moving backwards |
 | `ca_strafe_l` / `ca_strafe_r` | 0.70 loop | stride 2.0 | side-hop trot keeping the head on the enemy | strafing |
-| `ca_atk_1` / `ca_atk_2` | 0.55 | strike 0.16 | right / left forepaw swipe | Claws (basic attack) |
-| `ca_rake` | 0.60 | strike 0.18 | both claws raking down the target | Rake |
-| `ca_shred` | 0.65 | strike 0.16, hit2 0.32 | rapid two-paw shredding | Shred |
-| `ca_bite` | 0.70 | strike 0.24 | rears the head back, then drives both sabers down into the target in a stabbing bite and wrenches the head sideways | Ferocious Bite |
-| `ca_pounce_start` / `ca_pounce_air` / `ca_pounce_land` | 0.12 / 0.40 loop / 0.45 | launch 0.04; land strike 0.05 | spring, stretched in the air with the claws out; lands pinning the target with both forepaws, sabers stabbing down | Wild Pounce |
+| `ca_atk_1` / `ca_atk_2` | 0.55 | strike 0.16 | rises slightly and swipes the right / left forepaw across, claws spread | Claws (basic attack) |
+| `ca_atk_3` | 0.60 | strike 0.18 | quick double swipe, right then left, claws spread | Claws (basic attack, third variant) |
+| `ca_rake` | 0.60 | strike 0.18 | reaches high and rakes both forepaws' claws down the target | Rake |
+| `ca_shred` | 0.65 | strike 0.16, hit2 0.32 | rapid alternating forepaw claw slashes | Shred |
+| `ca_rend` | 0.75 | strike 0.26 | rears onto its hind legs and tears both forepaws' claws down across the target in an X, then rips back | Ferocious Bite (the finisher is a claw strike) |
+| `ca_pounce_start` / `ca_pounce_air` / `ca_pounce_land` | 0.12 / 0.40 loop / 0.45 | launch 0.04; land strike 0.05 | spring, stretched in the air with the claws out; lands pinning the target with both forepaws, claws raking | Wild Pounce |
 | `ca_roar` | 0.90 | release 0.30 | rears its head and roars, sabers bared | Berserk Instinct |
 | `ca_hit` | 0.30 | — | flinch, snarl | damage taken |
 | `ca_stun` | 1.20 loop | — | dazed, swaying, head low | stunned |
 | `ca_death` | 1.60 | — | collapses onto its side; then the humanoid druid's corpse replaces it with a burst of leaves | death |
 
-**19 clips** (`ca_atk_1/2` and `ca_strafe_l/r` count as two each, the pounce as three).
+**20 clips** (`ca_atk_1/2` and `ca_strafe_l/r` count as two each, the pounce as three). Claw trails: 3 thin
+ribbons from `claw_fl` / `claw_fr` during every attack clip (`06` §5.11).
 
 ### 3.6 Bear form — Druid Feral (Bear Form)
 
 An **armoured cave bear**: massive, hump-shouldered, with carved bone plates strapped to its shoulders and brow,
-the same druidic stripes (amber glow), small amber eyes.
+the same druidic stripes (amber glow), small amber eyes. Like the cat, **it fights only with its claws**.
 
 | | |
 |---|---|
+| Claws | huge front paws with long curved dark claws **always extended**, 0.15 m, sculpted spread; hind claws 0.08 m |
 | Size | **2.6 m** long, 1.5 m at the shoulder, 3.0 m when reared (today ≈2.24 m long) |
 | Model | Tripo four-legged, retopo **10,000 tris**, 1 material 1024² |
-| Rig | standard four-legged, **every leg ≥ 3 bones** (today's hind-right leg is one bone → re-rig) |
+| Rig | standard four-legged, **every leg ≥ 3 bones** (today's hind-right leg is one bone → re-rig), paw bones on the front legs |
+| Sockets | `claw_fl` / `claw_fr` (claw tips), `mouth`, `head_top`, `eyes`, `paw_*`, `chest`, `base`, `overhead` |
 
 | Clip | Len | Markers | Motion | Used by |
 |---|---|---|---|---|
@@ -233,11 +240,11 @@ the same druidic stripes (amber glow), small amber eyes.
 | `be_run` | 0.70 loop | stride 3.6 | lumbering charge-run | moving |
 | `be_back` | 1.10 loop | stride 1.3 | backing off | moving backwards |
 | `be_strafe_l` / `be_strafe_r` | 0.90 loop | stride 1.6 | side-step | strafing |
-| `be_atk_1` / `be_atk_2` | 0.70 | strike 0.18 | right / left paw swipe | Swipe (basic attack) |
-| `be_maul` | 0.90 | strike 0.24 | rears up and smashes both paws down | Maul |
-| `be_thrash` | 0.90 | strike 0.22, hit2 0.45 | spins half around swiping, then stomps | Thrash |
-| `be_roar` | 1.00 | release 0.30 | rears up and roars, chest out | Frenzied Regeneration, Berserk Instinct (bear) |
-| `be_pounce_start` / `be_pounce_air` / `be_pounce_land` | 0.15 / 0.40 loop / 0.45 | launch 0.05; land strike 0.05 | heavy leap, crash landing | Wild Pounce (bear) |
+| `be_atk_1` / `be_atk_2` | 0.70 | strike 0.18 | heavy right / left claw swipe, the paw sweeping across with the claws spread | Swipe (basic attack) |
+| `be_maul` | 0.90 | strike 0.24 | rears up and rakes both clawed front paws down through the target | Maul |
+| `be_thrash` | 0.90 | strike 0.22, hit2 0.45 | spins half around raking with the claws of both front paws, then stomps | Thrash |
+| `be_roar` | 1.00 | release 0.30 | rears up and roars, chest out, claws spread | Frenzied Regeneration, Berserk Instinct (bear) |
+| `be_pounce_start` / `be_pounce_air` / `be_pounce_land` | 0.15 / 0.40 loop / 0.45 | launch 0.05; land strike 0.05 | heavy leap with the front claws reaching forward, crash landing with a two-paw claw rake | Wild Pounce (bear) |
 | `be_hit` | 0.35 | — | grunts, recoils | damage taken |
 | `be_stun` | 1.50 loop | — | dazed | stunned |
 | `be_death` | 1.80 | — | rolls onto its side | death |
@@ -246,31 +253,40 @@ the same druidic stripes (amber glow), small amber eyes.
 
 ### 3.7 Tree of Life — Druid Restoration signature (10 s)
 
-A **walking ancient tree-guardian**: bark body with a face in the trunk, glowing green eyes, two long branch arms
-with leafy hands, root feet, a crown of blossoms and antler-like branches (ties to the druid's antler crown),
-fireflies.
+Direction: the role model's **early "tree of life" healer form** as an archetype — not a thin treant, but a
+**stout, top-heavy walking tree with a friendly old face and big, expressive hands** that do all the healing
+gestures. Our own model and texture.
 
 | | |
 |---|---|
-| Size | 3.0 m (crown included) |
-| Model | Tripo, T-pose (branch arms out), retopo **10,000 tris**, 1 material 1024² (leaves as solid clumps, no alpha cards) |
-| Rig | humanoid (UE5) — a two-legged tree with arms; check that the crown is weighted to `head` / `spine_05` |
-| Sockets | `grip_r/l` (palm of the branch hands: heal origin), `head_top`, `eyes`, `base`, `overhead` |
+| Body | a massive, barrel-shaped trunk as the torso (wider at the shoulders than the hips), gnarled dark-brown bark with moss in the cracks; **no separate head**: a kind, wise old face carved into the top of the trunk (heavy bark brows, a knotted nose, a mossy beard of hanging lichen), glowing green eyes |
+| Crown | a big rounded canopy of leaves sitting on the shoulders and over the face like a hood, sprinkled with pale blossoms, a few antler-like branches growing out of it (ties to the druid's antler crown); leaves as solid sculpted clumps, no alpha cards |
+| Arms and **hands** | long thick branch arms reaching to the knees; **large hands** (≈ 0.40 m) with a broad bark palm, **four long jointed twig fingers and a thumb**, small leaves sprouting at the knuckles; glowing green sap lines in the palms (emissive) — the healing comes from the open palms |
+| Legs | short, thick legs splitting into big root feet that grip the ground |
+| Colours | `#5a3a22` bark / `#4a7a2a` leaves / `#e8d0e0` blossoms / glow `#8ae86a` |
+| Glows | eyes, palm sap lines, a few blossoms |
+| Size | **2.8 m** to the top of the canopy, 1.5 m across the shoulders |
+| Model | Tripo, **T-pose with the arms straight out, the hands flat, palms down, the twig fingers spread straight and apart** (so the auto-rig finds 5 fingers per hand), retopo **10,000 tris**, 1 material 1024² |
+| Rig | humanoid (UE5) with **all finger joints** (as champions, `02` §4); the canopy weighted to `spine_05` / `head`, the face to `head` |
+| Finger poses (finger layer, `03` §5) | `tree_relaxed` (fingers loosely curled, 20 / 30 / 20°), `tree_open` (palm open, fingers spread +15°, for heals), `tree_point` (index straight, others curled 60 / 80 / 40°), `tree_grasp` (all curled 70 / 90 / 60° — the roots grab) |
+| Sockets | `grip_r/l` and `spell_r/l` (palm centres: heal and spell origins), `head_top`, `eyes`, `base`, `overhead` |
+| Prompt core | "stout top-heavy walking tree creature, massive barrel-shaped trunk as the torso with a kind wise old face carved in the upper trunk, heavy bark brows, mossy lichen beard, glowing green eyes, a big rounded canopy of leaves and pale blossoms over its shoulders and head, a few antler-like branches, long thick branch arms ending in large hands with four long twig fingers and a thumb, fingers spread, glowing green lines in the palms, short thick legs with big root feet, moss in the bark, T-pose with arms straight out and palms down" |
 
 | Clip | Len | Markers | Motion | Used by |
 |---|---|---|---|---|
-| `tr_shift_in` | 0.60 | — | unfolds upward from a crouch, branches spreading (scale 0.6 → 1.0 by code, overshoot) | Tree of Life start |
-| `tr_shift_out` | 0.40 | — | folds down into a crouch (then the druid reappears in a burst of leaves) | end of the 10 s |
-| `tr_idle` | 3.00 loop | — | swaying, leaves rustling, breathing | idle |
-| `tr_walk` | 1.20 loop | stride 2.4 | lumbering root-footed walk, arms swinging slowly | moving |
-| `tr_pre_loop` | 1.20 loop | — | both branch arms raised, gathering light | casting (Regrowth) |
-| `tr_rel_ally` | 0.60 | release 0.15 | sweeps a branch hand toward the ally, petals fly | Regrowth, Rejuvenation |
-| `tr_rel_dir` | 0.55 | release 0.12 | points a branch at the enemy | Moonfire, Wrath (basic attack) |
-| `tr_stomp` | 0.70 | strike 0.25 | stamps a root foot, roots burst | Entangling Roots |
-| `tr_hit` | 0.40 | — | creaks back | damage taken |
-| `tr_stun` | 1.50 loop | — | sways, leaves falling | stunned |
+| `tr_shift_in` | 0.60 | — | unfolds upward from a crouch, arms and fingers stretching wide, canopy shaking out (scale 0.6 → 1.0 by code, overshoot) | Tree of Life start |
+| `tr_shift_out` | 0.40 | — | folds down into a crouch, hands closing (then the druid reappears in a burst of leaves) | end of the 10 s |
+| `tr_idle` | 3.00 loop | — | gentle sway, canopy rustling, breathing, fingers flexing slowly, hands hanging near the knees | idle (`tree_relaxed`) |
+| `tr_walk` | 1.20 loop | stride 2.4 | heavy, rolling root-footed walk, long arms swinging with open hands | moving |
+| `tr_pre_loop` | 1.20 loop | — | both big hands raised before the face, palms up, fingers spread, light gathering between them | casting Regrowth (`tree_open`) |
+| `tr_rel_ally` | 0.60 | release 0.15 | pushes both open hands toward the ally, petals and light flying from the palms | Regrowth, Rejuvenation (`tree_open`) |
+| `tr_rel_dir` | 0.55 | release 0.12 | flicks one hand at the enemy, pointing finger | Wrath (basic attack), Moonfire (`tree_point`) |
+| `tr_root_grasp` | 0.75 | strike 0.28 | slams one hand flat onto the ground, fingers digging in as roots burst ahead | Entangling Roots (`tree_grasp`) |
+| `tr_bless` | 0.80 | release 0.30 | raises both hands high over the canopy, fingers spread, then opens the arms wide | the group heal-over-time pulse at the start of Tree of Life |
+| `tr_hit` | 0.40 | — | creaks back, a hand raised to shield the face | damage taken |
+| `tr_stun` | 1.50 loop | — | sways, leaves falling, hands hanging limp | stunned |
 
-**10 clips.** Death in tree form: the form ends (the druid reverts, then `cm_death_*`).
+**11 clips.** Death in tree form: the form ends (the druid reverts, then `cm_death_*`).
 
 ### 3.8 Fire Spirit — Shaman Elemental signature (buff, 10 s)
 
@@ -312,8 +328,8 @@ Forms get their own state machine instead of reacting to actions meant for the h
 
 | Input | Cat | Bear | Tree |
 |---|---|---|---|
-| basic attack (`auto`, `hitAt`) | `ca_atk_1/2` alternating, strike on `hitAt` | `be_atk_1/2` | `tr_rel_dir` (Wrath) |
-| ability → clip (manifest `abilities`) | Rake `ca_rake`, Shred `ca_shred`, Ferocious Bite `ca_bite`, Wild Pounce `ca_pounce_*`, Berserk Instinct `ca_roar`, Bear Form → swap | Maul `be_maul`, Thrash `be_thrash`, Frenzied Regen `be_roar`, Wild Pounce `be_pounce_*`, Cat Form → swap | Regrowth `tr_pre_loop` → `tr_rel_ally`, Rejuvenation `tr_rel_ally`, Moonfire `tr_rel_dir`, Roots `tr_stomp`, Wild Charge `tr_walk` (fast) |
+| basic attack (`auto`, `hitAt`) | `ca_atk_1/2/3` (random, no repeat), claw strike on `hitAt` | `be_atk_1/2` alternating, claws | `tr_rel_dir` (Wrath) |
+| ability → clip (manifest `abilities`) | Rake `ca_rake`, Shred `ca_shred`, Ferocious Bite `ca_rend`, Wild Pounce `ca_pounce_*`, Berserk Instinct `ca_roar`, Bear Form → swap | Maul `be_maul`, Thrash `be_thrash`, Frenzied Regen `be_roar`, Wild Pounce `be_pounce_*`, Cat Form → swap | Regrowth `tr_pre_loop` → `tr_rel_ally`, Rejuvenation `tr_rel_ally`, Moonfire `tr_rel_dir`, Roots `tr_root_grasp`, Wild Charge `tr_walk` (fast), Tree of Life pulse `tr_bless` |
 | move / back / strafe | run / back / strafe clips | same | walk |
 | stunned / disoriented / frozen | `*_stun` / `*_stun` / pose freeze | same | same |
 | hit | `*_hit` (additive during attacks) | same | same |
@@ -333,12 +349,12 @@ The cat / bear / tree models also get the champion's material treatment: rim lig
 | Ghoul | 7,000 | ~80 | 1024² | 9 | 1 + shadow |
 | Abomination | 10,000 | ~80 | 1024² | 8 | 1 + shadow |
 | Spirit wolf | 6,000 | ≤ 40 | 512² | 9 | 1 (no shadow: spectral) |
-| Cat form (saber-toothed tiger) | 9,000 | ≤ 40 | 1024² | 19 | 1 + shadow |
+| Cat form (saber-toothed tiger) | 9,000 | ≤ 40 | 1024² | 20 | 1 + shadow |
 | Bear form | 10,000 | ≤ 40 | 1024² | 18 | 1 + shadow |
-| Tree of Life | 10,000 | ~80 | 1024² | 10 | 1 + shadow |
+| Tree of Life | 10,000 | ~80 | 1024² | 11 | 1 + shadow |
 | Fire Spirit | 400 | 0 | VFX atlas | — (code) | in the VFX draw |
 | 3 totems | 3 × 1,200 | 0 | 1024² shared | — (code) | 1 each |
 | Freezing Trap | 600 | 0 | in the totem atlas | — (code) | 1 |
-| **Total** | | | | **86 clips** | |
+| **Total** | | | | **88 clips** | |
 
 At most on screen in a 2v2: 2 pets + 1 summon + forms replace their champion (no extra), 2 totems, 1 trap.

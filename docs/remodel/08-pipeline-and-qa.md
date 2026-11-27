@@ -69,12 +69,12 @@ AI animation **20** credits. Balance ≈ **15,800**.
 | Props: 3 totems, trap, 7 projectile meshes | 11 × 80 | 880 |
 | Animation master | 1 × 100 | 100 |
 | Humanoid champion clips | 192 × 20 | 3,840 |
-| Humanoid creature clips (gorilla 13, ghoul 9, abomination 8, tree 10) | 40 × 20 | 800 |
-| Four-legged clips (wolf 9, cat 19, bear 18; Plan A) | 46 × 20 | 920 |
-| Re-roll reserve for clips (20 %) | | 1,112 |
-| **Total** | | **≈ 12,450** |
+| Humanoid creature clips (gorilla 13, ghoul 9, abomination 8, tree 11) | 41 × 20 | 820 |
+| Four-legged clips (wolf 9, cat 20, bear 18; Plan A) | 47 × 20 | 940 |
+| Re-roll reserve for clips (20 %) | | 1,120 |
+| **Total** | | **≈ 12,500** |
 
-Leaves ≈ 3,350 credits of margin. If Plan B (procedural four-legged motion) is used: −920.
+Leaves ≈ 3,300 credits of margin. If Plan B (procedural four-legged motion) is used: −940.
 
 ---
 
@@ -123,4 +123,4 @@ Leaves ≈ 3,350 credits of margin. If Plan B (procedural four-legged motion) is
 | KTX2 transcoder fails to load | no textures | fallback JPEG textures in the same GLB slot (larger download) |
 | R1 shifts combat feel / balance | win rates move | re-run the balance matrix and auto-tune (`docs/BALANCE.md`) |
 | Heroic sizes collide with the fixed hitboxes | weapons look like they miss | strike markers are measured on the real items; hit effects drawn at the contact point (tip) |
-| Unit prices rise after the sale | budget | margin ≈ 3,350 credits; Plan B saves 920; split items share GLBs where possible |
+| Unit prices rise after the sale | budget | margin ≈ 3,300 credits; Plan B saves 940; split items share GLBs where possible |

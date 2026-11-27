@@ -76,7 +76,7 @@ Every effect uses its **school**, not its class. Colours as `core / glow / dark`
 | Shadow / void | `#e8d0ff` | `#9a50ff` | `#1a0830` | tendrils, black smoke, void eye | Shadow Priest |
 | Necrotic | `#eaffd8` | `#7aff6a` | `#1a3a12` | bone shards, green smoke, skulls | Necromancer Summoner |
 | Curse | `#f0d8ff` | `#b070ff` | `#2a1040` | chains, sigils, violet smoke | Necromancer Curser |
-| Storm | `#ffffff` | `#6ae0ff` | `#1a4a8a` | lightning strips, sparks, wind streaks | Shaman (lightning, wolf, gale) |
+| Storm | `#ffffff` | `#6ae0ff` | `#1a4a8a` | lightning strips, sparks, wind streaks | Shaman (lightning, gale; the spirit wolf has its own pale spirit-blue, `04` §3.4) |
 | Earth | `#ffe2b0` | `#d09040` | `#4a3018` | stone chips, dust, cracks | Shaman totems, Ground Breaker, leaps |
 | Nature (life) | `#f4ffd8` | `#8ae86a` | `#2a5a18` | leaves, petals, vines, fireflies | Restoration Druid, heals |
 | Moon | `#f0f0ff` | `#c8b0ff` | `#3a3070` | moon disc, silver motes | Moonfire |
@@ -248,7 +248,7 @@ Column **Clip** refers to `05-animations.md`. "→" = travels to the target. Siz
 | **Lava Lash** | `dw_lash` | the left axe flares orange | melee | molten splash | `dot_fire` |
 | **Healing Surge** (cast 1.2) | `dw_pre_*` → `dw_rel_self` | **water/storm** circle, cyan droplets rise | — | `heal_land` with cyan-green water motes | — |
 | **Earthbind Totem** (r 9, 8 s) | `dw_plant` | — | Earthbind totem rises | — | tan rotating ring decal + slow-moving dust; enemies `slow_earth` |
-| **Spirit Wolf** (12 s) | `dw_roar` | lightning strike at the spawn point | Spirit wolf (04 §3.4) | — | — |
+| **Spirit Wolf** (12 s) | `dw_roar` | a swirl of pale blue spirit mist at the spawn point | Spirit wolf (04 §3.4): translucent ghost-wolf, mist from paws and tail, glowing pawprints | — | — |
 
 ### 5.9 Hunter — Beastmaster / Sharpshooter (Jungle Troll)
 
@@ -293,13 +293,13 @@ Column **Clip** refers to `05-animations.md`. "→" = travels to the target. Siz
 | **Regrowth** (cast 1.4) | `st_pre_heal_*` → `st_rel_ally` | **nature** circle (today cyan), leaves gather at the staff | a ribbon of vines and light to the ally | `heal_land` (green) | short `hot` |
 | **Moonfire** (DoT) | `st_calldown` | — | a beam of moonlight from above onto the target | lilac pillar + burst | `dot_moon` (lilac sparks; today fire) |
 | **Wild Charge** (13 m) | `cm_dash_fwd` | — | leaf trail + hoof dust | — | — |
-| **Entangling Roots** (root 3 s) | `st_ground` | — | roots burst from the ground at the target | — | `root_nature`: vines wrap to the knees (today ice) |
-| **Tree of Life** (10 s) | `st_summon` → `tr_shift_in` | leaves spiral up the druid | — | form swap in a burst of leaves (the model unfolds) | fireflies around the tree, the group HoT shows `hot` on every ally |
-| **Claws** (auto, cat) | `ca_atk_1/2` | — | melee | 3 parallel **claw streaks** (atlas) + `melee_hit` | — |
+| **Entangling Roots** (root 3 s) | `st_ground` (tree: `tr_root_grasp`) | — | roots burst from the ground at the target | — | `root_nature`: vines wrap to the knees (today ice) |
+| **Tree of Life** (10 s) | `st_summon` → `tr_shift_in` → `tr_bless` | leaves spiral up the druid | light and petals pour from the tree's raised open hands over the group | form swap in a burst of leaves (the model unfolds) | fireflies around the tree, palm sap lines glow, the group HoT shows `hot` on every ally; every tree heal leaves from `spell_r/l` (the palms) |
+| **Claws** (auto, cat) | `ca_atk_1..3` | claw trails: 3 thin ribbons from `claw_fl/fr` | melee | 3 parallel **claw streaks** (atlas) + `melee_hit` | — |
 | **Rake** | `ca_rake` | — | melee | claw streaks + blood | `dot_bleed` (today fire) |
 | **Shred** | `ca_shred` | — | 2 hits | 2 claw-streak sets | — |
-| **Ferocious Bite** | `ca_bite` | — | melee | two puncture flashes at `saber_tip_l/r` + blood burst, bigger with combo points | — |
-| **Wild Pounce** (leap, stun) | `ca_pounce_*` / `be_pounce_*` | — | leaf + dust trail | **landing** dust ring + beast shockwave (today nothing) | `stun` |
+| **Ferocious Bite** | `ca_rend` | claw trails | melee (a claw finisher) | two crossing sets of deep claw streaks in an X + blood burst, bigger with combo points | — |
+| **Wild Pounce** (leap, stun) | `ca_pounce_*` / `be_pounce_*` | — | leaf + dust trail, claw trails in the air | **landing** dust ring + beast shockwave + claw streaks on the target (today nothing) | `stun` |
 | **Bear Form / Cat Form** | form swap | — | — | shapeshift burst: fur/leaf particles + green flash 0.25 s, covers the swap | — |
 | **Berserk Instinct** (CC immune) | `ca_roar` / `be_roar` | roar ring | — | — | eyes blaze amber, red-amber steam off the back (today nothing) |
 | **Swipe** (auto, bear) | `be_atk_1/2` | — | melee | wide claw streaks | — |

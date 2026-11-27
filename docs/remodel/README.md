@@ -12,7 +12,7 @@ as a hard requirement.
 | 01 | [Art direction](01-art-direction.md) | what we take from the role model, style rules, races, colours |
 | 02 | [Champions](02-champions.md) | 20 model sheets: race, size, armour, colours, glow, silhouette, generation prompt, acceptance |
 | 03 | [Weapons and sockets](03-weapons-and-sockets.md) | **how every item sits in the hand**: sockets on the rig, item grip space, finger poses, two-hand IK, shields, rigged bows, 24 items with exact sizes |
-| 04 | [Pets, summons, forms](04-pets-summons-forms.md) | gorilla, ghoul, abomination, spirit wolf, cat / bear / tree forms, Fire Spirit, totems, trap — models, rigs, 86 clips |
+| 04 | [Pets, summons, forms](04-pets-summons-forms.md) | gorilla, ghoul, abomination, spirit wolf, cat / bear / tree forms, Fire Spirit, totems, trap — models, rigs, 88 clips |
 | 05 | [Animations](05-animations.md) | 192 humanoid clips in 9 stance sets, markers, layers, timing contracts with the sim, manifest, prompts |
 | 06 | [Spells and VFX](06-spells-and-vfx.md) | effect system and budget, school palette, an entry for each of 21 basic attacks and 106 abilities, buff states, 25 projectiles |
 | 07 | [Performance](07-performance.md) | measurements today, budgets, offline assembly into one draw per champion, LODs, shadows, loading |
@@ -26,9 +26,9 @@ as a hard requirement.
 | Items | 24 (weapons, shields, off-hands, bows, arrow) |
 | Creatures | 7 (gorilla, ghoul, abomination, spirit wolf, cat, bear, tree) + Fire Spirit + 3 totems + trap |
 | Humanoid clips | 192 (common 33, `sns` 20, `th` 26, `dw` 21, `dg` 18, `mc` 21, `wd` 17, `st` 22, `bw` 14) |
-| Creature clips | 86 |
+| Creature clips | 88 |
 | Abilities with their own motion and effect | 106 + 21 basic attacks |
-| Tripo credits (estimate) | ≈ 12,450 of ≈ 15,800 |
+| Tripo credits (estimate) | ≈ 12,500 of ≈ 15,800 |
 | Draw calls per champion | 8–31 today → **1** (+1 shadow) |
 | 2v2 frame | 273 draws today → ≈ 150 |
 
