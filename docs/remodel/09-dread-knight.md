@@ -1,13 +1,14 @@
 # 09 — New class: Dread Knight (Frost / Blood)
 
-Status: **blueprint only** (2026-11-27). A new, 11th class, shaped after the role model's **death knight archetype**:
+Status: **playable** since 2026-11-28 with a code-built placeholder look (plate set + runeblades from the armory);
+the generated models, items, animations and effects of §3–§6 are still to do. A new, 11th class, shaped after the role model's **death knight archetype**:
 a fallen knight raised from death, bound to runes, fighting in heavy plate with a runeblade. Two specs, as asked:
 **Frost = damage** (two runeblades), **Blood = tank** (a two-handed runeblade, self-healing). Working name
 **Dread Knight** (`dreadknight`) — our own name, as with every other class and race; the display name can be
 changed in one place (`classes.js`).
 
 Everything here follows the other blueprint documents: models `02`, items `03`, animations `05`, effects `06`,
-performance `07`, pipeline `08`. All numbers are starting points for the balance lab.
+performance `07`, pipeline `08`. The numbers in §2 are the ones in the game (`js/data/classes.js`, `tuning.js`).
 
 ---
 
@@ -240,6 +241,17 @@ game's own Sim and AI for everyone else. Same procedure as `docs/BALANCE.md`.
 | Frost: Cleave 115 → 100, Rime 60 → 55, Killing Cold every 4th → 5th hit, Heart +25 → +20 %, Howl 50 → 40, HP 1300 → 1330, defense 0.12 → 0.135 | damage per second 86 → 73 (peers 62–65); it then lost every melee duel, so it got back a little health and armour |
 | Blood: Reaping heal 25 → 8 % of damage taken (min 6 → 3 %), Bond 12 → 4 %, RP per hit 10 → 6, Crimson RP 25 → 20, damage −15–30 %, Covenant +25 → +15 % health, HP 1450 → 1400, defense 0.18 → 0.15 | it won melee duels with 44–74 % health left and survived the bench twice as long as Protection Paladin |
 | Team factors Frost 0.96, Blood 1.15 | 2v2 was 56–58 % / 39–40 % with the 1v1-balanced numbers (the pull and the cone are stronger in team fights; Blood has no partner protection). Blood's bot peels with the pull |
+
+**With the real code (2026-11-28)** — same lab, same sample sizes, the class implemented in `classes.js` / `sim.js`
+(Runic Power, `pull`, the spell-only absorb, the damage-taken window, Sanguine Covenant's health) and its bots in
+`ai.js`:
+
+| Check | Frost | Blood |
+|---|---|---|
+| 1v1, 40 rounds per pairing | **49.4 %** | **48.2 %** |
+| 2v2, 800 random games | **53.8 %** | **50.1 %** |
+
+Both inside today's bands; the counters are the same as in the prototype.
 
 **Watch list**: Blood's team factor (1.15) is at the top of today's range — if it needs more, give Blood partner
 utility (for example Rune Ward castable on the partner) instead of raising the factor. Re-run the whole lab once the

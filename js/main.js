@@ -312,7 +312,7 @@ function selectClass(id) {
   document.querySelectorAll('.cs-card').forEach(c => c.classList.toggle('on', c.dataset.cls === id));
   const spec = mySpec(), C = kit(id, spec);
   world.showPreview(id, spec);
-  const resName = { mana: 'Mana', energy: 'Energy', rage: 'Rage', focus: 'Focus' }[C.resType];
+  const resName = { mana: 'Mana', energy: 'Energy', rage: 'Rage', focus: 'Focus', runic: 'Runic Power' }[C.resType];
   const A = C.auto;
   // spec cards: pick one of the class's two specs (unbuilt ones are shown as "coming soon")
   const specCards = `<div class="spec-pick"><div class="sp-h">Choose a spec <span>locked for the match</span></div><div class="sp-cards">${specsOf(id).map(s => `
@@ -1027,7 +1027,7 @@ function onSnapshot(s) {
 
 // ------------------------------------------------------------------ events → feedback
 // abilities whose damage is a weapon blow (melee impact sound, hit-stop); basic melee swings carry ev.melee
-const MELEE_HIT_ABS = new Set(['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skull_leap',
+const MELEE_HIT_ABS = new Set(['rime_strike', 'glacier_cleave', 'crimson_strike', 'reaping_strike', 'viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skull_leap',
   'skullsplitter', 'ground_breaker', 'envenom', 'crippling_poison', 'execute', 'bladestorm', 'stormstrike', 'lava_lash', 'holy_strike', 'pal_shield_slam', 'rake', 'shred', 'ferocious_bite', 'maul', 'thrash', 'wild_pounce', 'bull_rush']);
 function handleEvents(evs, view) {
   const F = view.fighters, my = S.myId, me = F[my];

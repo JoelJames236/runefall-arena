@@ -10,7 +10,7 @@ import { keyLabel } from '../input.js';
 
 const $ = id => document.getElementById(id);
 const SCHOOL = { frost: '#8fd8ff', fire: '#ff9a4a', arcane: '#d29aff', holy: '#ffe680', nature: '#7ae0ff', shadow: '#c08aff', phys: '#ffffff' };
-const RES_NAME = { mana: 'Mana', energy: 'Energy', rage: 'Rage', focus: 'Focus' };
+const RES_NAME = { mana: 'Mana', energy: 'Energy', rage: 'Rage', focus: 'Focus', runic: 'Runic Power' };
 
 export function iconHTML(ab, size) {
   const c = ab.color;

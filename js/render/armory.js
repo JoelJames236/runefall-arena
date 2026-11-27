@@ -282,14 +282,14 @@ export function makeClassWeapon(kind, M, look) {
   const g = new THREE.Group();
   const tip = new THREE.Object3D();
   switch (kind) {
-    case 'runesword': {
+    case 'runesword': case 'runeswordL': {
       // broad longsword with fuller, curved crossguard, wrapped grip, glowing runes
       const blade = mesh(extrude([[-0.038, 0], [0.038, 0], [0.032, 0.86], [0, 0.98], [-0.032, 0.86]], 0.012, 0.004), M.silver); blade.position.y = 0.1; g.add(blade);
       const fuller = mesh(box(0.012, 0.66, 0.02), M.pIron, false); fuller.position.y = 0.46; g.add(fuller);
-      for (let i = 0; i < 5; i++) { const r = mesh(box(0.016, 0.05, 0.022), M.rune(0xff7a2a, 2.2), false); r.position.y = 0.22 + i * 0.12; g.add(r); }
+      for (let i = 0; i < 5; i++) { const r = mesh(box(0.016, 0.05, 0.022), M.rune(look.glow || 0xff7a2a, 2.2), false); r.position.y = 0.22 + i * 0.12; g.add(r); }
       const guard = mesh(tube([V(-0.15, 0.06, 0), V(-0.07, 0.09, 0), V(0, 0.085, 0), V(0.07, 0.09, 0), V(0.15, 0.06, 0)], 0.016, 16, 6), M.pGold); g.add(guard);
       for (const s of [-1, 1]) { const e = mesh(sph(0.022, 8, 6), M.pGold); e.position.set(s * 0.155, 0.055, 0); g.add(e); }
-      const gem = mesh(sph(0.018, 10, 8), M.gem(0xff3a1a)); gem.position.set(0, 0.09, 0.016); g.add(gem);
+      const gem = mesh(sph(0.018, 10, 8), M.gem(look.glow || 0xff3a1a)); gem.position.set(0, 0.09, 0.016); g.add(gem);
       const grip = mesh(cyl(0.017, 0.019, 0.2, 10), M.pLeather); grip.position.y = -0.02; g.add(grip);
       g.add(helixWrap(-0.115, 0.075, 0.0195, 7, M.pLeather, 0.0042));
       const pom = mesh(new THREE.OctahedronGeometry(0.03, 0), M.pGold); pom.position.y = -0.14; g.add(pom);
@@ -554,7 +554,7 @@ export function makeClassWeapon(kind, M, look) {
       // Arms: a two-handed rune greatsword — long wrapped grip (both hands), wide crossguard, broad fullered blade
       const blade = mesh(extrude([[-0.055, 0], [0.055, 0], [0.05, 1.18], [0, 1.34], [-0.05, 1.18]], 0.016, 0.005), M.silver); blade.position.y = 0.2; g.add(blade);
       const fuller = mesh(box(0.02, 1.0, 0.036), M.pIron, false); fuller.position.y = 0.76; g.add(fuller);
-      for (let i = 0; i < 4; i++) { const r = mesh(box(0.034, 0.05, 0.04), M.rune(0xff5a3a, 2.2), false); r.position.y = 0.38 + i * 0.13; g.add(r); }
+      for (let i = 0; i < 4; i++) { const r = mesh(box(0.034, 0.05, 0.04), M.rune(look.glow || 0xff5a3a, 2.2), false); r.position.y = 0.38 + i * 0.13; g.add(r); }
       const guard = mesh(tube([V(-0.24, 0.12, 0), V(-0.12, 0.17, 0), V(0, 0.18, 0), V(0.12, 0.17, 0), V(0.24, 0.12, 0)], 0.022, 12, 6), M.pIron); g.add(guard);
       for (const s of [-1, 1]) { const k2 = spike(0.022, 0.07, M.pGold); k2.rotation.z = -s * PI / 2; k2.position.set(s * 0.27, 0.11, 0); g.add(k2); }
       const grip = mesh(cyl(0.024, 0.026, 0.46, 10), M.pLeather); grip.position.y = -0.06; g.add(grip);

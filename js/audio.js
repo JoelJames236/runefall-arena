@@ -274,6 +274,8 @@ export class Audio {
 
 // Ability → sound mapping for 'ab' events and impacts.
 export const AB_SOUND = {
+  rime_strike: 'melee_heavy', glacier_cleave: 'melee_heavy', grave_chains: 'shadow', winters_howl: 'glacial_nova', rune_ward: 'shield', heart_of_winter: 'warcry',
+  crimson_strike: 'melee_heavy', reaping_strike: 'melee_heavy', sanguine_pulse: 'quake', sanguine_covenant: 'warcry',
   frost_lance: 'frost_lance', flame_burst: 'flame_burst', glacial_nova: 'glacial_nova', arcane_shift: 'arcane_shift', mana_ward: 'mana_ward', arcane_comet: 'arcane_comet',
   viper_strike: 'dagger', gutting_edge: 'melee_heavy', skull_crack: 'stun', shadow_leap: 'shadow', fade: 'stealth', death_mark: 'mark',
   rending_blow: 'melee_heavy', crippling_slash: 'swing', bull_rush: 'charge', iron_bulwark: 'shield', shield_slam: 'shield', steel_tempest: 'tempest',

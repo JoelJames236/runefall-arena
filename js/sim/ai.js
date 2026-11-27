@@ -15,11 +15,11 @@ const DIFF = {
 
 // debuff an ability leaves on its target when it isn't named after the ability (see AI.filler)
 const FILLER_DEBUFF = { rending_axes: 'Bleeding', crippling_slash: 'Crippled' };
-const MELEE_CLASSES = new Set(['rogue', 'warrior', 'berserker', 'paladin']);
+const MELEE_CLASSES = new Set(['rogue', 'warrior', 'berserker', 'paladin', 'dreadknight']);
 // melee or not: a spec can override its class (e.g. Enhancement Shaman fights in melee)
 const isMelee = f => { const k = kitOf(f); return k.melee ?? MELEE_CLASSES.has(f.cls); };
 const HEALERS = new Set(['priest']);
-const INTERRUPTS = { paladin: ['sentinels_shield', 'hammer_of_light'], berserker: [], warrior: ['shield_slam'], rogue: ['skull_crack'], priest: ['blinding_light', 'psychic_scream'], mage: [], shaman: ['quake_totem'], hunter: ['intimidation'], necromancer: [], druid: [] };
+const INTERRUPTS = { paladin: ['sentinels_shield', 'hammer_of_light'], berserker: [], warrior: ['shield_slam'], rogue: ['skull_crack'], priest: ['blinding_light', 'psychic_scream'], mage: [], shaman: ['quake_totem'], hunter: ['intimidation'], necromancer: [], druid: [], dreadknight: ['grave_chains'] };
 
 export class AI {
   constructor(sim, id, difficulty = 'normal') {
@@ -560,6 +560,34 @@ export class AI {
         if (dist < 7.5 && (me.cp >= 3 || (me.cp >= 2 && (foeHp < 0.2 || hp < 0.35))) && (p = use('radiant_storm'))) return p;
         if (me.cp < 3 && (p = use('holy_strike'))) return p;
         if (me.cp < 3 && (p = use('judgment'))) return p;
+        return null; }
+      case 'dreadknight': {
+        const ranged = t => !isMelee(t);
+        if (me.spec === 'blood') {
+          // tank: covenant when low, ward against casters, drag whoever hits the partner off it, taunt with Pulse,
+          // heal back what it just took with Reaping Strike
+          if (def && hp < 0.35 && (p = use('sanguine_covenant'))) return p;
+          if (def && hp < 0.6 && ranged(threat) && td < 30 && (p = use('rune_ward'))) return p;
+          const onAlly = allies.length ? living.filter(e => allies.some(a => e.target === a.id) && sim.dist(me, e) >= 5 && sim.dist(me, e) <= 25 && sim.los(me, e)) : [];
+          if (onAlly.length && (p = use('grave_chains', { tid: onAlly[0].id }))) return p;
+          if (!visible) return null;
+          if (dist > 7 && (p = use('grave_chains'))) return p;
+          const loose = allies.length ? living.find(e => e.target !== me.id && sim.dist(me, e) <= 8) : null;
+          if ((loose || near(8) >= 1) && (p = use('sanguine_pulse'))) return p;
+          if (hp < 0.7 && (p = use('reaping_strike'))) return p;
+          if ((p = use('crimson_strike'))) return p;
+          if (me.res >= 75 && (p = use('reaping_strike'))) return p;
+          return null;
+        }
+        // Frost: drag the target in, freeze it, spend on Glacier Cleave (the free Killing Cold one first)
+        if (def && hp < 0.45 && ranged(threat) && (p = use('rune_ward'))) return p;
+        if (!visible) return null;
+        if (dist > 7 && (p = use('grave_chains'))) return p;
+        if (dist < 6 && (foeHp < 0.6 || hp < 0.5) && (p = use('heart_of_winter'))) return p;
+        if (dist < 9 && (near(10) >= 2 || !hasBuff(foe, 'slow')) && (p = use('winters_howl'))) return p;
+        if (me.kc && (p = use('glacier_cleave'))) return p;
+        if ((p = use('rime_strike'))) return p;
+        if (me.res >= 40 && (p = use('glacier_cleave'))) return p;
         return null; }
       case 'druid': {
         if (me.spec === 'feral') {

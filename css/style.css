@@ -309,6 +309,7 @@ kbd { display: inline-block; min-width: 26px; padding: 2px 7px; margin-right: 3p
 .res-energy { background: linear-gradient(90deg, #a88a10, #ffe25a) !important; }
 .res-rage { background: linear-gradient(90deg, #8a140c, #ff4a3a) !important; }
 .res-focus { background: linear-gradient(90deg, #a8540c, #ffa04a) !important; }
+.res-runic { background: linear-gradient(90deg, #24456e, #8ad8ff) !important; }
 .cp { display: flex; gap: 4px; height: 10px; }
 .cp i { width: 18px; height: 8px; border-radius: 4px; background: rgba(0,0,0,0.6); border: 1px solid #6a5530; }
 .cp .bloodrage { font-family: var(--font-title); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-shadow: 0 1px 2px #000; }

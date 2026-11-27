@@ -60,6 +60,7 @@ Source: Discord brainstorm (joel_141, icecooldd) plus the six existing classes.
 | **Necromancer** (new) | 💀 **Summoner**: one undead minion fights for you | ☠ **Curser**: stacking curses, "martyr" scaling | Soul energy (mana-like) | Ranged |
 | **Hunter** (new) | 🐾 **Beastmaster**: pet + bow, lower shot damage | 🎯 **Sharpshooter**: no pet, heavy crossbow, high shot damage | Focus | Ranged |
 | **Druid** (new) | 🐾 **Feral**: switch Cat (rogue-like) / Bear (tank) | 🌳 **Restoration**: tree form healer, lots of mobility | Mana (+ energy/rage in forms) | Melee / Ranged |
+| **Dread Knight** (new, 2026-11-28) | ❄ **Frost**: two runeblades, pull + burst + slows | 🩸 **Blood**: two-handed runeblade, tank, heals from damage taken | Runic Power | Melee |
 
 Ideas 9 ("Demonology") and 10 ("one with crazy DoTs") are covered by the Necromancer's two specs
 (Summoner = pet class, Curser = DoT class), so no separate Warlock class is needed for now.
@@ -241,6 +242,14 @@ Class mechanic — **Holy Power** (0–3, shown as three golden pips): builders 
 | 6 | **Divine Wrath** — pillar of light: 128 holy (+55 nearby), 3 Holy Power, +15% damage for 8 s (wings of light) | **Guardian's Resolve** — 8 s: 30% less damage taken, allies within 20 yd 10% less, Challenges every enemy within 15 yd |
 
 ---
+
+### ♞ Dread Knight — NEW, melee, Runic Power, 1330 / 1400 hp, plate, Risen (undead knight)
+
+A knight raised from death by rune magic. Both specs share **Grave Chains** (pull an enemy 5–25 yd to you,
+interrupting its cast; cover blocks the chain) and **Rune Ward** (absorbs spell damage). Frost deals damage with two
+runeblades (Rime Strike, Glacier Cleave, Winter's Howl, Heart of Winter); Blood tanks with a two-handed runeblade
+(Crimson Strike, Reaping Strike heals from the damage just taken, Sanguine Pulse taunts, Sanguine Covenant). Full
+kit, numbers and balance results: `docs/remodel/09-dread-knight.md`.
 
 ## 4. Races
 

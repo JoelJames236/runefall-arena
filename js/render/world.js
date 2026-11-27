@@ -65,6 +65,8 @@ const AB_ANIM = {
   shadow_word_pain: 'release', mind_blast: 'release', psychic_scream: 'raise', void_eruption: 'release',
   holy_strike: 'finisher', judgment: 'release', radiant_storm: 'slam', hammer_of_light: 'release', divine_shield: 'raise', divine_wrath: 'raise',
   pal_shield_slam: 'bash', sentinels_shield: 'release', consecration: 'slam', holy_shield: 'raise', guardians_resolve: 'raise',
+  rime_strike: 'slash', glacier_cleave: 'finisher', grave_chains: 'release', winters_howl: 'raise', rune_ward: 'raise', heart_of_winter: 'raise',
+  crimson_strike: 'slash', reaping_strike: 'finisher', sanguine_pulse: 'slam', sanguine_covenant: 'raise',
 };
 export { AB_ANIM };
 
@@ -472,7 +474,7 @@ export class World {
     const at = this.chars[src];
     if (o.melee && !o.pet && at && at !== ch && at.hitStop) at.hitStop(o.crit || o.big ? 0.085 : 0.05);
   }
-  onDash(id, fx) { const ch = this.chars[id]; if (ch) ch.play(fx === 'bull_rush' || fx === 'skull_leap' ? 'charge' : 'dash', fx === 'bull_rush' || fx === 'skull_leap' ? 0.7 : 0.35); }
+  onDash(id, fx) { const ch = this.chars[id]; if (ch && fx === 'grave_chains') { ch.hit(1.5); return; } if (ch) ch.play(fx === 'bull_rush' || fx === 'skull_leap' ? 'charge' : 'dash', fx === 'bull_rush' || fx === 'skull_leap' ? 0.7 : 0.35); }
 
   updateGameCamera(dt, me, input) {
     if (!me) return;

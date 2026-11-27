@@ -8,6 +8,7 @@ const tmpC = new THREE.Color();
 const V3 = new THREE.Vector3();
 
 // projectile looks (spells and basic attacks)
+const F_SPEC = (ctx, id) => (ctx && ctx.fighters && ctx.fighters[id] ? ctx.fighters[id].spec : null);
 const PROJ_STYLE = {
   frost_lance: { color: 0x8fd8ff, core: 0xeaffff, size: 0.38, trail: 0x6ac8ff, stretch: 3.2, shard: true },
   flame_burst: { color: 0xff7a1a, core: 0xfff0b0, size: 0.48, trail: 0xff5a10, smoke: true },
@@ -34,6 +35,8 @@ const PROJ_STYLE = {
   judgment: { color: 0xffe680, core: 0xffffff, size: 0.55, trail: 0xfff0b0, rays: true, halo: true },
   hammer_of_light: { color: 0xffd84a, core: 0xfff6d0, size: 0.6, trail: 0xffe890, axe: true, metal: 0xe8c060, emissive: 0xffc030 },
   sentinels_shield: { color: 0xbfe0ff, core: 0xffffff, size: 0.7, trail: 0xffe9a0, axe: true, metal: 0xc8d8f0, emissive: 0xffd870 },
+  grave_chains: { color: 0xbfd8f0, core: 0xffffff, size: 0.26, trail: 0x6a8aa8, stretch: 3, shard: true, small: true },
+  grave_chains_blood: { color: 0xff5a6a, core: 0xffe0e0, size: 0.26, trail: 0x8a1020, stretch: 3, shard: true, small: true },
 };
 const SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff7a2a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff, phys: 0xffffff };
 const CAST_SCHOOL_COLOR = { frost: 0x8fd8ff, fire: 0xff8a3a, arcane: 0xc07aff, holy: 0xffe070, nature: 0x7ae0ff, shadow: 0xa060ff };
@@ -528,7 +531,7 @@ export class VFX {
         else if (b.type === 'dr' && b.name === 'Consecrated Ground') key = null; // the ground itself glows
         else if (b.type === 'wrath' && b.fx === 'crusader_power') key = 'crusader_power';
         else if (b.type === 'divine' || b.type === 'taunt' || b.type === 'judged') key = b.type;
-        else if (['stun', 'root', 'disorient', 'silence', 'dr', 'tempest', 'mark', 'spirit', 'speed', 'stoneskin', 'slow', 'healred', 'stealth', 'berserk', 'lifesteal'].includes(b.type)) key = b.type === 'dr' && b.fx === 'undying' ? 'undying' : b.type;
+        else if (['stun', 'root', 'disorient', 'silence', 'dr', 'tempest', 'mark', 'spirit', 'speed', 'stoneskin', 'slow', 'healred', 'stealth', 'berserk', 'lifesteal', 'winter', 'covenant'].includes(b.type)) key = b.type === 'dr' && b.fx === 'undying' ? 'undying' : b.type;
         else if (b.type === 'dot') key = b.data?.school === 'holy' || b.name === 'Holy Burn' ? 'dot_holy' : 'dot';
         if (!key) continue;
         want.add(key);
@@ -601,6 +604,17 @@ export class VFX {
         const r = new THREE.Mesh(this.G.plane, add(0xff2a1a, 0.55)); r.material.map = this.ringTexture; r.rotation.x = -Math.PI / 2; r.position.y = 0.07; r.scale.setScalar(1.3); g.add(r);
 
         g.userData.pulse2 = r; return g; }
+      case 'rune_ward': { // Dread Knight: a shell of turning runes (frost blue / blood red)
+        const c = f.spec === 'blood' ? 0xff6a7a : 0x9ec8ff;
+        const s = new THREE.Mesh(new THREE.IcosahedronGeometry(1.25, 2), add(c, 0.12)); s.position.y = 1.1; g.add(s);
+        const w = new THREE.Mesh(new THREE.IcosahedronGeometry(1.27, 0), new THREE.MeshBasicMaterial({ color: c, wireframe: true, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false })); w.position.y = 1.1; g.add(w);
+        g.userData.spin = w; g.userData.pulse = s; return g; }
+      case 'winter': { // Heart of Winter: a frost ring at the feet, frost rising off the knight
+        const r = new THREE.Mesh(this.G.plane, add(0x7ad0ff, 0.5)); r.material.map = this.ringTexture; r.rotation.x = -Math.PI / 2; r.position.y = 0.07; r.scale.setScalar(1.3); g.add(r);
+        g.userData.pulse2 = r; return g; }
+      case 'covenant': { // Sanguine Covenant: a beating crimson aura
+        const s = new THREE.Mesh(this.G.sphere, add(0xff2a3a, 0.14)); s.scale.setScalar(1.3); s.position.y = 1.15; g.add(s);
+        g.userData.pulse = s; return g; }
       case 'undying': {
         const s = new THREE.Mesh(this.G.sphere, add(0xa01020, 0.14)); s.scale.setScalar(1.35); s.position.y = 1.15; g.add(s);
         g.userData.pulse = s; return g; }
@@ -660,6 +674,8 @@ export class VFX {
     if (key === 'healred' && Math.random() < dt * 4 * b) { const p = R(0.6); this.glow.emit({ x: p.x, y: pos.y + 0.8 + Math.random(), z: p.z, vy: -0.6, life: 0.6, size: 0.25, color: 0xff2a2a }); }
     if (key === 'stoneskin' && Math.random() < dt * 6 * b) { const p = R(0.8); this.glow.emit({ x: p.x, y: pos.y + Math.random() * 1.8, z: p.z, vy: 0.5, life: 0.7, size: 0.2, color: 0xb0e080 }); }
     if (key === 'stealth' && Math.random() < dt * 6 * b && ch.opacity > 0.05) { const p = R(0.6); this.smoke.emit({ x: p.x, y: pos.y + Math.random() * 1.6, z: p.z, vy: 0.3, life: 0.9, size: 0.6, color: 0x1a1024, grow: 1, alpha: 0.3 }); }
+    if (key === 'winter' && Math.random() < dt * 30 * b) { const p = R(0.8); this.glow.emit({ x: p.x, y: pos.y + 0.3 + Math.random() * 1.8, z: p.z, vy: 1.2, life: 0.6, size: 0.3, color: Math.random() < 0.5 ? 0xbfefff : 0x7ad0ff }); }
+    if (key === 'covenant' && Math.random() < dt * 18 * b) { const p = R(1.0); this.glow.emit({ x: p.x, y: pos.y + 0.2 + Math.random() * 1.6, z: p.z, vy: 0.8, life: 0.6, size: 0.3, color: Math.random() < 0.5 ? 0xff3a4a : 0x8a0010 }); }
     if (key === 'berserk' && Math.random() < dt * 45 * b) { const p = R(0.8); this.glow.emit({ x: p.x, y: pos.y + 0.3 + Math.random() * 1.8, z: p.z, vy: 2.2, life: 0.55, size: 0.4, color: Math.random() < 0.6 ? 0xff2a1a : 0xff8a3a, grow: -0.7 }); }
     if (key === 'lifesteal' && Math.random() < dt * 12 * b) { const p = R(1.6); this.glow.emit({ x: p.x, y: pos.y + 0.6 + Math.random(), z: p.z, vx: (pos.x - p.x) * 2, vy: 0.4, vz: (pos.z - p.z) * 2, life: 0.5, size: 0.22, color: 0xc0102a }); }
     if (key === 'tempest' && Math.random() < dt * 60 * b) { const a = Math.random() * 6.28; this.glow.emit({ x: pos.x + Math.sin(a) * 2.2, y: pos.y + 0.6 + Math.random() * 1.2, z: pos.z + Math.cos(a) * 2.2, vx: Math.cos(a) * 6, vz: -Math.sin(a) * 6, life: 0.25, size: 0.35, color: 0xfff0d0, grow: -0.5, drag: 3 }); }
@@ -701,11 +717,12 @@ export class VFX {
       case 'fizzle': this.burst(ev.x, ev.y, ev.z, 0x888888, 10, 2, 0.4, 0.3); this.smokeBurst(ev.x, ev.y, ev.z, 0x444444, 4, 1, 0.6, 0.5, 0.3); break;
       case 'dmg': {
         const P = at(ev.id);
-        const meleeAb = ev.ab === 'auto' ? !!ev.melee : ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skullsplitter', 'ground_breaker', 'envenom', 'crippling_poison', 'execute', 'bladestorm', 'stormstrike', 'lava_lash', 'holy_strike', 'pal_shield_slam', 'rake', 'shred', 'ferocious_bite', 'maul', 'thrash'].includes(ev.ab);
+        const meleeAb = ev.ab === 'auto' ? !!ev.melee : ['viper_strike', 'rending_blow', 'crippling_slash', 'gutting_edge', 'steel_tempest', 'skull_crack', 'shield_slam', 'rending_axes', 'headtaker', 'skullsplitter', 'ground_breaker', 'envenom', 'crippling_poison', 'execute', 'bladestorm', 'stormstrike', 'lava_lash', 'holy_strike', 'pal_shield_slam', 'rake', 'shred', 'ferocious_bite', 'maul', 'thrash', 'rime_strike', 'glacier_cleave', 'crimson_strike', 'reaping_strike'].includes(ev.ab);
         if (meleeAb) {
           this.burst(P.x, P.y + 1.2, P.z, [0xff3a2a, 0xffe0c0], ev.crit || ev.big ? 26 : 10, 5, 0.35, 0.28, { gravity: 9 });
           const src = F[ev.src];
-          const col = src?.cls === 'rogue' ? (ev.ab === 'gutting_edge' ? 0xffcf4a : 0x9be36a) : ev.ab === 'shield_slam' ? 0x9ec0ff : 0xfff0d8;
+          const col = src?.cls === 'rogue' ? (ev.ab === 'gutting_edge' ? 0xffcf4a : 0x9be36a) : src?.cls === 'dreadknight' ? (src.spec === 'blood' ? 0xff5a6a : 0xbfefff) : ev.ab === 'shield_slam' ? 0x9ec0ff : 0xfff0d8;
+          if (src?.cls === 'dreadknight' && src.spec !== 'blood' && ev.ab !== 'auto') this.burst(P.x, P.y + 1.2, P.z, [0xbfefff, 0x7ad0ff], ev.ab === 'glacier_cleave' ? 22 : 12, 4, 0.35, 0.35, { gravity: 6 }); // frost on the blade
           this.slashArc(P, src, col, ev.crit || ev.big);
           if (ev.melee && src?.cls === 'paladin' && src.spec !== 'protection') { this.burst(P.x, P.y + 1.2, P.z, [0xffe680, 0xffffff], 18, 4, 0.35, 0.32, { drag: 3 }); this.sphereFlash(P.x, P.y + 1.2, P.z, 0xffe680, 0.2, 1.0, 0.2, 0.45); } // holy hammer blows land with the hit
         }
@@ -721,7 +738,7 @@ export class VFX {
         if (ev.fx === 'shadow_leap') { this.smokeBurst(ev.x0, 1, ev.z0, 0x140a20, 14, 2, 0.9, 1.0, 0.7); this.smokeBurst(ev.x1, 1, ev.z1, 0x140a20, 14, 2, 0.9, 1.0, 0.7); }
         for (let i = 0; i < 20; i++) { const u = i / 20; this.glow.emit({ x: ev.x0 + (ev.x1 - ev.x0) * u, y: 1 + Math.random() * 0.6, z: ev.z0 + (ev.z1 - ev.z0) * u, life: 0.4, size: 0.4, color: c }); }
         break; }
-      case 'dash': { const P = at(ev.id); if (ev.fx === 'blazing_step') { this.burst(P.x, P.y + 0.8, P.z, [0xff7a1a, 0xffd080], 26, 4, 0.5, 0.45, { up: 1 }); this.flash(P.x, P.y + 1, P.z, 0xff7a1a, 25, 0.3); this.groundRing(P.x, P.z, 0xff7a1a, 0.3, 2.4, 0.35, (P.y || 0) + 0.08); break; } this.groundRing(P.x, P.z, ev.fx === 'bull_rush' ? 0xffb04a : 0xc8fff0, 0.3, 2.2, 0.35); this.smokeBurst(P.x, 0.3, P.z, 0x8a7a60, 8, 2, 0.6, 0.8, 0.4); break; }
+      case 'dash': { const P = at(ev.id); if (ev.fx === 'grave_chains') { this.smokeBurst(P.x, 0.3, P.z, 0x8a7a60, 8, 2, 0.6, 0.8, 0.4); break; } if (ev.fx === 'blazing_step') { this.burst(P.x, P.y + 0.8, P.z, [0xff7a1a, 0xffd080], 26, 4, 0.5, 0.45, { up: 1 }); this.flash(P.x, P.y + 1, P.z, 0xff7a1a, 25, 0.3); this.groundRing(P.x, P.z, 0xff7a1a, 0.3, 2.4, 0.35, (P.y || 0) + 0.08); break; } this.groundRing(P.x, P.z, ev.fx === 'bull_rush' ? 0xffb04a : 0xc8fff0, 0.3, 2.2, 0.35); this.smokeBurst(P.x, 0.3, P.z, 0x8a7a60, 8, 2, 0.6, 0.8, 0.4); break; }
       case 'interrupted': { const P = at(ev.id); this.burst(P.x, P.y + 1.8, P.z, [0xff4a3a, 0xffffff], 22, 4, 0.5, 0.35); this.groundRing(P.x, P.z, 0xff4a3a, 0.5, 2, 0.3); break; }
       case 'castfail': { const P = at(ev.id); this.burst(P.x, P.y + 1.5, P.z, 0x888888, 8, 2, 0.4, 0.25); break; }
       case 'death': {
@@ -766,7 +783,7 @@ export class VFX {
     } else {
       // weapon trail sparks for melee swings
       const ch = ctx.chars[ev.id];
-      if (ch && ch.weaponTipWorld) { const tp = ch.weaponTipWorld(V3); this.burst(tp.x, tp.y, tp.z, src.cls === 'rogue' ? 0x9be36a : 0xffc88a, 6, 1.5, 0.25, 0.2); }
+      if (ch && ch.weaponTipWorld) { const tp = ch.weaponTipWorld(V3); this.burst(tp.x, tp.y, tp.z, src.cls === 'rogue' ? 0x9be36a : src.cls === 'dreadknight' ? (src.spec === 'blood' ? 0xff5a6a : 0xbfefff) : 0xffc88a, 6, 1.5, 0.25, 0.2); }
     }
   }
 
@@ -816,6 +833,10 @@ export class VFX {
     const P = at(ev.id), T = ev.tid >= 0 ? at(ev.tid) : null;
     const hp = handPos(ev.id);
     switch (ev.ab) {
+      case 'rune_ward': { const c = F_SPEC(ctx, ev.id) === 'blood' ? 0xff6a7a : 0x9ec8ff; this.sphereFlash(P.x, P.y + 1.1, P.z, c, 0.5, 1.5, 0.4); this.ringBurst(P.x, P.y + 1, P.z, c, 24, 4, 0.5, 0.35); break; }
+      case 'heart_of_winter': this.pillar(P.x, P.z, 0x7ad0ff, 6, 0.7, 0.5); this.burst(P.x, P.y + 1.2, P.z, [0xbfefff, 0x7ad0ff, 0xffffff], 40, 5, 0.5, 0.5); this.flash(P.x, P.y + 1.5, P.z, 0x7ad0ff, 40, 0.4); break;
+      case 'sanguine_covenant': this.pillar(P.x, P.z, 0xff2a3a, 6, 0.7, 0.5); this.spiral(P.x, 0.2, P.z, 0xff3a4a, 40, 1.4, 2.2, 0.6, 0.4); this.flash(P.x, P.y + 1.5, P.z, 0xff2a3a, 40, 0.4); break;
+      case 'grave_chains': this.burst(hp.x, hp.y, hp.z, F_SPEC(ctx, ev.id) === 'blood' ? [0xff5a6a, 0x8a1020] : [0xbfd8f0, 0x6a8aa8], 14, 3, 0.3, 0.3); break;
       case 'flame_burst': case 'fireball': this.burst(hp.x, hp.y, hp.z, [0xff7a1a, 0xffd080], 16, 4, 0.35, 0.4); this.smokeBurst(hp.x, hp.y, hp.z, 0x2a1a14, 4, 1, 0.6, 0.5, 0.4); break;
       case 'meteor': this.burst(hp.x, hp.y, hp.z, [0xff5a1a, 0xffd080], 30, 5, 0.5, 0.5, { up: 2 }); this.flash(hp.x, hp.y, hp.z, 0xff5a1a, 35, 0.4); this.pillar(P.x, P.z, 0xff6a1a, 6, 0.6, 0.5); break;
       case 'frostbite': this.burst(hp.x, hp.y, hp.z, 0xa8e4ff, 12, 3, 0.3, 0.3); break;
@@ -859,6 +880,28 @@ export class VFX {
 
   namedFx(ev, ctx, at) {
     switch (ev.fx) {
+      case 'grave_chains': { // the chain snaps taut between the knight and its victim while the victim is dragged in
+        const P = at(ev.id), T = ev.tid >= 0 ? at(ev.tid) : null; if (!T) break;
+        const blood = F_SPEC(ctx, ev.id) === 'blood', c = blood ? 0xff4a5a : 0xbfd8f0;
+        this.beam(new THREE.Vector3(T.x, T.y + 1.2, T.z), new THREE.Vector3(P.x, P.y + 1.3, P.z), c, 0.4, 0.06, 0.15);
+        this.burst(T.x, T.y + 1.2, T.z, blood ? [0xff5a6a, 0x3a0010] : [0xffffff, 0x9ec8ff], 24, 4, 0.4, 0.4);
+        break; }
+      case 'winters_howl': { // a cone of freezing wind in front of the knight
+        const fy = ev.yaw ?? 0;
+        for (let i = 0; i < 9; i++) {
+          const a = fy + (i / 8 - 0.5) * 1.5, r = 2 + Math.random() * 7, x = ev.x + Math.sin(a) * r, z = ev.z + Math.cos(a) * r;
+          this.burst(x, 0.9, z, [0xbfefff, 0x7ad0ff, 0xffffff], 10, 4, 0.5, 0.45, { drag: 2 });
+        }
+        this.smokeBurst(ev.x + Math.sin(fy) * 4, 0.6, ev.z + Math.cos(fy) * 4, 0xd8f0ff, 14, 4, 1.0, 1.4, 0.35);
+        this.flash(ev.x, 1.4, ev.z, 0x7ad0ff, 35, 0.3);
+        break; }
+      case 'sanguine_pulse': // a nova of blood around the knight
+        this.groundRing(ev.x, ev.z, 0xff2a3a, 0.5, 8, 0.45);
+        this.ringBurst(ev.x, 1.0, ev.z, 0xff4a5a, 50, 12, 0.5, 0.45);
+        this.burst(ev.x, 0.8, ev.z, [0xff3a4a, 0x5a0010], 30, 8, 0.5, 0.45, { flat: true });
+        this.flash(ev.x, 1.4, ev.z, 0xff2a3a, 40, 0.35);
+        break;
+      case 'killing_cold': { const P = at(ev.id); this.burst(P.x, P.y + 1.3, P.z, [0xffffff, 0x7ad0ff], 16, 3, 0.35, 0.35); break; }
       case 'radiant_storm': // Crusader spender: a whirling storm of light around the paladin
         this.groundRing(ev.x, ev.z, 0xffe680, 0.6, 8, 0.5);
         this.ringBurst(ev.x, 1.0, ev.z, 0xfff0b0, 60, 14, 0.5, 0.5);

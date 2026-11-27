@@ -85,6 +85,10 @@ LOOKS['shaman:enhancement'] = { ...LOOKS.shaman, hair: [], weapons: ['stormaxe',
 LOOKS['hunter:sharpshooter'] = { ...LOOKS.hunter, weapons: ['longbow'], idle: 'Idle_Loop', tint: [0.24, 0.2, 0.16] };
 LOOKS['necromancer:curser'] = { ...LOOKS.necromancer, tint: [0.15, 0.1, 0.2], glow: 0xb070ff };
 LOOKS['druid:feral'] = { ...LOOKS.druid, weapons: [] };
+// Dread Knight (Risen): pale undead knight in dark plate, two frost runeblades / a blood-runed greatsword
+LOOKS.dreadknight = { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: ['Head_Hood', 'Acc_Pauldron'],
+  tint: [0.16, 0.2, 0.3], tintAmt: 0.8, skinTint: [0.7, 0.76, 0.84], scale: 1.07, weapons: ['runesword', 'runeswordL'], idle: 'Sword_Idle', glow: 0x7ad0ff, race: 'undead' };
+LOOKS['dreadknight:blood'] = { ...LOOKS.dreadknight, weapons: ['greatsword'], tint: [0.22, 0.07, 0.09], glow: 0xff3a4a };
 // undead summons (minions)
 LOOKS.ghoul = { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: [], hide: [], tint: [0.2, 0.24, 0.16], tintAmt: 0.8, skinTint: [0.5, 0.6, 0.42], scale: 0.95, weapons: [], idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', noArmor: true, race: 'undead' };
 LOOKS.abomination = { ...LOOKS.ghoul, outfit: 'Superhero_Male_FullBody', head: null, parts: [{ src: 'Male_Peasant', only: ['Legs', 'Feet'] }], skinTint: [0.55, 0.66, 0.46], scale: 1.4, race: 'orc' };
@@ -97,7 +101,7 @@ const ACTIONS = {
   // basic attacks: motions made with Tripo's AI animation for each weapon (attack-anims.js); a list alternates
   attack: { 'berserker:executioner': ['axe2h', 'sweep2h'], 'warrior:arms': ['axe2h', 'sweep2h'], paladin: ['smash2h', 'axe2h'], 'paladin:protection': ['sword_fore', 'sword_back'],
     'shaman:enhancement': ['chop_r', 'chop_l'], berserker: ['chop_r', 'chop_l'], warrior: ['chop_r', 'sword_back'], rogue: ['stab_r', 'hook_l'], mage: ['wand'], priest: ['scepter'], shaman: ['scepter'],
-    hunter: ['bow'], necromancer: ['staff'], druid: ['staff'], ghoul: ['Zombie_Scratch'], abomination: ['Zombie_Scratch'], gorilla: ['Punch_Jab', 'Punch_Cross'] },
+    hunter: ['bow'], necromancer: ['staff'], druid: ['staff'], dreadknight: ['chop_r', 'chop_l'], 'dreadknight:blood': ['axe2h', 'sweep2h'], ghoul: ['Zombie_Scratch'], abomination: ['Zombie_Scratch'], gorilla: ['Punch_Jab', 'Punch_Cross'] },
   slash: { any: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Cross'] },
   stab: { any: ['Punch_Cross', 'Punch_Jab'] },
   finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'], berserker: ['Sword_Regular_C'], paladin: ['Sword_Regular_C'], 'paladin:protection': ['Sword_Attack'], 'berserker:executioner': ['Sword_Attack'], 'warrior:arms': ['Sword_Attack'] },
@@ -113,7 +117,8 @@ const ACTIONS = {
 // the library clips basic attacks used before (and still use when assets/models/anims/attacks.json can't load)
 const ATTACK_FALLBACK = { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], paladin: ['TreeChopping_Loop'], 'paladin:protection': ['Sword_Regular_A', 'Sword_Regular_B'],
   'shaman:enhancement': ['Sword_Regular_A', 'Sword_Regular_B'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'],
-  mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'], hunter: ['Pistol_Shoot'], necromancer: ['Spell_Simple_Shoot'], druid: ['Spell_Simple_Shoot'] };
+  mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'], hunter: ['Pistol_Shoot'], necromancer: ['Spell_Simple_Shoot'], druid: ['Spell_Simple_Shoot'],
+  dreadknight: ['Sword_Regular_A', 'Sword_Regular_B'], 'dreadknight:blood': ['TreeChopping_Loop'] };
 // s into each attack clip at which the blow lands (measured: peak speed / furthest reach of the striking hand)
 const IMPACT = { Sword_Regular_A: 0.25, Sword_Regular_B: 0.27, Sword_Regular_C: 0.65, Sword_Attack: 0.4, TreeChopping_Loop: 0.13, Punch_Jab: 0.17, Punch_Cross: 0.22,
   Melee_Hook: 0.25, Shield_OneShot: 0.1, OverhandThrow: 0.38, Zombie_Scratch: 0.58 };
@@ -308,7 +313,7 @@ export function makeWeapon(kind, look) {
 // How each weapon is held, in WORLD terms at the idle pose of a champion facing +Z:
 //   dir  = where the weapon's +Y (blade / shaft) points,  side = where its +X points,
 //   palm = offset from the bone toward the fingers (m),   up/fwd = extra world offsets.
-export const ARMORY_KINDS = new Set(['orcaxe', 'longbow', 'frostwand', 'firewand', 'tome', 'stormmace', 'relic', 'sunhammer', 'holysword', 'towershield', 'cleaver', 'orcshield', 'flamestaff', 'runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'greatsword', 'stormaxeL', 'bow', 'crossbow', 'bonestaff', 'druidstaff', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe']);
+export const ARMORY_KINDS = new Set(['orcaxe', 'longbow', 'frostwand', 'firewand', 'tome', 'stormmace', 'relic', 'sunhammer', 'holysword', 'towershield', 'cleaver', 'orcshield', 'flamestaff', 'runesword', 'kiteshield', 'warAxe', 'warAxeL', 'greatAxe', 'greatsword', 'stormaxeL', 'bow', 'crossbow', 'bonestaff', 'druidstaff', 'fang', 'fangL', 'archstaff', 'sunmace', 'stormaxe', 'runeswordL']);
 const GRIP = {
   sword: { bone: 'hand_r', dir: [0, 0.55, 1], side: [-1, 0, 0], palm: 0.085 },
   axe: { bone: 'hand_r', dir: [0, 0.35, 1], side: [-1, 0, 0], palm: 0.085 },
@@ -333,7 +338,8 @@ Object.assign(GRIP, { runesword: GRIP.sword, kiteshield: GRIP.shield, holysword:
   tome: { bone: 'hand_l', dir: [0, 1, 0.1], side: [1, 0, 0.25], palm: 0.06 }, relic: { bone: 'hand_l', dir: [0, 1, 0.2], side: [1, 0, 0], palm: 0.07 },
   stormmace: { bone: 'hand_r', dir: [0, 0.8, 0.6], side: [-1, 0, 0], palm: 0.085 },
   bow: { bone: 'hand_l', dir: [0, 1, 0.08], side: [0, 0, 1], palm: 0.07 }, longbow: { bone: 'hand_l', dir: [0, 1, 0.08], side: [0, 0, 1], palm: 0.07 }, orcaxe: { bone: 'hand_r', dir: [0, 0.75, 0.65], side: [0, -0.3, 1], palm: 0.085 }, crossbow: { bone: 'hand_r', dir: [0, 0.05, 1], side: [-1, 0, 0], palm: 0.07 },
-  bonestaff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 }, druidstaff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 } });
+  bonestaff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 }, druidstaff: { bone: 'hand_r', dir: [0, 1, 0.12], side: [-1, 0, 0], palm: 0.085 },
+  runeswordL: { bone: 'hand_l', dir: [0, 0.55, 1], side: [1, 0, 0], palm: 0.085 } });
 export const GRIPS = GRIP; // exposed for tuning
 export let TROLL_KNEE = -0.22; // knee crouch for jungle trolls (bone-local X in the base skeleton's axes)
 export const setTrollKnee = v => { TROLL_KNEE = v; };
@@ -501,7 +507,7 @@ export class Character {
     const W = this.weapons, tipOf = k => W[k] && (W[k].userData.tip || W[k]);
     this.focus = ['frostwand', 'firewand', 'stormmace', 'relic', 'archstaff', 'flamestaff', 'sunhammer', 'holysword', 'cleaver', 'sunmace', 'fireOrb', 'bonestaff', 'druidstaff', 'crossbow', 'bow', 'longbow', 'orcaxe', 'stormaxe', 'runesword', 'greatsword', 'warAxe', 'greatAxe', 'fang'].map(tipOf).find(Boolean) || this.bones.hand_r;
     this.tipR = ['orcaxe', 'frostwand', 'firewand', 'stormmace', 'runesword', 'sunhammer', 'holysword', 'cleaver', 'greatsword', 'warAxe', 'greatAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
-    this.tipL = (W.fangL || W.warAxeL || W.stormaxeL)?.userData.tip;
+    this.tipL = (W.fangL || W.warAxeL || W.stormaxeL || W.runeswordL)?.userData.tip;
     this.tmpQ = new THREE.Quaternion(); this.tmpE = new THREE.Euler();
     this.setLoco(look.idle, 0);
   }

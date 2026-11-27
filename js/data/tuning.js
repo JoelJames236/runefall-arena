@@ -14,6 +14,7 @@ export const TUNING = {
     'paladin:crusader': 1.029, 'paladin:protection': 1.005, 'priest:discipline': 1.021, 'priest:shadow': 1.031,
     'shaman:elemental': 0.974, 'shaman:enhancement': 0.987, 'hunter:beastmaster': 0.99, 'hunter:sharpshooter': 1.018,
     'necromancer:summoner': 0.977, 'necromancer:curser': 0.954, 'druid:feral': 1.023, 'druid:restoration': 1.015,
+    'dreadknight:frost': 1, 'dreadknight:blood': 1,
   },
   team: {
     'mage:frost': 1.145, 'mage:fire': 1.125, 'rogue:subtlety': 0.918, 'rogue:assassination': 0.927,
@@ -21,6 +22,7 @@ export const TUNING = {
     'paladin:crusader': 0.971, 'paladin:protection': 0.979, 'priest:discipline': 1.017, 'priest:shadow': 0.95,
     'shaman:elemental': 1.09, 'shaman:enhancement': 0.937, 'hunter:beastmaster': 1.076, 'hunter:sharpshooter': 1.11,
     'necromancer:summoner': 1.018, 'necromancer:curser': 0.997, 'druid:feral': 0.903, 'druid:restoration': 1.01,
+    'dreadknight:frost': 0.96, 'dreadknight:blood': 1.15, // balance-tested in the lab (docs/remodel/09-dread-knight.md §8)
   },
 };
 TUNING.bg5 = { ...TUNING.team };

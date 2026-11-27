@@ -45,7 +45,7 @@ export const RACES = {
     face: { muzzle: 0.5, noseWide: 0.4, jawWide: 0.2, brow: 0.08 }, hunch: 0.12 },
 };
 // class -> race (both specs of a class share the race; see docs/CLASSES_AND_SPECS.md)
-export const RACE_OF = { mage: 'elf', rogue: 'human', warrior: 'orc', berserker: 'dwarf', paladin: 'human', priest: 'human', shaman: 'orc', hunter: 'troll', necromancer: 'undead', druid: 'tauren' };
+export const RACE_OF = { mage: 'elf', rogue: 'human', warrior: 'orc', berserker: 'dwarf', paladin: 'human', priest: 'human', shaman: 'orc', hunter: 'troll', necromancer: 'undead', druid: 'tauren', dreadknight: 'undead' };
 
 const segS = (R, name) => { const s = R.bones[name] || R.bones[name.replace(/_[lr]$/, '')]; return s || null; };
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };

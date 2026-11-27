@@ -643,7 +643,42 @@ const SETS = {
     K.cape(X.moss, 0.5, 0.95, { ragged: 0.03 });
   },
 };
+SETS['dreadknight:frost'] = (K) => { // frost-rimed dark plate, ice-crystal spiked pauldrons, horned helm with glowing eye slits
+  const { H, M, X, k } = K, { mesh } = H;
+  K.pads(s => P.spiked(K, 0.14 * k, M.blacksteel, X.ice, { n: 3 }), { up: 0.07 });
+  K.breastplate(M.blacksteel, M.silver, M.rune(0x7ad0ff, 1.6));
+  K.gauntlets(M.blacksteel, M.silver, 1.25);
+  K.greaves(M.blacksteel, M.silver);
+  K.belt(M.darkleather, M.silver, 0.2);
+  K.tassets(M.blacksteel, M.silver, 4);
+  skirt(K, X.chain, { len: 0.38, flare: 0.27, top: 0.19 });
+  K.tabard(M.royal, 0.22, 0.58, M.silver);
+  const helm = H.helmGreat(M, 0.14, { crest: null, horns: true });
+  helm.traverse(o => { if (o.isMesh && o.material === M.steel) o.material = M.blacksteel; });
+  const slit = mesh(H.box(0.15, 0.016, 0.03), M.rune(0x7ad0ff, 3), false); slit.position.set(0, -0.015, 0.142); helm.add(slit);
+  for (let i = 0; i < 3; i++) { const c = H.spike(0.014, 0.06 + (i === 1 ? 0.03 : 0), X.ice); c.position.set((i - 1) * 0.05, 0.15, 0.04); helm.add(c); }
+  helm.scale.setScalar(K.kh); K.onHead(helm, 0, 0.01, -0.005);
+  K.cape(M.royal, 0.5, 0.9, { ragged: 0.03, trim: M.silver });
+};
+SETS['dreadknight:blood'] = (K) => { // black-and-crimson plate, skull pauldrons, spiked crown-helm, crimson cloak
+  const { H, M, X, k } = K, { mesh } = H;
+  K.pads(s => P.skull(K, 0.16 * k, M.blacksteel, M.bone), { up: 0.08, out: 0.03 });
+  K.breastplate(M.blacksteel, M.darksteel, M.rune(0xff3a4a, 1.6));
+  K.gauntlets(M.blacksteel, M.darksteel, 1.25);
+  K.greaves(M.blacksteel, M.darksteel);
+  K.belt(M.darkleather, M.bone, 0.2);
+  K.tassets(M.blacksteel, M.darksteel, 5);
+  skirt(K, X.chain, { len: 0.4, flare: 0.28, top: 0.19 });
+  K.tabard(M.crimson, 0.24, 0.6, M.darksteel);
+  const sk = H.skullMesh(M, 0.05 * k); K.hips(sk, 0, 0.05, 0.21);
+  const helm = H.helmGreat(M, 0.14, { crest: null });
+  helm.traverse(o => { if (o.isMesh && o.material === M.steel) o.material = M.blacksteel; });
+  const slit = mesh(H.box(0.15, 0.016, 0.03), M.rune(0xff3a4a, 3), false); slit.position.set(0, -0.015, 0.142); helm.add(slit);
+  for (let i = 0; i < 5; i++) { const c = H.spike(0.013, 0.06 + (i === 2 ? 0.04 : 0), M.darksteel); c.position.set((i - 2) * 0.04, 0.15 - Math.abs(i - 2) * 0.01, 0.05); helm.add(c); }
+  helm.scale.setScalar(K.kh); K.onHead(helm, 0, 0.01, -0.005);
+  K.cape(M.crimson, 0.5, 0.92, { ragged: 0.03, trim: M.darksteel });
+};
 // classes without a spec key fall back to their first spec's set
 SETS.mage = SETS['mage:frost']; SETS.rogue = SETS['rogue:subtlety']; SETS.warrior = SETS['warrior:protection']; SETS.berserker = SETS['berserker:fury'];
 SETS.paladin = SETS['paladin:crusader']; SETS.priest = SETS['priest:discipline']; SETS.shaman = SETS['shaman:elemental']; SETS.hunter = SETS['hunter:beastmaster'];
-SETS.necromancer = SETS['necromancer:summoner']; SETS.druid = SETS['druid:restoration'];
+SETS.necromancer = SETS['necromancer:summoner']; SETS.druid = SETS['druid:restoration']; SETS.dreadknight = SETS['dreadknight:frost'];

@@ -7,7 +7,7 @@
 //   melee: needs to face the target      gcd: triggers / respects the global cooldown
 //   cast: cast time in seconds (moving cancels)
 
-export const CLASS_ORDER = ['mage', 'rogue', 'warrior', 'berserker', 'paladin', 'priest', 'shaman', 'hunter', 'necromancer', 'druid'];
+export const CLASS_ORDER = ['mage', 'rogue', 'warrior', 'berserker', 'paladin', 'priest', 'shaman', 'hunter', 'necromancer', 'druid', 'dreadknight'];
 
 const MELEE = 4.2;
 
@@ -342,7 +342,63 @@ export const CLASSES = {
           sim.holyPower(c, 3); sim.addBuff(c, 'wrath', 8, { value: 0.15, src: c.id, name: 'Crusader\'s Power', icon: '☀', fx: 'crusader_power' }); } },
     ],
   },
+
+  // A fallen knight raised by rune magic (docs/remodel/09-dread-knight.md). Frost is spec 0 (the class kit below),
+  // Blood overrides it in SPECS. Runic Power: builders and basic attacks fill it (dealing damage does not, unlike
+  // rage); Blood also gains it from damage taken. Numbers balance-tested in the lab (09 §8).
+  dreadknight: {
+    id: 'dreadknight', name: 'Dread Knight', role: 'Runebound Death-Knight', race: 'Risen', emblem: '♞', color: '#a8b4c8', accent: '#7ad0ff', melee: true,
+    desc: 'A knight raised from death by rune magic, cold and relentless. Drags enemies to it with spectral chains, interrupting their spells, then breaks them with runeblade strikes. Builds Runic Power with strikes and spends it on heavy blows. Passive — Killing Cold: every 5th basic attack makes your next Glacier Cleave free and a certain critical hit.',
+    weapon: 'Two frost-runed runeblades', armor: 'Frost-rimed dark plate with ice-crystal pauldrons and a horned helm',
+    hp: 1330, defense: 0.135, speed: 6.9, resType: 'runic', res: 100, resStart: 10, regen: 1,
+    auto: { name: 'Frostbound Strikes', dmg: 34, speed: 1.6, range: 4.5, ranged: false, school: 'phys', glyph: '⚔', color: '#7ad0ff', rp: 8,
+      desc: 'Basic attack: alternating runeblade strikes (34 damage every 1.6 sec). Melee range, +8 Runic Power.' },
+    rating: { health: 4, damage: 5, mobility: 3, defense: 3 },
+    passive: { name: 'Killing Cold', killingCold: 5 },
+    abilities: [
+      { id: 'rime_strike', name: 'Rime Strike', glyph: '❄', color: '#9adfff', school: 'frost', cost: 0, cd: 4.5, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
+        desc: 'Strike with both runeblades for 55 frost damage, Chilling the target (20% slow for 3 sec). Generates 25 Runic Power.',
+        exec(sim, c, t) { sim.damage(c, t, 55, { school: 'frost', ab: 'rime_strike' }); sim.addBuff(t, 'slow', 3, { value: 0.2, src: c.id, name: 'Chilled', icon: '❄' }); sim.gainRes(c, 25); } },
+      { id: 'glacier_cleave', name: 'Glacier Cleave', glyph: '❆', color: '#c8f0ff', school: 'frost', cost: 40, cd: 0, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
+        desc: 'Bring both blades down for 100 frost damage with +25% critical strike chance. Killing Cold makes it free and a certain critical hit.',
+        exec(sim, c, t) { const kc = c.kc; c.kc = false; sim.damage(c, t, 100, { school: 'frost', ab: 'glacier_cleave', forceCrit: kc || Math.random() < 0.25, big: kc }); } },
+      graveChains('grave_chains'),
+      { id: 'winters_howl', name: "Winter's Howl", glyph: '≋', color: '#bfefff', school: 'frost', cost: 20, cd: 10, gcd: true, cast: 0, range: 0, target: false,
+        desc: 'Roar a cone of freezing wind: enemies within 10 yards in front of you take 40 frost damage and are slowed by 40% for 3 sec.',
+        exec(sim, c) {
+          sim.event({ e: 'fx', fx: 'winters_howl', id: c.id, x: c.x, z: c.z, yaw: c.yaw }); sim.aoeMinions(c, c.x + Math.sin(c.yaw) * 5, c.z + Math.cos(c.yaw) * 5, 5, 40);
+          for (const e of sim.enemiesOf(c)) if (sim.dist(c, e) <= 10 && Math.abs(angleDiffD(c.yaw, Math.atan2(e.x - c.x, e.z - c.z))) <= 0.79) {
+            sim.damage(c, e, 40, { school: 'frost', ab: 'winters_howl' }); sim.addBuff(e, 'slow', 3, { value: 0.4, src: c.id, name: "Winter's Howl", icon: '≋' });
+          }
+        } },
+      runeWard(),
+      { id: 'heart_of_winter', name: 'Heart of Winter', glyph: '❄', color: '#7ad0ff', school: 'frost', cost: 0, cd: 50, gcd: false, cast: 0, range: 0, target: false, signature: true,
+        desc: 'SIGNATURE — Your heart freezes over for 10 sec: +20% damage, basic attacks 30% faster, every hit Chills the target, and you are immune to slows and roots.',
+        exec(sim, c) { sim.cleanse(c, ['slow', 'root']); sim.addBuff(c, 'winter', 10, { value: 0.2, src: c.id, name: 'Heart of Winter', icon: '❄' }); } },
+    ],
+  },
 };
+
+// Dread Knight abilities shared by both specs
+function graveChains(id) {
+  return { id, name: 'Grave Chains', glyph: '⛓', color: '#9ec8e0', school: 'shadow', cost: 0, cd: 20, gcd: false, cast: 0, range: 25, minRange: 5, target: true,
+    desc: 'Hurl a spectral chain at an enemy 5–25 yards away and drag them to you, interrupting spellcasting and Chilling them (20% slow for 2 sec). Cover blocks the chain while it flies.',
+    exec(sim, c, t) {
+      sim.spawnProjectile(c, t, c.spec === 'blood' ? 'grave_chains_blood' : 'grave_chains', 50, () => {
+        if (!t.alive) return;
+        if (t.buffs.some(b => b.type === 'divine' || b.type === 'ccimmune' || b.type === 'tempest' || b.type === 'sanctuary')) { sim.event({ e: 'immune', id: t.id }); return; }
+        sim.interrupt(t, c);
+        sim.event({ e: 'fx', fx: 'grave_chains', id: c.id, tid: t.id, x: t.x, z: t.z });
+        sim.pull(t, c, 2.5, 0.35);
+        sim.addBuff(t, 'slow', 2, { value: 0.2, src: c.id, name: 'Chilled', icon: '❄' });
+      }, 0, { block: true });
+    } };
+}
+function runeWard() {
+  return { id: 'rune_ward', name: 'Rune Ward', glyph: '◈', color: '#c8d8ff', school: 'shadow', cost: 0, cd: 40, gcd: false, cast: 0, range: 0, target: false, allowCC: true,
+    desc: 'Wrap yourself in runes for 5 sec, absorbing up to 400 magic (non-physical) damage. Every 10 damage absorbed gives 1 Runic Power. Usable while stunned.',
+    exec(sim, c) { sim.addBuff(c, 'absorb', 5, { value: 400, src: c.id, name: 'Rune Ward', icon: '◈', fx: 'rune_ward', data: { magicOnly: true, rpPer: 10 } }); } };
+}
 
 // ---------------------------------------------------------------- specs (talents)
 // Every class has two specs, chosen before the match and locked for it. Spec 0 is the class's
@@ -687,6 +743,44 @@ export const SPECS = {
       look: 'protection',
     },
   ],
+  dreadknight: [
+    {
+      id: 'frost', name: 'Frost', icon: '❄', color: '#7ad0ff', tag: 'Two runeblades · pull, burst, control',
+      role: 'Frost Dread Knight',
+      desc: 'Two frost-runed runeblades. Drags casters in with Grave Chains, slows everything with Chill and Winter\'s Howl, and spends Runic Power on crushing Glacier Cleaves. Passive — Killing Cold: every 5th basic attack makes your next Glacier Cleave free and a certain critical hit.',
+      abilities: {},
+    },
+    {
+      id: 'blood', name: 'Blood', icon: '🩸', color: '#ff3a4a', tag: 'Two-handed runeblade · tank, self-healing',
+      role: 'Blood Dread Knight',
+      desc: 'A two-handed runeblade and a body that feeds on battle. Pulls enemies in and taunts them, heals from the damage it just took with Reaping Strike, and gains Runic Power from every blow it suffers. Passive — Blood Bond: 4% of all damage you deal heals you; taking damage generates Runic Power (1 per 5% of your health lost).',
+      weapon: 'A two-handed blood-runed greatsword', armor: 'Black-and-crimson plate with skull pauldrons and a spiked crown-helm',
+      hp: 1400, defense: 0.15, speed: 6.7,
+      rating: { health: 5, damage: 2, mobility: 2, defense: 5 },
+      passive: { name: 'Blood Bond', killingCold: 0, bond: 0.04, takenRP: 0.05 },
+      auto: { name: 'Sanguine Cleave', dmg: 38, speed: 2.1, range: 4.5, ranged: false, school: 'phys', glyph: '⚔', color: '#ff3a4a', rp: 6,
+        desc: 'Basic attack: a heavy two-handed runeblade cleave (38 damage every 2.1 sec). Melee range, +6 Runic Power. Blood Bond heals you for 4% of it.' },
+      abilities: {
+        0: { id: 'crimson_strike', name: 'Crimson Strike', glyph: '🩸', color: '#ff5a6a', school: 'phys', cost: 0, cd: 4, gcd: true, cast: 0, range: MELEE, target: true, melee: true,
+          desc: 'A rising runeblade slash for 42 damage that infects the target with Blood Plague (36 shadow damage over 6 sec). Generates 20 Runic Power.',
+          exec(sim, c, t) { sim.damage(c, t, 42, { school: 'phys', ab: 'crimson_strike' }); sim.addDot(c, t, 'Blood Plague', 36, 6, 'shadow', '🩸'); sim.gainRes(c, 20); } },
+        1: { id: 'reaping_strike', name: 'Reaping Strike', glyph: '✚', color: '#ff3a4a', school: 'phys', cost: 40, cd: 0, gcd: true, cast: 0, range: MELEE, target: true, melee: true, freeWith: 'covenant',
+          desc: 'A reaping sweep for 55 damage that heals you for 8% of all damage you took in the last 5 sec (at least 3% of your maximum health).',
+          exec(sim, c, t) { sim.damage(c, t, 55, { school: 'phys', ab: 'reaping_strike' }); sim.heal(c, c, Math.max(sim.takenSince(c, 5) * 0.08, c.maxHp * 0.03), 'reaping_strike'); } },
+        2: graveChains('grave_chains'),
+        3: { id: 'sanguine_pulse', name: 'Sanguine Pulse', glyph: '◎', color: '#ff6a7a', school: 'shadow', cost: 15, cd: 8, gcd: true, cast: 0, range: 0, target: false,
+          desc: 'Drive the blade into the ground: a blood nova deals 30 shadow damage to enemies within 8 yards, spreads Blood Plague to them and taunts them for 3 sec.',
+          exec(sim, c) {
+            sim.event({ e: 'fx', fx: 'sanguine_pulse', id: c.id, x: c.x, z: c.z }); sim.aoeMinions(c, c.x, c.z, 8, 30);
+            for (const e of sim.enemiesOf(c)) if (sim.dist(c, e) <= 8) { sim.damage(c, e, 30, { school: 'shadow', ab: 'sanguine_pulse' }); sim.addDot(c, e, 'Blood Plague', 36, 6, 'shadow', '🩸'); sim.taunt(c, e, 3); }
+          } },
+        5: { id: 'sanguine_covenant', name: 'Sanguine Covenant', glyph: '♥', color: '#ff2a3a', school: 'shadow', cost: 0, cd: 60, gcd: false, cast: 0, range: 0, target: false, allowCC: true, signature: true,
+          desc: 'SIGNATURE — Seal a blood covenant for 8 sec: +15% maximum health (healed for the gain), +30% healing received, and Reaping Strike costs no Runic Power. Usable while stunned.',
+          exec(sim, c) { const base = c.maxHp, gain = Math.round(base * 0.15); sim.addBuff(c, 'covenant', 8, { value: 0.15, src: c.id, name: 'Sanguine Covenant', icon: '♥', data: { base, heal: 0.3 } }); c.maxHp = base + gain; c.hp = Math.min(c.maxHp, c.hp + gain); sim.event({ e: 'heal', id: c.id, src: c.id, amt: gain, ab: 'sanguine_covenant' }); } },
+      },
+      look: 'blood',
+    },
+  ],
 };
 // bear form shares Wild Pounce and Berserk Instinct with cat form
 { const F = SPECS.druid[0].forms; F.bear.abilities[3] = F.cat.abilities[3]; F.bear.abilities[5] = F.cat.abilities[5]; }
@@ -733,6 +827,7 @@ export const BUFF_ICONS = {
   berserk: { icon: '☄', color: '#ff2a1a' }, lifesteal: { icon: '♥', color: '#b01020' },
   hot: { icon: '✿', color: '#8aff9a' }, wrath: { icon: '🔥', color: '#ff7a3a' }, weaken: { icon: '⇣', color: '#9a7aff', debuff: true },
   hexed: { icon: '☠', color: '#b070ff', debuff: true }, doom: { icon: '☄', color: '#7a3aff', debuff: true }, treeform: { icon: '🌳', color: '#5aff7a' },
+  winter: { icon: '❄', color: '#7ad0ff' }, covenant: { icon: '♥', color: '#ff3a4a' },
   judged: { icon: '⚖', color: '#ffe680', debuff: true }, taunt: { icon: '⚑', color: '#ff9a4a', debuff: true }, divine: { icon: '◯', color: '#fff6c0' },
   // battleground: the flag, spawn protection, Exposed and the power-ups
   flagcarrier: { icon: '⚑', color: '#ffd27a' }, sanctuary: { icon: '☩', color: '#fff6c0' }, exposed: { icon: '◎', color: '#ff7a3a', debuff: true },

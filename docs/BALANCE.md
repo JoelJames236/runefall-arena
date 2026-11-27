@@ -19,6 +19,21 @@ outlier; differences of a few points are noise (±3 % in 1v1, ±2.5 % in 2v2 at 
 Rage users look weak against the passive dummy because nothing hits them back (rage comes from dealing and
 taking damage) — the benchmark measures the kit, the matrix measures the fight.
 
+## New class: Dread Knight (2026-11-28)
+
+Frost and Blood joined as the 21st and 22nd specs. Tuned in a lab prototype first, then measured again with the
+real code (hard bots, 40 rounds per 1v1 pairing, 800 random 2v2 games per spec):
+
+| Spec | 1v1 % | 2v2 % | Factors (duel / team) |
+|---|---|---|---|
+| Dread Knight — Frost | 49.4 | 53.8 | 1.00 / 0.96 |
+| Dread Knight — Blood | 48.2 | 50.1 | 1.00 / 1.15 |
+
+Frost beats casters and ranged specs it can pull in (Discipline, Shadow, Elemental, Summoner 100 %) and loses to
+melee (Crusader, Feral 0 %); Blood beats melee and loses to kiting damage-over-time casters — like Protection
+Paladin. Without its pull (Grave Chains) the class drops to 32 % / 43 % in 1v1. The other specs' tables below were
+measured before it existed; the next full lab run includes it. Details: `docs/remodel/09-dread-knight.md` §8.
+
 ## Players vs bots — ranged aim assist and more human bots (2026-11-27)
 
 The lab only ever pits bots against bots, and bots aim the same for every spec — so it could not show what players

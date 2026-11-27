@@ -16,7 +16,11 @@ export const MOVE_ABS = new Set(['arcane_shift', 'shadow_leap', 'bull_rush', 'ga
 // Berserker passive: up to +60% damage as health drops (linear with missing health)
 export const bloodrage = f => f.cls === 'berserker' ? 1 + (CLASSES.berserker.passive.maxBonus) * (1 - Math.max(0, f.hp) / f.maxHp) : 1;
 const STUNLIKE = ['stun', 'disorient'];
-const RES_NAME = { mana: 'mana', energy: 'energy', rage: 'rage', focus: 'focus' };
+const RES_NAME = { mana: 'mana', energy: 'energy', rage: 'rage', focus: 'focus', runic: 'Runic Power' };
+// an ability's cost right now (Dread Knight Blood: Reaping Strike is free during Sanguine Covenant)
+const costOf = (f, ab) => ab.freeWith && hasBuff(f, ab.freeWith) ? 0 : ab.cost;
+// Berserk (Berserker) and Heart of Winter (Dread Knight Frost) share their mechanics: + damage, faster basic attacks, immune to slows and roots
+const frenzyOf = f => getBuff(f, 'berserk') || getBuff(f, 'winter');
 export const MELEE_AUTO_RANGE = 4.5;
 // Melee leeway: when attacker and target are BOTH on the move, melee reaches this much further. Chasing a
 // running target otherwise means standing right behind it and still being "out of range" every other swing.
@@ -478,7 +482,7 @@ export class Sim {
       Object.assign(f, {
         hp: Math.round(C.hp * this.vitality(f)), maxHp: Math.round(C.hp * this.vitality(f)), res: C.resStart ?? C.res, maxRes: C.res, cds: [0, 0, 0, 0, 0, 0], ch: C.abilities.map(a => a.charges || 0), gcd: 0, cast: null, buffs: [],
         cp: 0, stamina: 100, alive: true, vy: 0, y: 0, dash: null, locked: false, dr: {}, queued: null, autoT: 0, atkReq: 0, atkHold: false, atkWarn: false, swing: null, form: kit(f.cls, f.spec).defaultForm || null, petT: 0,
-        target: this.defaultTarget(f), friend: -1,
+        target: this.defaultTarget(f), friend: -1, kc: false, autoN: 0, taken: [],
       });
       const s = this.spawnOf(f);
       f.x = s.x; f.z = s.z; f.yaw = s.yaw;
@@ -651,7 +655,7 @@ export class Sim {
     if (ab.cast > 0 && airborne(f)) return "You can't cast while jumping";
     if (ab.charges ? f.ch[idx] <= 0 : f.cds[idx] > 0) return 'Ability not ready yet';
     if (ab.gcd && f.gcd > 0 && !ignoreGcd) return 'GCD';
-    if (ab.cost > f.res) return `Not enough ${RES_NAME[f.resType]}`;
+    if (costOf(f, ab) > f.res) return `Not enough ${RES_NAME[f.resType]}`;
     if (ab.needsCp && f.cp < 1) return f.cls === 'paladin' ? 'No Holy Power' : 'No combo points';
     if (ab.needsPet && !this.minionOf(f)) return 'Your pet is not here';
     if (ab.target) {
@@ -711,7 +715,7 @@ export class Sim {
 
   execute(f, idx, t, opts) {
     const ab = kitOf(f).abilities[idx];
-    f.res -= ab.cost;
+    f.res -= costOf(f, ab);
     if (ab.charges) { f.ch[idx]--; if (f.cds[idx] <= 0) f.cds[idx] = ab.cd; } // charges refill one at a time
     else f.cds[idx] = ab.cd;
     if (!ab.keepStealth) this.removeBuff(f, 'stealth');
@@ -818,7 +822,7 @@ export class Sim {
     f.atkReq = Math.max(0, f.atkReq - dt);
     if (!A || !(f.atkHold || had)) return;
     if (f.autoT > 0 || f.swing || isStunned(f) || f.cast || f.dash || hasBuff(f, 'tempest')) return;
-    f.autoT = A.speed / (hasBuff(f, 'berserk') ? 1.3 : 1); f.atkReq = 0;
+    f.autoT = A.speed / (frenzyOf(f) ? 1.3 : 1); f.atkReq = 0;
     this.removeBuff(f, 'stealth');
     if (A.ranged) {
       const aimed = this.shootAuto(f, A), aim = this.aimOf(f);
@@ -883,7 +887,7 @@ export class Sim {
           f.cast = null;
           let t = tid >= 0 ? this.fighters[tid] : null;
           let err = null;
-          if (ab.cost > f.res) err = `Not enough ${RES_NAME[f.resType]}`;
+          if (costOf(f, ab) > f.res) err = `Not enough ${RES_NAME[f.resType]}`;
           else if (ab.target) {
             if (!this.visibleTo(t, f)) err = 'No target';
             else if (this.dist(f, t) > ab.range + 2) err = 'Out of range';
@@ -936,6 +940,7 @@ export class Sim {
           this.event({ e: 'fx', fx: 'doom_pop', id: f.id, x: f.x, z: f.z });
           this.damage(src, f, b.data.dmg + b.data.per * n, { school: 'shadow', ab: 'doom', big: true });
         }
+        if (b.type === 'covenant' && b.data.base) { f.maxHp = b.data.base; f.hp = Math.min(f.hp, f.maxHp); } // the covenant's extra health goes again
         if (b.type === 'mark') {
           const src = this.fighters[b.src];
           this.event({ e: 'fx', fx: 'death_mark_pop', id: f.id, x: f.x, z: f.z });
@@ -1024,7 +1029,7 @@ export class Sim {
     const wr = getBuff(src, 'wrath'); if (wr) amt *= 1 + wr.value; // Bestial Wrath / Berserk Instinct
     if (TP && TP.martyr) { let mine = 0; for (const e of this.fighters) if (e.team !== tgt.team) mine += e.buffs.filter(b => b.src === tgt.id && b.data && b.data.curse).length; amt *= 1 + 0.03 * Math.min(5, mine); }
     if (SP.steadyAim && (src.stillT || 0) >= 1 && !o.dot) amt *= 1 + SP.steadyAim; // Sharpshooter: standing still
-    const bz = getBuff(src, 'berserk'); if (bz) amt *= 1 + bz.value;
+    const bz = frenzyOf(src); if (bz) amt *= 1 + bz.value;
     // battleground effects: the Fury power-up (+ damage dealt, + damage taken) and a flag carrier's Exposed stacks
     const fu = getBuff(src, 'fury'); if (fu) amt *= 1 + fu.value;
     if (hasBuff(tgt, 'fury')) amt *= 1.1;
@@ -1039,11 +1044,15 @@ export class Sim {
     let absorbed = 0;
     for (const b of tgt.buffs) {
       if (b.type !== 'absorb' || amt <= 0 || o.pierce) continue; // pierce: ignores shields
+      if (b.data.magicOnly && (o.school || 'phys') === 'phys') continue; // Rune Ward: spells only
       const a = Math.min(b.value, amt); b.value -= a; amt -= a; absorbed += a;
+      if (b.data.rpPer) this.gainRes(tgt, a / b.data.rpPer);
       if (b.value <= 0) b.t = 0;
     }
     tgt.hp -= amt;
     src.stats.dmg += amt;
+    if (src.resType === 'runic' && src !== tgt) this.runicDealt(src, tgt, amt, o, SP);
+    if (tgt.resType === 'runic' && tgt !== src && amt > 0) this.runicTaken(tgt, amt);
     const ls = getBuff(src, 'lifesteal');
     if (ls && src !== tgt && src.alive) { const h = Math.round((amt + absorbed) * ls.value * (1 - this.damp / 100)); if (h > 0) { src.hp = Math.min(src.maxHp, src.hp + h); src.stats.heal += h; this.event({ e: 'heal', id: src.id, src: src.id, amt: h, ab: 'lifesteal' }); } }
     tgt.stats.absorbed += absorbed;
@@ -1082,6 +1091,7 @@ export class Sim {
     const crit = Math.random() < RULES.critChance;
     if (crit) amt *= RULES.critMult;
     if (src && hasBuff(src, 'treeform')) amt *= 1.4; // Druid Tree of Life: +40% healing done
+    const cv = getBuff(tgt, 'covenant'); if (cv) amt *= 1 + (cv.data.heal || 0); // Dread Knight Blood: Sanguine Covenant
     const hr = tgt.buffs.reduce((m, b) => b.type === 'healred' ? Math.max(m, b.value) : m, 0);
     amt *= (1 - hr) * (1 - this.damp / 100);
     amt = Math.round(Math.min(amt, tgt.maxHp - tgt.hp));
@@ -1094,10 +1104,10 @@ export class Sim {
   addBuff(f, type, dur, o = {}) {
     if (!f.alive) return null;
     if ((hasBuff(f, 'divine') || hasBuff(f, 'sanctuary')) && o.src !== undefined && this.fighters[o.src] && this.fighters[o.src].team !== f.team) { this.event({ e: 'immune', id: f.id }); return null; } // Divine Shield: immune to harmful effects
-    if (type === 'slow' && o.src !== f.id && (hasBuff(f, 'berserk') || hasBuff(f, 'treeform'))) return null; // berserk / Tree of Life: immune to slows
+    if (type === 'slow' && o.src !== f.id && (frenzyOf(f) || hasBuff(f, 'treeform'))) return null; // berserk, Heart of Winter, Tree of Life: immune to slows
     if (o.cc) {
       if (hasBuff(f, 'tempest') || hasBuff(f, 'ccimmune')) { this.event({ e: 'immune', id: f.id }); return null; }
-      if (o.cc === 'root' && hasBuff(f, 'berserk')) { this.event({ e: 'immune', id: f.id }); return null; }
+      if (o.cc === 'root' && frenzyOf(f)) { this.event({ e: 'immune', id: f.id }); return null; }
       const dr = f.dr[o.cc];
       if (dr && dr.t > 15) delete f.dr[o.cc];
       const n = f.dr[o.cc] ? f.dr[o.cc].n : 0;
@@ -1346,7 +1356,7 @@ export class Sim {
     amt *= bloodrage(src);
     if (SP.schoolBonus) amt *= 1 + (SP.schoolBonus[o.school] || 0);
     const wr = getBuff(src, 'wrath'); if (wr) amt *= 1 + wr.value;
-    const bz = getBuff(src, 'berserk'); if (bz) amt *= 1 + bz.value;
+    const bz = frenzyOf(src); if (bz) amt *= 1 + bz.value;
     amt = Math.max(1, Math.round(amt));
     m.hp -= amt;
     if (src.resType === 'rage') src.res = Math.min(src.maxRes, src.res + amt * 0.09);
@@ -1399,7 +1409,33 @@ export class Sim {
     }
   }
 
+  // ------------------------------------------------------------ Runic Power (Dread Knight)
+  gainRes(f, n) { f.res = Math.min(f.maxRes, f.res + n); }
+  // dealing damage gives no Runic Power (unlike rage): basic attacks give their fixed amount, Killing Cold counts them
+  runicDealt(src, tgt, amt, o, SP) {
+    if (o.auto) {
+      this.gainRes(src, kitOf(src).auto.rp || 0);
+      if (SP.killingCold && ++src.autoN % SP.killingCold === 0 && !src.kc) { src.kc = true; this.gainRes(src, 40); this.event({ e: 'fx', fx: 'killing_cold', id: src.id }); }
+    }
+    if (SP.bond && amt > 0 && src.alive) this.heal(src, src, amt * SP.bond, 'blood_bond'); // Blood Bond
+    if (amt > 0 && hasBuff(src, 'winter')) this.addBuff(tgt, 'slow', 3, { value: 0.2, src: src.id, name: 'Chilled', icon: '❄' }); // Heart of Winter
+  }
+  // damage taken: remembered for Reaping Strike; Blood turns it into Runic Power
+  runicTaken(f, amt) {
+    (f.taken || (f.taken = [])).push([this.fightT, amt]);
+    while (f.taken.length && this.fightT - f.taken[0][0] > 6) f.taken.shift();
+    const P = kitOf(f).passive; if (P && P.takenRP) this.gainRes(f, amt / (P.takenRP * f.maxHp));
+  }
+  takenSince(f, secs) { let s = 0; for (const [t, a] of f.taken || []) if (this.fightT - t <= secs && this.fightT >= t) s += a; return s; }
+
   // ------------------------------------------------------------ movement abilities
+  // drag a fighter toward another one, stopping `stop` metres in front of it (Dread Knight Grave Chains).
+  // The victim slides along the ground like a dash: walls, pillars and the bridge edge stop it; it can't act meanwhile.
+  pull(t, to, stop, dur) {
+    const dx = to.x - t.x, dz = to.z - t.z, d = Math.hypot(dx, dz);
+    if (d <= stop + 0.1) return;
+    this.dashDir(t, dx, dz, d - stop, dur, 'grave_chains');
+  }
   validSpot(x, z, y = 0) {
     if (!inBounds(x, z)) return false;
     if (!GEO) for (const p of PILLARS) if (Math.hypot(x - p.x, z - p.z) < p.r + FIGHTER_R) return false;
