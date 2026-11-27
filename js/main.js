@@ -10,7 +10,7 @@ import { loadHeroAssets, preloadChampions } from './render/heroes.js';
 import { HUD, iconHTML, emblemStyle } from './ui/hud.js';
 import { Input, DEFAULT_BINDS, RESERVED_KEYS, keyLabel } from './input.js';
 import { Audio, AB_SOUND, HIT_SOUND, CAST_SOUND } from './audio.js';
-import { Sim, moveFighter, RULES, rangeDist, segBlocked, angleTo, angleDiff, FACE_ARC, meleeBonus, airborne, MOVE_ABS, aimPick, MELEE_AIM_WIDTH, MELEE_AUTO_RANGE } from './sim/sim.js';
+import { Sim, moveFighter, RULES, rangeDist, segBlocked, angleTo, angleDiff, FACE_ARC, meleeBonus, airborne, MOVE_ABS, aimPick, assistPick, MELEE_AIM_WIDTH, MELEE_AUTO_RANGE } from './sim/sim.js';
 import { AI } from './sim/ai.js';
 import { useMap } from './sim/sim.js';
 import { FlagSim, FLAG_RULES, POWERUPS } from './sim/flag.js';
@@ -1248,7 +1248,9 @@ function gameFrame(dt) {
   if (meV && myA) {
     const reachOk = myA.ranged ? (t => rangeDist(meV, t) <= myA.range + 1)
       : (t => rangeDist(meV, t) <= MELEE_AUTO_RANGE + meleeBonus(meV, t) && Math.abs(angleDiff(meV.yaw, angleTo(meV, t))) <= FACE_ARC);
-    hud.aimOn = !!aimPick([...pre.fighters, ...(pre.minions || [])], meV, aim, 80, myA.ranged ? 0 : MELEE_AIM_WIDTH, reachOk);
+    const units = [...pre.fighters, ...(pre.minions || [])];
+    // ranged: the dot also counts as on target inside the aim assist (the shot will lead and bend towards that enemy)
+    hud.aimOn = !!(aimPick(units, meV, aim, 80, myA.ranged ? 0 : MELEE_AIM_WIDTH, reachOk) || (myA.ranged && assistPick(units, meV, aim, 80, t => reachOk(t) && !segBlocked(meV.x, meV.z, t.x, t.z, meV.y + 1.5, t.y + 1.2))));
   }
   const atkHold = !!raw.atkHeld;
   if (raw.friendKey === 1) setFriend = S.myId;

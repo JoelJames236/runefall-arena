@@ -71,7 +71,7 @@ host refused or queued disappears again within half a second.
 | --- | --- |
 | `W A S D` | Move / strafe |
 | Mouse | Turn camera & champion (click the arena to capture the mouse; if the browser refuses once — e.g. right after Esc — the next click captures it again. Where capture is impossible, such as an embedded view, the cursor itself aims and the right button held turns the camera) |
-| **Left click** | Basic attack where the dot in the middle of the screen points (aimed — it hits the enemy hitbox under the dot, or nothing). One swing per click, hold to keep swinging at your attack speed. The enemy you click on also becomes your target |
+| **Left click** | Basic attack where the dot in the middle of the screen points (aimed — it hits the enemy hitbox under the dot, or nothing). One swing per click, hold to keep swinging at your attack speed. Ranged basic attacks have aim assist: with the dot on or near an enemy the shot leads a moving target and bends a little towards it (the dot turns red). The enemy you click on also becomes your target |
 | `1`–`6` | Abilities (`Q` / `E` also trigger 5 / 6). **Rebind them in Settings** → Ability Keys: two keys per slot, any key or the middle / back / forward mouse button |
 | `Tab` | Cycle enemy targets |
 | `F1` / `F2` | Friendly target: yourself / your ally — press `F2` again for the next ally (heals and shields go to the friendly target) |

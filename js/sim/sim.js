@@ -71,6 +71,24 @@ export function aimPick(units, me, aim, len, thick = 0, ok = null) {
   }
   return best;
 }
+// Aim assist for players' ranged basic attacks (bots aim themselves). Hitting a strafing enemy with a bolt that
+// flies half a second meant aiming 3–4 m ahead of it by hand, while bots hit nearly every shot — so ranged specs
+// felt hopeless for people. Now an enemy counts as aimed at when the dot is within ASSIST_M (+ a little per metre
+// of distance) of its hitbox; the shot then leads it (shootAuto) and bends towards it a little (stepStraight).
+export const ASSIST_M = 0.45, ASSIST_PER_M = 0.035, ASSIST_TURN = 2.2;
+// the enemy nearest to the aim ray within the assist cone: { f, dist } or null (the line of sight check is `ok`'s)
+export function assistPick(units, me, aim, len, ok = null) {
+  let best = null, bestOff = Infinity;
+  for (const t of units) {
+    if (t.team === me.team || !hittable(t)) continue;
+    const r = hitboxDist(aim[0], aim[1], aim[2], aim[3] * len, aim[4] * len, aim[5] * len, t);
+    const along = r.s * len, off = r.d - boxOf(t).r;
+    if (along < 0.3 || off > ASSIST_M + ASSIST_PER_M * along || (ok && !ok(t))) continue;
+    const score = off / (1 + along * 0.05); // the nearest to the dot (in angle), then the nearest in distance
+    if (score < bestOff) { bestOff = score; best = { f: t, dist: along }; }
+  }
+  return best;
+}
 // a ray from the input, or null: finite numbers, unit direction, origin near the fighter (the camera can't be further)
 function readAim(a, f) {
   if (!Array.isArray(a) || a.length !== 6 || !a.every(Number.isFinite)) return null;
@@ -501,6 +519,7 @@ export class Sim {
       if (f.alive && inp.attack) this.startAttack(f, true);
     }
     for (const f of this.fighters) this.updateFighter(f, dt);
+    this.trackVelocity(dt);
     this.updateProjectiles(dt);
     this.updateZones(dt);
     this.updateMinions(dt);
@@ -704,21 +723,46 @@ export class Sim {
   // what you hit becomes your target when you have none (so abilities follow your basic attacks)
   claimTarget(f, t) { const c = this.fighters[f.target]; if (!c || !c.alive || c.team === f.team || !this.visibleTo(c, f)) f.target = t.id; }
 
+  // every unit's smoothed ground velocity (players' aim assist leads moving targets with it); teleports are skipped
+  trackVelocity(dt) {
+    const k = Math.min(1, dt * 8);
+    for (const u of this.units()) {
+      if (u._px !== undefined) {
+        const vx = (u.x - u._px) / dt, vz = (u.z - u._pz) / dt;
+        if (vx * vx + vz * vz < 225) { u.vx = (u.vx || 0) * (1 - k) + vx * k; u.vz = (u.vz || 0) * (1 - k) + vz * k; }
+      }
+      u._px = u.x; u._pz = u.z;
+    }
+  }
+
   // a ranged basic attack: a straight bolt from the weapon towards the aim point (the first hitbox under the
   // aim ray, or where the ray ends at the weapon's range / meets the ground). Returns the fighter aimed at.
+  // Players (not bots — they aim themselves) get aim assist: a dot on or near an enemy (assistPick) fires at
+  // where that enemy will be when the bolt arrives, and the bolt bends a little towards it in flight.
   shootAuto(f, A) {
     const aim = this.aimOf(f), fw = this.forward(f);
     const M = [f.x + fw.x * 0.8, f.y + 1.6, f.z + fw.z * 0.8];
     const reach = A.range + 1;
     const L = Math.hypot(aim[0] - f.x, aim[1] - f.y - 1.5, aim[2] - f.z) + reach; // camera → beyond the weapon's range
-    const pick = aimPick(this.units(), f, aim, L, 0, t => this.dist(f, t) <= reach);
-    let s = pick ? pick.dist : L;
-    if (!pick && aim[4] < -1e-3) s = Math.min(s, (aim[1] - floorAt(f.x, f.z, f.y) - 0.05) / -aim[4]); // into the ground
-    let dx = aim[0] + aim[3] * s - M[0], dy = aim[1] + aim[4] * s - M[1], dz = aim[2] + aim[5] * s - M[2];
+    const inReach = t => this.dist(f, t) <= reach;
+    let pick = aimPick(this.units(), f, aim, L, 0, inReach);
+    if (!pick && !f.bot) pick = assistPick(this.units(), f, aim, L, t => inReach(t) && !segBlocked(f.x, f.z, t.x, t.z, f.y + 1.5, t.y + 1.2));
+    let dx, dy, dz;
+    if (pick && !f.bot) {
+      // lead: aim at the target's chest where it will be when the bolt gets there (two passes for the flight time)
+      const t = pick.f; let px = t.x, pz = t.z;
+      for (let n = 0; n < 2; n++) { const tt = Math.hypot(px - M[0], pz - M[2]) / A.projSpeed; px = t.x + (t.vx || 0) * tt; pz = t.z + (t.vz || 0) * tt; }
+      dx = px - M[0]; dy = t.y + (isMinion(t) ? 0.8 : 1.05) - M[1]; dz = pz - M[2];
+    } else {
+      let s = pick ? pick.dist : L;
+      if (!pick && aim[4] < -1e-3) s = Math.min(s, (aim[1] - floorAt(f.x, f.z, f.y) - 0.05) / -aim[4]); // into the ground
+      dx = aim[0] + aim[3] * s - M[0]; dy = aim[1] + aim[4] * s - M[1]; dz = aim[2] + aim[5] * s - M[2];
+    }
     let l = Math.hypot(dx, dy, dz);
     if (l < 1.5) { dx = aim[3]; dy = aim[4]; dz = aim[5]; l = 1; } // aim point right at the muzzle: fly along the aim
     const t0 = pick ? pick.f : null;
     this.projectiles.push({ id: NEXT_ID++, kind: A.proj, owner: f.id, team: f.team, target: -1, straight: true, x: M[0], y: M[1], z: M[2], dx: dx / l, dy: dy / l, dz: dz / l, speed: A.projSpeed, left: reach + 2,
+      home: t0 && !f.bot ? t0 : null,
       onHit: t => {
         if (isMinion(t)) { this.hitMinion(f, t, A.dmg, { school: A.school }); return; }
         this.claimTarget(f, t);
@@ -1101,6 +1145,16 @@ export class Sim {
 
   // an aimed basic-attack bolt: flies straight, hits the first enemy hitbox on its way, breaks on cover / the ground
   stepStraight(p, i, dt) {
+    // aim assist: a player's bolt bends towards the target it was fired at (a strafe still beats it at long range)
+    const h = p.home;
+    if (h && hittable(h)) {
+      const tx = h.x - p.x, ty = h.y + (isMinion(h) ? 0.8 : 1.05) - p.y, tz = h.z - p.z, tl = Math.hypot(tx, ty, tz);
+      if (tl > 0.3) {
+        const k = Math.min(1, ASSIST_TURN * dt);
+        let dx = p.dx + (tx / tl - p.dx) * k, dy = p.dy + (ty / tl - p.dy) * k, dz = p.dz + (tz / tl - p.dz) * k;
+        const l = Math.hypot(dx, dy, dz) || 1; p.dx = dx / l; p.dy = dy / l; p.dz = dz / l;
+      }
+    }
     const step = Math.min(p.speed * dt, p.left); p.left -= step;
     const ux = p.dx * step, uy = p.dy * step, uz = p.dz * step;
     let hit = null, hs = 2;

@@ -19,6 +19,28 @@ outlier; differences of a few points are noise (±3 % in 1v1, ±2.5 % in 2v2 at 
 Rage users look weak against the passive dummy because nothing hits them back (rage comes from dealing and
 taking damage) — the benchmark measures the kit, the matrix measures the fight.
 
+## Players vs bots — ranged aim assist and more human bots (2026-11-27)
+
+The lab only ever pits bots against bots, and bots aim the same for every spec — so it could not show what players
+felt: as a caster or archer you lose to bots. The reason was the aim. A ranged basic attack flies straight and takes
+0.5–0.6 s over 25 yd; a strafing enemy has moved 3.5–4 m by then, so a person had to aim that far ahead by hand,
+while a Champion bot aims within ±0.2 m and leads perfectly (a Knight bot within ±0.45 m — the hitbox is 0.55 m wide).
+Melee doesn't have this problem: a swing hits whatever is under the dot at once.
+
+- **Aim assist for players' ranged basic attacks** (`assistPick` / `shootAuto` / `stepStraight` in `js/sim/sim.js`):
+  an enemy within 0.45 m (+ 0.035 m per metre of distance) of the dot counts as aimed at; the shot then fires at
+  where it will be when the bolt arrives and bends towards it in flight (2.2 rad/s). Walls still block, aiming clearly
+  beside the target still misses. Bots don't get it (they aim themselves; the AI marks its champion as a bot), so the
+  lab numbers and the tuning stay valid. The crosshair turns red when the assist will catch a target.
+- **Squire and Knight bots aim like people**: aim error 0.9 → 1.3 m and 0.45 → 0.75 m, lead 0.3 → 0.15 and
+  0.75 → 0.55; Knight also interrupts (0.55 → 0.45) and dodges (0.6 → 0.5) a little less and reacts a little slower.
+  Champion bots are unchanged (the expert level; the lab measures with them).
+
+Measured with a stand-in for a person — the dot on the enemy's chest with ±0.5 m jitter and no lead — against every
+spec as Knight bots (114 rounds each): basic-attack hit rate without → with assist: Fire 65 → 80 %, Frost 71 → 88 %,
+Sharpshooter 74 → 90 %, Elemental 65 → 84 %, Shadow 65 → 78 %, Curser 64 → 83 % — about the rate bots reach by
+themselves.
+
 ## Latest measurement — all three modes (2026-11-27)
 
 Measured with the code after the 5v5 battleground and the new main menu (nothing changed in the arena: an A/B run

@@ -6,8 +6,10 @@ import { CLASSES, kitOf } from '../data/classes.js';
 import { PILLARS, ARENA_R, BRIDGE, ARCH_OPEN, hasBuff, isStunned, angleTo, segBlocked, floorAt, solidAt, airborne, currentMap } from './sim.js';
 
 const DIFF = {
-  easy: { react: 0.65, interrupt: 0.15, defensive: 0.5, kite: 0.3, dodge: 0.2, focus: 0.3, aim: 0.9, lead: 0.3 },
-  normal: { react: 0.35, interrupt: 0.55, defensive: 0.85, kite: 0.7, dodge: 0.6, focus: 0.7, aim: 0.45, lead: 0.75 },
+  // aim: how far (m) a bot's aim drifts off the target's chest; lead: how much of a ranged shot's lead it gets right.
+  // Squire and Knight aim like people do (they miss strafing targets now and then); Champion is the expert.
+  easy: { react: 0.65, interrupt: 0.15, defensive: 0.5, kite: 0.3, dodge: 0.2, focus: 0.3, aim: 1.3, lead: 0.15 },
+  normal: { react: 0.4, interrupt: 0.45, defensive: 0.85, kite: 0.6, dodge: 0.5, focus: 0.7, aim: 0.75, lead: 0.55 },
   hard: { react: 0.15, interrupt: 0.9, defensive: 1.0, kite: 1.0, dodge: 0.95, focus: 1.0, aim: 0.2, lead: 1.0 },
 };
 
@@ -22,6 +24,7 @@ const INTERRUPTS = { paladin: ['sentinels_shield', 'hammer_of_light'], berserker
 export class AI {
   constructor(sim, id, difficulty = 'normal') {
     this.sim = sim; this.id = id; this.d = DIFF[difficulty] || DIFF.normal;
+    if (sim.fighters[id]) sim.fighters[id].bot = true; // bots aim themselves: no player aim assist (sim.shootAuto)
     this.think = Math.random() * 0.3; this.strafe = Math.random() < 0.5 ? 1 : -1; this.strafeT = 0; this.jumpT = 3 + Math.random() * 4;
     this.focus = -1; this.focusT = 0; this.closeT = 0;
     this.seenCasts = new Map(); // enemy id -> { cast, react, will }
