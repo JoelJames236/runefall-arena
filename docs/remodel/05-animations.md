@@ -347,6 +347,7 @@ marker until `release`, then becomes the projectile.
 | `dw` | 21 | `st` | 22 |
 | | | `bw` | 14 |
 | **Total** | **192 humanoid clips** | | |
+| + Dread Knight (`09` §5) | 12 | | |
 
 Every one of the 106 abilities and 21 basic attacks now has its own motion (the per-ability table is in
 `06-spells-and-vfx.md`, column "Clip").

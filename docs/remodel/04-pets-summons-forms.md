@@ -105,26 +105,33 @@ which one produced the motion.
 
 | | |
 |---|---|
-| Look | gaunt, hunched undead, grey-green skin stretched over bones, exposed ribs and spine ridge, long clawed hands, torn burial wraps, iron collar with a broken chain, **glowing green eyes** (emissive) |
-| Size | 1.70 m standing upright, hunched to ~1.45 m |
-| Model | Tripo, T-pose, retopo **7,000 tris**, 1 material 1024² (emissive mask: eyes, rib cracks) |
-| Rig | humanoid (UE5) |
+| Direction | the role model's **death-knight ghoul** as an archetype: a bent, twisted, feral humanoid corpse, pale, its flesh rotted away in places down to the bone, a face twisted until it is barely human with a jutting underbite full of fangs, deformed claws, no weapons, no armour — a ravenous, mindless servant. Our own model and texture |
+| Body | emaciated but wiry, **deeply hunched and twisted** (spine bowed forward, one shoulder higher than the other), **very long arms** reaching below the knees, oversized hands with **long hooked black claws** (0.12 m), thin bent legs on clawed bare feet |
+| Skin | grey-green **pallor** with darker rot blotches; flesh **rotted away in patches showing bone**: ribs on one side of the chest, the knobbed spine ridge along the back, the bones of one forearm, part of the cheek and jaw |
+| Head | bald, small and **feral**: a **heavy jutting underbite jaw with jagged fangs**, lipless mouth, sunken nose, small pointed ears, deep sockets with small eyes that glow faint green (the necromancer's colour, eyes only) |
+| Clothing | only a filthy ragged loincloth and a few strips of torn burial cloth on the wrists and ankles — no collar, no armour, no weapons |
+| Colours | `#8a9a7a` pallor / `#4a5a3a` rot / `#d8d0b0` bone / `#3a2a22` cloth / glow `#7aff6a` (eyes, faint) |
+| Size | 1.75 m if it stood straight; hunched to ~1.40 m |
+| Model | Tripo, T-pose, retopo **7,000 tris**, 1 material 1024² (emissive mask: eyes only) |
+| Rig | humanoid (UE5); the claws are part of the fingers (weighted to the finger joints); finger pose `claw` (`03` §5) |
 | Hitbox (R4) | r 0.45, h 1.6 |
-| Sockets | `grip_r/l` (claw tips), `eyes`, `chest` (Corpse Explosion centre), `base`, `overhead` |
+| Sockets | `grip_r/l` (claw tips), `mouth` (bite), `eyes`, `chest` (Corpse Explosion centre), `base`, `overhead` |
+| Prompt core | "emaciated wiry undead ghoul, deeply hunched and twisted body, very long arms reaching below the knees, oversized hands with long hooked black claws, thin bent legs with clawed bare feet, grey-green pallid rotting skin with flesh rotted away showing bones of the ribs, spine and one forearm, bald small feral head with a heavy jutting underbite jaw full of jagged fangs, lipless mouth, small pointed ears, small faintly glowing green eyes, a ragged loincloth and torn cloth strips, no armor, no weapon, T-pose" |
 
 | Clip | Len | Markers | Motion | Plays on |
 |---|---|---|---|---|
-| `gh_spawn` | 1.20 | — | claws out of the ground and drags itself up (the root rises from −1.2 m to 0 by code) | summon / respawn |
-| `gh_idle` | 2.00 loop | — | hunched, twitching, head jerking | idle |
-| `gh_run` | 0.60 loop | stride 4.8 | fast lurching run on bent legs, arms swinging low | moving (11 m/s) |
-| `gh_atk_1` | 0.70 | strike 0.22 | right claw rake downward | basic attack |
+| `gh_spawn` | 1.20 | — | claws out of the ground and drags itself up, snapping its jaw (the root rises from −1.2 m to 0 by code) | summon / respawn |
+| `gh_idle` | 2.00 loop | — | deep hunch, twitching, head jerking, sniffing the air, claws scraping the ground | idle |
+| `gh_run` | 0.60 loop | stride 4.8 | fast feral lope, dropping onto its knuckles every other stride, long arms clawing forward | moving (11 m/s) |
+| `gh_atk_1` | 0.70 | strike 0.22 | rakes the right claws downward | basic attack |
 | `gh_atk_2` | 0.70 | strike 0.22 | double claw swipe across | basic attack |
-| `gh_hit` | 0.30 | — | jerks back, hisses | damage taken |
-| `gh_stun` | 1.20 loop | — | swaying, head lolling | stunned |
+| `gh_atk_3` | 0.80 | strike 0.28 | lunges, clamps its jaws on the target's arm and tears (a gnawing bite) | basic attack (third variant; fits its slowing hit) |
+| `gh_hit` | 0.30 | — | jerks back, snarls with the fangs bared | damage taken |
+| `gh_stun` | 1.20 loop | — | swaying, head lolling, jaw hanging | stunned |
 | `gh_swell` | 0.40 | release 0.38 | body convulses, arms out, swells (blend shape not needed: the chest scales 1 → 1.3 by code) | Corpse Explosion, then hidden at `release` |
-| `gh_death` | 1.20 | — | collapses into a heap | death (then dissolve into dust) |
+| `gh_death` | 1.20 | — | collapses into a twisted heap | death (then dissolve into dust) |
 
-**9 clips.**
+**10 clips.**
 
 ### 3.3 Abomination — Necromancer Summoner signature (15 s)
 
@@ -346,7 +353,7 @@ The cat / bear / tree models also get the champion's material treatment: rim lig
 | Creature | Tris | Joints | Texture | Clips | Draws |
 |---|---|---|---|---|---|
 | Gorilla | 9,000 | ~80 | 1024² | 13 | 1 + shadow |
-| Ghoul | 7,000 | ~80 | 1024² | 9 | 1 + shadow |
+| Ghoul | 7,000 | ~80 | 1024² | 10 | 1 + shadow |
 | Abomination | 10,000 | ~80 | 1024² | 8 | 1 + shadow |
 | Spirit wolf | 6,000 | ≤ 40 | 512² | 9 | 1 (no shadow: spectral) |
 | Cat form (saber-toothed tiger) | 9,000 | ≤ 40 | 1024² | 20 | 1 + shadow |
@@ -355,6 +362,6 @@ The cat / bear / tree models also get the champion's material treatment: rim lig
 | Fire Spirit | 400 | 0 | VFX atlas | — (code) | in the VFX draw |
 | 3 totems | 3 × 1,200 | 0 | 1024² shared | — (code) | 1 each |
 | Freezing Trap | 600 | 0 | in the totem atlas | — (code) | 1 |
-| **Total** | | | | **88 clips** | |
+| **Total** | | | | **89 clips** | |
 
 At most on screen in a 2v2: 2 pets + 1 summon + forms replace their champion (no extra), 2 totems, 1 trap.

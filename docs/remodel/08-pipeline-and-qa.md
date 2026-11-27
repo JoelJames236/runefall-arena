@@ -48,6 +48,7 @@ Ids: lowercase, `_`-separated; champions `<class>_<spec>`; items as in `03` §7;
 | 5 · Creatures | gorilla, ghoul, abomination (humanoid rigs); quadruped pilot (2 cat clips) → wolf, cat, bear; tree; totems, trap, projectile meshes | `04` per creature |
 | 6 · Effects | atlas, then per class in the order of `06` §5 | per class: every ability fired in the viewer harness, screenshots, budgets |
 | 7 · Sim follow-ups | R1 (instant melee abilities land at `hitAt`), optionally R2–R4 | balance matrix + 2v2 auto-tune re-run, `docs/BALANCE.md` updated |
+| 7b · Dread Knight | `09`: models, runeblades, 12 clips, then classes / sim mechanics / AI / HUD / balance | `09` passes `02` §4, `03` §8, `05` §9 and a balance run |
 | 8 · Final | 5v5 check with LODs, perf acceptance (`07` §8), docs (`TRIPO_CHARACTERS.md`, `ATTACK_ANIMATIONS.md`) updated, old code paths removed | — |
 
 Long Tripo runs go end to end without stopping for confirmation (saved files land in `src/` automatically), as
@@ -69,12 +70,14 @@ AI animation **20** credits. Balance ≈ **15,800**.
 | Props: 3 totems, trap, 7 projectile meshes | 11 × 80 | 880 |
 | Animation master | 1 × 100 | 100 |
 | Humanoid champion clips | 192 × 20 | 3,840 |
-| Humanoid creature clips (gorilla 13, ghoul 9, abomination 8, tree 11) | 41 × 20 | 820 |
+| Humanoid creature clips (gorilla 13, ghoul 10, abomination 8, tree 11) | 42 × 20 | 840 |
 | Four-legged clips (wolf 9, cat 20, bear 18; Plan A) | 47 × 20 | 940 |
-| Re-roll reserve for clips (20 %) | | 1,120 |
-| **Total** | | **≈ 12,500** |
+| Re-roll reserve for clips (20 %) | | 1,124 |
+| **Total** | | **≈ 12,520** |
+| New class Dread Knight (`09` §7): 2 champions, 2 items, 12 clips + reserve | | ≈ 650 |
+| **Total with the Dread Knight** | | **≈ 13,170** |
 
-Leaves ≈ 3,300 credits of margin. If Plan B (procedural four-legged motion) is used: −940.
+Leaves ≈ 3,280 credits of margin (≈ 2,630 with the Dread Knight). If Plan B (procedural four-legged motion) is used: −940.
 
 ---
 
@@ -123,4 +126,4 @@ Leaves ≈ 3,300 credits of margin. If Plan B (procedural four-legged motion) is
 | KTX2 transcoder fails to load | no textures | fallback JPEG textures in the same GLB slot (larger download) |
 | R1 shifts combat feel / balance | win rates move | re-run the balance matrix and auto-tune (`docs/BALANCE.md`) |
 | Heroic sizes collide with the fixed hitboxes | weapons look like they miss | strike markers are measured on the real items; hit effects drawn at the contact point (tip) |
-| Unit prices rise after the sale | budget | margin ≈ 3,300 credits; Plan B saves 940; split items share GLBs where possible |
+| Unit prices rise after the sale | budget | margin ≈ 3,280 credits; Plan B saves 940; split items share GLBs where possible |
