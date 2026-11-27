@@ -19,7 +19,94 @@ outlier; differences of a few points are noise (±3 % in 1v1, ±2.5 % in 2v2 at 
 Rage users look weak against the passive dummy because nothing hits them back (rage comes from dealing and
 taking damage) — the benchmark measures the kit, the matrix measures the fight.
 
-## Where every spec stands (benchmark from an earlier update; current win rates are in the first change log below)
+## Latest measurement — all three modes (2026-11-27)
+
+Measured with the code after the 5v5 battleground and the new main menu (nothing changed in the arena: an A/B run
+against the simulation from before the battleground put Fire Mage at 51.3 % now vs 47.4 % before, 760 rounds each).
+
+| Mode | Sample | Noise per spec |
+| --- | --- | --- |
+| 1v1 | two matrices, 20 rounds per pairing each → 760 rounds per spec | ±1.8 points |
+| 2v2 | 2,400 random team-ups (≈ 480 per spec) | ±2.3 points |
+| 5v5 battleground | 200 complete matches, random teams (no class twice per team), FlagAI on hard → ≈ 100 per spec | ±5 points |
+
+| Spec | 1v1 % | 2v2 % | 5v5 % | 5v5 damage / healing per match | 5v5 flag returns / picks per match |
+| --- | --- | --- | --- | --- | --- |
+| Warrior — Protection | 52.2 | 53.5 | **63.0** | 19,800 / 0 | 2.28 / 1.09 |
+| Warrior — Arms | 49.7 | **56.1** | 57.4 | 25,800 / 0 | 2.56 / 1.12 |
+| Berserker — Fury | 50.7 | 48.4 | **59.7** | 26,600 / 700 | 2.23 / 1.91 |
+| Berserker — Executioner | 49.7 | **45.2** | 56.6 | 20,200 / 0 | 1.77 / 1.95 |
+| Rogue — Assassination | 52.9 | 48.8 | **59.2** | 24,100 / 0 | 2.29 / 2.72 |
+| Rogue — Subtlety | **45.6** | 51.8 | 53.6 | 23,500 / 0 | 2.79 / 2.66 |
+| Necromancer — Summoner | 50.1 | 49.9 | 57.7 | 17,100 / 0 | 0.26 / 1.88 |
+| Necromancer — Curser | 49.9 | 48.7 | **36.4** | 11,900 / 800 | 0.17 / 1.18 |
+| Mage — Frost | 49.2 | 48.8 | 56.7 | 9,300 / 0 | 0.12 / 0.05 |
+| Mage — Fire | 48.9 | 50.2 | **41.5** | 15,400 / 0 | 0.18 / 1.31 |
+| Druid — Feral | 48.8 | 48.3 | 54.5 | 20,000 / 3,400 | 1.90 / 1.36 |
+| Druid — Restoration | 49.2 | 53.8 | **28.3** | 6,300 / 13,600 | 0.17 / 0.13 |
+| Paladin — Crusader | 51.8 | 52.0 | 53.4 | 22,200 / 1,000 | 1.76 / 2.54 |
+| Paladin — Protection | **46.8** | 48.7 | **39.9** | 13,600 / 4,600 | 1.17 / 0.83 |
+| Hunter — Sharpshooter | 53.1 | **45.9** | 51.6 | 14,300 / 0 | 0.24 / 2.25 |
+| Hunter — Beastmaster | 50.0 | 51.7 | 45.1 | 16,100 / 1,100 | 0.11 / 3.21 |
+| Priest — Shadow | 51.2 | 51.8 | 48.2 | 9,300 / 1,000 | 0.19 / 0.62 |
+| Priest — Discipline | 48.7 | 46.7 | 44.0 | 10,000 / 8,800 | 0.20 / 0.11 |
+| Shaman — Enhancement | 52.9 | 49.1 | 47.6 | 14,200 / 5,600 | 1.31 / 1.98 |
+| Shaman — Elemental | 48.6 | 50.2 | **41.9** | 14,200 / 1,200 | 0.34 / 2.23 |
+
+5v5 matches: median 11 min, scores mostly decided (3:0 32×, 3:1 28×, 0:3 25×, 1:3 24×, 3:2 19×, 2:3 17×), 24 draws.
+
+### 1v1 — balanced on average, but every pairing is a hard counter
+
+The averages sit between 45.6 and 53.1 %, yet nearly every single pairing ends 0 % or 100 %: both bots play the
+same way every time and the simulation has little randomness (±6 % damage, 8 % crits), so the same matchup ends the
+same way. With humans this is softer, but the counters are real:
+
+- **Fire Mage** beats slow melee (Enhancement 100 %, Executioner 90 %, Protection Paladin 90 %: it casts on the
+  move and the target keeps burning) and loses to fast melee (Feral 0 %, Fury 0 %, Subtlety 5 %: low health, little
+  control, nothing to shake them off).
+- **Frost Mage** beats melee that has to walk in (Subtlety, Assassination, Protection Warrior 100 %: Frost Nova,
+  roots, two blinks, Shatter crits) and loses to Restoration, Enhancement and Elemental (0 %): targets it can't burst
+  or that shrug off its slows.
+- **Subtlety (lowest, 45.6 %)** beats casters without an escape (Fire 95 %, Shadow 90 %) and loses to Curser,
+  Beastmaster and Frost (0 %): damage over time, a pet that chases it and roots take away its stealth openers.
+- **Protection Paladin (46.8 %)** beats every melee spec (100 %) but can't kill a healer or a damage-over-time caster
+  (Restoration, Curser, Summoner 0 %): a tank's damage is too low.
+
+### 2v2 — a few specs at the edge
+
+- **Arms 56.1 %** (the one clear outlier): Greatsword Cleave often hits both enemies, Rending Blow halves the
+  target's healing for 8 s (bad news for a team with a healer), Battle Trance adds 35 % damage below 30 % health.
+  The 2v2 factor (1.026) can come down a little.
+- **Restoration 53.8 %, Protection Warrior 53.5 %**: their strength is protecting a partner, which only exists in
+  team play; in 1v1 they are average.
+- **Executioner 45.2 %**: slow 2.2 s swings and huge crits only pay off on a target that stays put; in 2v2 it gets
+  healed, peeled or swapped, and Bloodrage (more damage at low health) often comes too late.
+- **Sharpshooter 45.9 %** (53.1 % in 1v1): Steady Aim needs a second of standing still, and in 2v2 someone is always
+  on it with no pet to peel; in a duel it simply keeps its one opponent at range.
+
+### 5v5 — the battleground favours melee (the `bg5` factors are still the untuned 2v2 copy)
+
+1. **Casts break far more often.** Battleground bots move between objectives, push through to the flag and jump when
+   stuck, so many casts are lost to movement (cancelled share of cast starts, 5v5 vs 2v2): Sharpshooter 43 vs 13 %,
+   Frost 39 vs 9 %, Shadow 39 vs 14 %, Elemental 24 vs 13 %, Restoration 22 vs 7 %. Casters deal 9,000–15,000
+   damage per match, melee specs 20,000–27,000.
+2. **Objectives are melee work.** A flag is returned or picked up by touching it, and carriers die in melee range:
+   melee specs return 1.8–2.8 flags per match, ranged specs 0.1–0.3.
+3. **Respawn waves devalue healing.** A death costs 10–20 s, not the round. Restoration heals the most of anyone
+   (13,600 per match) and wins 28 %: its team effectively has four attackers against five. Discipline (44 %) and
+   Protection Paladin (40 %, little damage) suffer from the same.
+4. **Roles and kits.** Protection Warrior (63 %) is tanky and its Charge catches carriers; it returns the most flags.
+   Summoner (58 %): the fast ghoul with its slow harasses carriers on its own. Frost (57 %) usually gets the defender
+   role (the most controlling spec defends), which is why it never picks a flag — its roots shine in the flag room.
+   Curser (36 %) stacks curses on one target, while battleground fights switch targets constantly, and it takes
+   more damage itself for every curse it holds.
+
+**Next steps (not done yet):** part of the 5v5 gap is bot logic, not the classes — battleground bots don't stop to
+cast. Fix that first (casters stand to cast when not carrying or on an urgent errand), measure again, and only then
+run a `bg5` auto-tune; tuning on top of the bot quirk would make casters too strong in human hands. Separately,
+lower the 2v2 factor of Arms a little.
+
+## Where every spec stands (benchmark from an earlier update; the latest win rates are in the section above)
 
 | Spec | Role | 1v1 win % | 2v2 win % | Sustained DPS | Burst DPS (6 s) | Survival (s) | Partner HPS |
 | --- | --- | --- | --- | --- | --- | --- | --- |
