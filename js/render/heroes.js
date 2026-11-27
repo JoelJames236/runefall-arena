@@ -17,6 +17,8 @@ import { applyRace, RACES, RACE_OF } from './races.js';
 import { consolidate } from './consolidate.js';
 import { CHAMPION_MODELS, RACE_HEIGHT, championModel, loadChampion, setRetargetSource, analyse, retargetClip } from './champions.js';
 import { preloadCreatures } from './creatures.js';
+import { loadAttackAnims, ANIM_CLIPS, RAW_CLIPS, ATTACK_ANIMS, animSource } from './attack-anims.js';
+export { ANIM_CLIPS }; // for the test harness (cut times)
 import { validSpec } from '../data/classes.js';
 
 // Rim light for champions: a cheap view-dependent fresnel glow added to the emissive term of any
@@ -92,7 +94,10 @@ LOOKS.gorilla = { outfit: 'Male_Peasant', head: null, hair: [], hide: [], tint: 
 
 // one-shot actions: kind -> per-class clip list (alternated) + whether it should use the full body
 const ACTIONS = {
-  attack: { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], paladin: ['TreeChopping_Loop'], 'paladin:protection': ['Sword_Regular_A', 'Sword_Regular_B'], 'shaman:enhancement': ['Sword_Regular_A', 'Sword_Regular_B'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'], mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'], hunter: ['Pistol_Shoot'], necromancer: ['Spell_Simple_Shoot'], druid: ['Spell_Simple_Shoot'], ghoul: ['Zombie_Scratch'], abomination: ['Zombie_Scratch'], gorilla: ['Punch_Jab', 'Punch_Cross'] },
+  // basic attacks: motions made with Tripo's AI animation for each weapon (attack-anims.js); a list alternates
+  attack: { 'berserker:executioner': ['axe2h', 'sweep2h'], 'warrior:arms': ['axe2h', 'sweep2h'], paladin: ['smash2h', 'axe2h'], 'paladin:protection': ['sword_fore', 'sword_back'],
+    'shaman:enhancement': ['chop_r', 'chop_l'], berserker: ['chop_r', 'chop_l'], warrior: ['chop_r', 'sword_back'], rogue: ['stab_r', 'hook_l'], mage: ['wand'], priest: ['scepter'], shaman: ['scepter'],
+    hunter: ['bow'], necromancer: ['staff'], druid: ['staff'], ghoul: ['Zombie_Scratch'], abomination: ['Zombie_Scratch'], gorilla: ['Punch_Jab', 'Punch_Cross'] },
   slash: { any: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Cross'] },
   stab: { any: ['Punch_Cross', 'Punch_Jab'] },
   finisher: { any: ['Sword_Attack'], rogue: ['Melee_Hook'], berserker: ['Sword_Regular_C'], paladin: ['Sword_Regular_C'], 'paladin:protection': ['Sword_Attack'], 'berserker:executioner': ['Sword_Attack'], 'warrior:arms': ['Sword_Attack'] },
@@ -105,10 +110,15 @@ const ACTIONS = {
   flinch: { any: ['Hit_Chest'] },
 };
 
+// the library clips basic attacks used before (and still use when assets/models/anims/attacks.json can't load)
+const ATTACK_FALLBACK = { 'berserker:executioner': ['TreeChopping_Loop'], 'warrior:arms': ['TreeChopping_Loop'], paladin: ['TreeChopping_Loop'], 'paladin:protection': ['Sword_Regular_A', 'Sword_Regular_B'],
+  'shaman:enhancement': ['Sword_Regular_A', 'Sword_Regular_B'], berserker: ['Sword_Regular_A', 'Sword_Regular_B'], warrior: ['Sword_Regular_A', 'Sword_Regular_B'], rogue: ['Punch_Jab', 'Punch_Cross'],
+  mage: ['Spell_Simple_Shoot'], priest: ['Spell_Simple_Shoot'], shaman: ['Spell_Simple_Shoot'], hunter: ['Pistol_Shoot'], necromancer: ['Spell_Simple_Shoot'], druid: ['Spell_Simple_Shoot'] };
 // s into each attack clip at which the blow lands (measured: peak speed / furthest reach of the striking hand)
 const IMPACT = { Sword_Regular_A: 0.25, Sword_Regular_B: 0.27, Sword_Regular_C: 0.65, Sword_Attack: 0.4, TreeChopping_Loop: 0.13, Punch_Jab: 0.17, Punch_Cross: 0.22,
   Melee_Hook: 0.25, Shield_OneShot: 0.1, OverhandThrow: 0.38, Zombie_Scratch: 0.58 };
 const STRIKE_LEAD = 0.07; // s between pressing an instant strike and its animation connecting
+const RANGED_LEAD = 0.14; // s from a ranged basic attack (the bolt leaves at once) to the release of its Tripo motion
 
 const LOWER_ROOTS = ['pelvis', 'thigh_l', 'thigh_r', 'calf_l', 'calf_r', 'foot_l', 'foot_r', 'ball_l', 'ball_r', 'root'];
 
@@ -156,6 +166,16 @@ export async function loadHeroAssets(onProgress = () => {}) {
   GL.Male_Ranger.scene.traverse(o => { if (o.isBone && o.name === 'spine_01') o.traverse(c => lowerSet.delete(c.name)); });
   for (const clip of [...GL.UAL1.animations, ...GL.UAL2.animations]) { const c = cleanClip(clip); CLIPS[clip.name] = splitClip(c, lowerSet); CLIPS[clip.name].clean = c; }
   LOWER = new Set([...lowerSet, ...[...lowerSet].map(n => n.toLowerCase())]);
+  // basic-attack animations made with Tripo (attack-anims.js): authored on another skeleton, retargeted per body
+  try {
+    await loadAttackAnims();
+    if (animSource()) TRIPO_ON_UAL = analyse(GL.Male_Ranger.scene, animSource().rest);
+    for (const [n, c] of Object.entries(ANIM_CLIPS)) {
+      const cc = cleanClip(c); CLIPS[n] = splitClip(cc, lowerSet); CLIPS[n].clean = cc;
+      CLIPS[n].src = 'tripo'; CLIPS[n].speed = c.userData.speed; IMPACT[n] = c.userData.impact;
+      const rc = cleanClip(RAW_CLIPS[n]); CLIPS['raw:' + n] = splitClip(rc, lowerSet); CLIPS['raw:' + n].clean = rc; CLIPS['raw:' + n].src = 'tripo';
+    }
+  } catch (e) { console.warn('attack animations failed, using the library clips', e); }
   const tl = new THREE.TextureLoader(manager);
   TEX = { wood: texSet(tl, 'weathered_planks', 0.6), metal: texSet(tl, 'rusty_metal_02', 0.5) };
   prepareHeads();
@@ -163,6 +183,8 @@ export async function loadHeroAssets(onProgress = () => {}) {
 }
 export const heroesReady = () => ready;
 let LOADER = null;
+let TRIPO_ON_UAL = null;          // retarget of the Tripo animation skeleton onto the UAL body (code-built champions)
+const TRIPO_UAL_CLIPS = {};       // its clips, retargeted once
 // Stream the generated champion models in the background, one at a time, `first` keys first. A champion
 // whose model has not arrived yet is built the old way for that match.
 export async function preloadChampions(first = []) {
@@ -433,6 +455,7 @@ export class Character {
     // weapons: grips are solved from the hand's pose in the idle clip, so a weapon points
     // the intended world direction at rest and then simply follows the hand bone.
     this.weapons = {};
+    this.offHand = look.weapons.some(w => /shield|tome|relic|fireOrb/i.test(w)); // the left hand holds something that stays in guard
     this.mixer0 = new THREE.AnimationMixer(body);
     const rest = this.mixer0.clipAction(this.clip(look.idle).full); rest.play(); this.mixer0.update(0.01);
     this.root.updateMatrixWorld(true);
@@ -446,6 +469,7 @@ export class Character {
       bone.add(wp);
       this.weapons[w] = wp;
     }
+    this.fistGrips(look);
     // class armor, fitted to this body in the same rest pose
     this.armor = (look.noArmor || champ) ? null : equipArmor(this, cls, makeMaterials(TEX), spec);
     rest.stop(); this.mixer0.uncacheRoot(body); this.mixer0 = null;
@@ -482,6 +506,37 @@ export class Character {
     this.setLoco(look.idle, 0);
   }
 
+  // The weapons' idle grips are set by eye for the hanging idle hand. The Tripo attack motions hold a weapon the real
+  // way: through the fist, the shaft along the thumb side of the hand, the edge where the knuckles point. For every
+  // held weapon this works out that "fist grip" in the hand's own frame; during a Tripo attack the weapon turns
+  // into it (and back to the idle grip as the attack fades), so a thrust points the staff at the enemy, a cut leads
+  // with the edge.
+  fistGrips(look) {
+    const B = this.bones, V = THREE.Vector3;
+    for (const [w, wp] of Object.entries(this.weapons)) {
+      if (/shield|tome|relic|fireOrb/i.test(w)) continue;
+      const hand = wp.parent; if (!hand || !/^hand_[lr]$/i.test(Object.keys(B).find(k => B[k] === hand) || hand.name)) continue;
+      const s = /_l$/i.test(Object.keys(B).find(k => B[k] === hand) || hand.name) ? 'l' : 'r';
+      // the fingers' direction, and the thumb side (from the thumb, or index minus little / ring finger: some rigs lack one)
+      const idx = B['index_01_' + s], pin = B['pinky_01_' + s] || B['ring_01_' + s], mid = B['middle_01_' + s] || idx, th = B['thumb_01_' + s];
+      if (!mid || !(th || (idx && pin))) continue;
+      const local = o => hand.worldToLocal(o.getWorldPosition(new V()));
+      const f = local(mid).normalize(), l = idx && pin ? local(idx).sub(local(pin)) : local(th);
+      const Y = l.addScaledVector(f, -l.dot(f)).normalize();            // the fist's tube, toward the thumb
+      let X = f.clone();                                                   // the edge leads where the knuckles point
+      if (/bow/i.test(w)) X.crossVectors(Y, f).normalize();               // a bow faces the target, square to the fingers
+      const Z = new V().crossVectors(X, Y).normalize();
+      const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
+      wp.userData.idleQ = wp.quaternion.clone(); wp.userData.fistQ = q;
+      wp.userData.revQ = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new V(0, 0, 1), Math.PI)); // turned over in the fist
+      // 'palm': the shaft along the palm's normal — a bow held in a hand whose thumb points at the target stands upright
+      const n = new V().crossVectors(f, Y).normalize(), px = new V().crossVectors(n, f).normalize();
+      wp.userData.palmQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(px, n, new V().crossVectors(px, n).normalize()));
+      wp.userData.palmRevQ = wp.userData.palmQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new V(0, 0, 1), Math.PI));
+      wp.userData.noMerge = true; // it turns in the hand, so it can't be folded into the body mesh (consolidate.js)
+      (this.fistWeapons || (this.fistWeapons = [])).push(wp);
+    }
+  }
   // generated champion: clone the rigged GLB, fit it to the base body's height and analyse its rest pose once
   buildGenerated(champ, look) {
     const body = SkeletonUtils.clone(champ.scene);
@@ -504,13 +559,45 @@ export class Character {
     for (const [s, t] of Object.entries(champ.A.map)) { const b = byLc[t]; if (b) { this.bones[s] = b; if (s === 'head') this.bones.Head = b; } }
     if (byLc.head) this.bones.Head = byLc.head;
     body.scale.setScalar(champ.fit * look.scale * (RACE_HEIGHT[this.race] || 1));
-    this.retarget = champ.A; this.clipCache = champ.clips;
+    this.retarget = champ.A; this.clipCache = champ.clips; this.champ = champ;
     this.generated = true;
     return body;
   }
 
   // clip set { full, upper, lower } for this champion (retargeted + cached per generated model)
   clip(name) {
+    // "<clip>|offL": the clip with the left arm held in the idle pose — a shield, tome or relic stays in guard while
+    // the right arm attacks (the generated motions swing the free arm for balance)
+    if (name.endsWith('|offL')) {
+      const cache = this.retarget ? this.clipCache : (this.offCache || (this.offCache = {}));
+      const key = name + ':' + this.look.idle;
+      if (key in cache) return cache[key];
+      const base = this.clip(name.slice(0, -5)), idle = this.clip(this.look.idle);
+      if (!base || !idle) return (cache[key] = base);
+      const LEFT = /^(clavicle|upperarm|lowerarm|hand|index|middle|ring|pinky|thumb)(_twist)?(_\d+|_metacarpal)?(_\d+)?_l$/i;
+      const hold = (clip, from) => {
+        const d = clip.duration, tracks = clip.tracks.filter(t => !LEFT.test(t.name.slice(0, t.name.lastIndexOf('.'))));
+        for (const t of from.tracks) {
+          const bone = t.name.slice(0, t.name.lastIndexOf('.'));
+          if (!LEFT.test(bone) || !t.name.endsWith('.quaternion')) continue;
+          const v = t.values.slice(0, 4);
+          tracks.push(new THREE.QuaternionKeyframeTrack(t.name, [0, d], [...v, ...v]));
+        }
+        return new THREE.AnimationClip(clip.name + '|offL', d, tracks);
+      };
+      return (cache[key] = { full: hold(base.full, idle.full), upper: hold(base.upper, idle.upper), lower: base.lower });
+    }
+    const S = CLIPS[name];
+    if (S && S.src === 'tripo') { // authored on the Tripo animation skeleton: retarget onto this body (cached per model)
+      if (!this.retarget) {
+        if (!(name in TRIPO_UAL_CLIPS)) TRIPO_UAL_CLIPS[name] = TRIPO_ON_UAL ? splitClip(retargetClip(S.clean, TRIPO_ON_UAL), LOWER) : null;
+        return TRIPO_UAL_CLIPS[name];
+      }
+      const cache = this.clipCache, key = 'tripo:' + name;
+      if (key in cache) return cache[key];
+      const champ = this.champ; champ.AT = champ.AT || analyse(champ.scene, animSource().rest);
+      return (cache[key] = splitClip(retargetClip(S.clean, champ.AT), LOWER));
+    }
     if (!this.retarget) return CLIPS[name];
     const cache = this.clipCache;
     if (name in cache) return cache[name];
@@ -542,9 +629,12 @@ export class Character {
   play(kind, dur = 0.5, hitAt) {
     if (kind === 'flinch') { this.hit(1); return; }
     const spec = ACTIONS[kind]; if (!spec) return;
-    const list = spec[this.lookKey] || spec[this.cls] || spec.any; if (!list) return;
+    let list = spec[this.lookKey] || spec[this.cls] || spec.any; if (!list) return;
+    if (kind === 'attack' && !CLIPS[list[0]]) list = ATTACK_FALLBACK[this.lookKey] || ATTACK_FALLBACK[this.cls] || list;
     this.side = 1 - this.side;
-    const name = list[this.side % list.length];
+    const base = list[this.side % list.length];
+    // a Tripo right-hand attack keeps a shield / tome / relic in the left hand still
+    const name = CLIPS[base]?.src === 'tripo' && this.offHand && ATTACK_ANIMS[base]?.hand !== 'l' ? base + '|offL' : base;
     const clip = this.clip(name); if (!clip) return;
     if (this.cur) { this.cur.out = true; }
     const full = !!spec.full;
@@ -553,10 +643,19 @@ export class Character {
     // fit the clip into roughly the requested time (attacks follow the swing timer)
     const len = clip.full.duration;
     const want = Math.max(dur, 0.25);
-    const ts = Math.max(0.8, Math.min(2.4, len / Math.max(want, len * 0.45)));
-    const I = IMPACT[name];
+    // Tripo attack animations are already cut to one attack and play at their natural speed (real-world timing)
+    const natural = CLIPS[base]?.speed;
+    const ts = natural || Math.max(0.8, Math.min(2.4, len / Math.max(want, len * 0.45)));
+    const I = IMPACT[base];
     let t0 = 0, pre = 0, lead = 0;
-    if (I !== undefined) {
+    if (I !== undefined && natural) {
+      // Tripo attacks: the whole wind-up is shown, sped up (≤ 2.2×) so the blow lands at hitAt; strike, follow-through
+      // and recovery then run at natural speed. A ranged shot leaves at the click, so its release is played a moment
+      // after it (RANGED_LEAD) — the bolt and the flick read as one motion.
+      lead = hitAt !== undefined ? hitAt : (kind === 'attack' ? RANGED_LEAD : STRIKE_LEAD);
+      const ws = Math.min(2.2, Math.max(ts, I / lead));
+      t0 = Math.max(0, I - lead * ws); pre = ws;
+    } else if (I !== undefined) {
       lead = hitAt !== undefined ? hitAt : STRIKE_LEAD;
       if (I / ts > lead) t0 = I - lead * ts;               // long wind-up: start part-way into it
       else if (I / ts < lead - 0.02) pre = I / lead;       // short wind-up: play it slower up to the blow
@@ -690,6 +789,15 @@ export class Character {
       }
     }
     this.mixer.update(dt);
+    // weapons turn into the fist grip while a Tripo attack plays (see fistGrips)
+    if (this.fistWeapons) {
+      // the attack that is fading in (or the one fading out) decides the grip; 'idle' clips keep the idle hold
+      const gripOf = x => (x && CLIPS[x.name.split('|')[0]]?.src === 'tripo' ? ATTACK_ANIMS[x.name.split('|')[0]]?.grip || 'fist' : null);
+      const a = gripOf(c) ? c : gripOf(this.prevAct) ? this.prevAct : null, mode = gripOf(a);
+      const g = !a || mode === 'idle' ? 0 : a === c ? actW : a.w;
+      const key = { rev: 'revQ', palm: 'palmQ', palmRev: 'palmRevQ' }[mode] || 'fistQ';
+      for (const wp of this.fistWeapons) wp.quaternion.slerpQuaternions(wp.userData.idleQ, wp.userData[key] || wp.userData.fistQ, g);
+    }
 
     // ---- procedural layers on top of the animation
     const b = this.bones;

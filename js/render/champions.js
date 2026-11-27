@@ -89,13 +89,16 @@ const rotOf = m => { const q = new THREE.Quaternion(); m.decompose(new THREE.Vec
 // source = a UAL-skinned body (the skeleton the clips were authored for), in its bind pose
 let SRC = null;
 export function setRetargetSource(sourceScene) { SRC = restInfo(sourceScene); }
+// another source skeleton (bones already named like UAL's): clips authored on it retarget the same way
+export const restOf = root => restInfo(root);
 
+// UAL has three spine bones, the UE5 Mannequin five: spread them; a UAL-named target takes the names as they are
 const ALIAS = { spine_02: ['spine_03', 'spine_02'], spine_03: ['spine_05', 'spine_04', 'spine_03'] };
-function targetOf(n, T) { for (const c of (ALIAS[n] || [n])) if (T.bones[c]) return c; return null; }
+function targetOf(n, T) { for (const c of (T.bones.spine_05 ? (ALIAS[n] || [n]) : [n])) if (T.bones[c]) return c; return null; }
 
-// analyse a champion body in its bind pose (frames are relative to the body: scale-free)
-export function analyse(body) {
-  const T = restInfo(body), S = SRC;
+// analyse a champion body in its bind pose (frames are relative to the body: scale-free); S = the source skeleton
+export function analyse(body, S = SRC) {
+  const T = restInfo(body);
   const map = {}, rev = {};                       // source -> target, target -> source
   for (const n of Object.keys(S.bones)) { const t = targetOf(n, T); if (t && !rev[t]) { map[n] = t; rev[t] = n; } }
   // swing alignment of target bones onto source bone directions (parents first)

@@ -1,0 +1,15 @@
+[
+ ["^A swordsman holding a one-handed sword in his right hand","sword_back"],
+ ["^A swordsman in a ready stance swings a one-handed sword","sword_fore"],
+ ["^A warrior holding a one-handed axe in his LEFT hand, in a fight","chop_l"],
+ ["^A warrior holding a one-handed axe in his right hand, in a figh","chop_r"],
+ ["flicking a short magic wand","wand"],
+ ["holy mace scepter","scepter"],
+ ["long magic staff","staff"],
+ ["^A strong knight holding a heavy two-handed warhammer","smash2h"],
+ ["great axe held with $","axe2h"],
+ ["great axe held w[.]001$","sweep2h"],
+ ["dagger in her right hand","stab_r"],
+ ["dagger in her LEFT hand","hook_l"],
+ ["archer holds a bow","bow"]
+]
