@@ -99,6 +99,7 @@ export class World {
     const st = JSON.parse(localStorage.getItem("runefall-settings") || "{}");
     this.arenaId = new URLSearchParams(location.search).get('arena') || st.arena || 'runefall';
     this.arena = createArena(this.arenaId, this.scene, st.quality || "high");
+    this.arena.camera = this.camera;
     this.vfx = new VFX(this.scene);
 
     // post: MSAA HDR target → bloom → tone map/sRGB → colour grade + vignette
@@ -133,6 +134,7 @@ export class World {
     old.group.traverse(o => { o.geometry?.dispose(); });
     this.arenaId = id;
     this.arena = createArena(id, this.scene, this.quality || 'high');
+    this.arena.camera = this.camera; // maps that fade roofs out when the camera goes inside
     // a wide map moves the sun's shadow box with the player (updateGame); an arena puts it back over the middle
     if (!this.arena.wide) { this.sun.position.set(-40, 32, 34); this.sun.target.position.set(0, 0, 0); }
     return this.arena.ready;

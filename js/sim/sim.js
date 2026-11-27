@@ -135,8 +135,37 @@ const BOX_M = 0.45;                                   // body radius used agains
 const inFoot = (b, x, z, m = BOX_M) => x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m;
 const live = b => !b.gate || !GEO.gatesOpen;          // gates are solid until they open
 export const rampAt = (r, x, z) => { const u = Math.max(0, Math.min(1, r.axis === 'x' ? (x - r.x0) / (r.x1 - r.x0) : (z - r.z0) / (r.z1 - r.z0))); return r.h0 + (r.h1 - r.h0) * u; };
+// Hills { x0, x1, z0, z1, r, h }: soft mounds of ground — a flat top over the rectangle that falls away over r
+// with a cosine profile (steepest slope h·π / 2r). They are the ground itself: always walkable, never a wall, and
+// they block sight and shots like terrain. Pure, so the renderer builds the same surface.
+export function hillH(H, x, z) {
+  const dx = Math.max(H.x0 - x, 0, x - H.x1), dz = Math.max(H.z0 - z, 0, z - H.z1), d = Math.hypot(dx, dz) / H.r;
+  return d >= 1 ? 0 : H.h * 0.5 * (1 + Math.cos(Math.PI * d));
+}
+export function mapGround(map, x, z) {
+  let g = 0;
+  if (map && map.hills) for (const H of map.hills) { const v = hillH(H, x, z); if (v > g) g = v; }
+  return g;
+}
+// does the segment a->b dip into a hill? (sampled every half yard over the part that crosses its footprint)
+function hillBlocks(ax, ay, az, bx, by, bz) {
+  const dx = bx - ax, dz = bz - az, dy = by - ay;
+  for (const H of GEO.hills) {
+    if (H.h < Math.min(ay, by)) continue;
+    let t0 = 0, t1 = 1;
+    for (const [p, d, lo, hi] of [[ax, dx, H.x0 - H.r, H.x1 + H.r], [az, dz, H.z0 - H.r, H.z1 + H.r]]) {
+      if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) { t1 = -1; break; } continue; }
+      let u0 = (lo - p) / d, u1 = (hi - p) / d; if (u0 > u1) [u0, u1] = [u1, u0];
+      t0 = Math.max(t0, u0); t1 = Math.min(t1, u1); if (t0 > t1) break;
+    }
+    if (t0 > t1) continue;
+    const n = Math.max(1, Math.ceil((t1 - t0) * Math.hypot(dx, dz) / 0.5));
+    for (let i = 0; i <= n; i++) { const t = t0 + (t1 - t0) * i / n; if (ay + dy * t < hillH(H, ax + dx * t, az + dz * t) - 0.05) return true; }
+  }
+  return false;
+}
 function boxFloor(x, z, y, tol = 0.9) {
-  let fl = 0;
+  let fl = GEO.hills ? mapGround(GEO, x, z) : 0;
   for (const b of GEO.blocks) if (b.y1 > fl && b.y1 <= y + tol && live(b) && inFoot(b, x, z)) fl = b.y1;
   for (const r of GEO.ramps) if (inFoot(r, x, z, 0.05)) { const h = rampAt(r, x, z); if (h > fl && h <= y + tol - 0.15) fl = h; }
   return fl;
@@ -166,7 +195,7 @@ export function pointBlocked(x, y, z) {
   if (!GEO) return false;
   for (const b of GEO.blocks) if (y > b.y0 && y < b.y1 && live(b) && inFoot(b, x, z, 0.2)) return true;
   for (const r of GEO.ramps) if (inFoot(r, x, z, 0) && y < rampAt(r, x, z)) return true;
-  return false;
+  return !!GEO.hills && y < mapGround(GEO, x, z);
 }
 
 // height of the walkable surface under a fighter whose feet are at y
@@ -259,7 +288,7 @@ function boxBlocks(ax, ay, az, bx, by, bz) {
     if (r.x1 < lx || r.x0 > hx || r.z1 < lz || r.z0 > hz || Math.max(r.h0, r.h1) < ly) continue;
     if (clipSeg([ax, ay, az], [bx - ax, by - ay, bz - az], rampPlanes(r))) return true;
   }
-  return false;
+  return !!GEO.hills && hillBlocks(ax, ay, az, bx, by, bz);
 }
 // a straight walk from a to b at ground level: possible without climbing, and without dropping unless allowed?
 // (bots use this to link their waypoints; y follows the floor along the way)

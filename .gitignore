@@ -10,3 +10,6 @@ Thumbs.db
 # raw Tripo exports (4K textures); the optimized GLBs live in assets/models/champions/
 assets/models/champions/src/
 assets/models/creatures/src/
+
+# raw Tripo exports for the Thornwater map (big); the optimized GLBs live in assets/models/thornwater/
+assets/models/thornwater/src/

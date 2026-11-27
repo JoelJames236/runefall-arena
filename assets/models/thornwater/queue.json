@@ -1,0 +1,311 @@
+{
+ "_": "Tripo Studio generation queue for the Thornwater redesign (docs/THORNWATER_REDESIGN.md §6). style + prompt is sent as the text prompt; tris = retopology target; task = Studio task id once generated; status: queued | generated | retopo | exported | optimized | in-game.",
+ "style": "Stylized hand-painted fantasy MMO game asset, chunky exaggerated proportions, bold readable silhouette, painterly textures, saturated colors.",
+ "tail": "Single object, centered, no ground, no text.",
+ "assets": [
+  {
+   "id": "S05",
+   "name": "Sunward pavilion (buff shelter)",
+   "tris": 6000,
+   "task": "8dcf57b5-090a-4c8b-ad26-5d6be07a39b8",
+   "status": "optimized",
+   "prompt": "A small open-sided gazebo shrine: four slender white marble columns standing on the corners of a square three-step light grey stone base, a royal blue slate pyramid roof with gold ribs and a small gold sun finial on top, a glowing warm lantern hanging under the roof. Completely open between the columns, empty flat floor inside."
+  },
+  {
+   "id": "E05",
+   "name": "Ember war hut (buff shelter)",
+   "tris": 6000,
+   "task": "61fc3564-6881-4742-a35c-e228a9d8e41c",
+   "status": "optimized",
+   "prompt": "A small open-sided war hut: four thick rough dark timber posts standing on the corners of a square dark grey stone base, a roof of stretched red-dyed hides over crossed timber beams with bone spikes and a horned beast skull on top, hanging fang charms and a glowing red lantern under the roof. Completely open between the posts, empty flat floor inside. Brutal tribal warband style."
+  },
+  {
+   "id": "S09",
+   "name": "Sunward sword & shield rack",
+   "tris": 2500,
+   "status": "optimized",
+   "prompt": "A polished wooden weapon rack standing against a wall, holding four steel longswords upright and two royal blue kite shields with a golden sun emblem, gold and iron fittings, noble medieval style, flat back.",
+   "task": "7f612997-393c-4314-a154-3533e8e987e1"
+  },
+  {
+   "id": "E09",
+   "name": "Ember axe & shield rack",
+   "tris": 2500,
+   "status": "optimized",
+   "prompt": "A crude rough timber weapon rack standing against a wall, holding heavy two-handed battle axes and round wooden shields painted red and black with a white skull, iron rims, rope bindings, battle-worn, flat back. Brutal warband style.",
+   "task": "1f3783f1-ab39-466c-98c9-f92d5766394c"
+  },
+  {
+   "id": "S08",
+   "name": "Sunward armor display",
+   "tris": 3000,
+   "status": "optimized",
+   "prompt": "A full suit of polished silver plate armor with gold trim and a royal blue tabard showing a golden sun, standing on a wooden display stand, a great helm with a blue plume, a kite shield leaning against the stand. Noble knight armor display.",
+   "task": "d52bf414-c1dd-4da0-b3f2-51a9f8ba9492"
+  },
+  {
+   "id": "E08",
+   "name": "Ember armor display",
+   "tris": 3000,
+   "status": "optimized",
+   "prompt": "A brutal warrior armor display: spiked black iron plate armor with red cloth strips and fur on the shoulders, a horned iron helmet, on a rough timber stand decorated with a small skull, a round red and black shield leaning against it.",
+   "task": "91ca40c8-bd89-4ef2-b93e-10780a463105"
+  },
+  {
+   "id": "S13",
+   "name": "Sunward throne",
+   "tris": 3000,
+   "status": "optimized",
+   "prompt": "A high-backed royal throne carved from white stone with royal blue velvet cushions, gold trim and a large golden sun emblem on the tall backrest, on a small two-step stone dais. Noble and majestic.",
+   "task": "168425d4-7a53-4400-9662-b01a313490d0"
+  },
+  {
+   "id": "E14",
+   "name": "Ember warlord throne",
+   "tris": 3000,
+   "status": "optimized",
+   "prompt": "A huge brutal warlord throne made of dark stone and big bones, a horned beast skull on top of the backrest, black fur draped over the seat, iron spikes on the armrests, small red banners on both sides. Intimidating.",
+   "task": "6a8007da-6751-4188-9ca1-b6c4c40f2414"
+  },
+  {
+   "id": "S06",
+   "name": "Sunward sun shrine",
+   "tris": 2000,
+   "status": "optimized",
+   "prompt": "A small waist-high carved white stone altar with a large golden sun disc standing on top, royal blue cloth draped over the front, two lit candles, gold trim. Holy and elegant.",
+   "task": "331b006a-5f38-4e69-b331-5e46e1222852"
+  },
+  {
+   "id": "E10",
+   "name": "Ember war drum",
+   "tris": 2500,
+   "status": "optimized",
+   "prompt": "A huge war drum made from a hollowed tree trunk with stretched hide on top, bound with rope and red cloth, decorated with skulls and fangs, two bone drumsticks resting on it, on a low timber stand.",
+   "task": "a60dc08b-df9d-40a2-8c08-40a84c0a1f7b"
+  },
+  {
+   "id": "S11",
+   "name": "Sunward stone brazier",
+   "tris": 1500,
+   "status": "optimized",
+   "prompt": "A carved light grey stone pedestal with a wide bronze fire bowl on top with a gold rim, filled with glowing coals and no flame. Noble medieval style.",
+   "task": "a181a76d-f556-43e7-a42a-37df918c784a"
+  },
+  {
+   "id": "E12",
+   "name": "Ember torch pole",
+   "tris": 1200,
+   "status": "optimized",
+   "prompt": "A rough timber pole with a black iron fire basket on top filled with glowing coals and no flame, a small skull and a red cloth strip tied below the basket, on a small pile of stones.",
+   "task": "784b8ed0-4d84-468c-b0ef-9df0e933b662"
+  },
+  {
+   "id": "S10",
+   "name": "Sunward lantern post",
+   "tris": 1200,
+   "status": "optimized",
+   "prompt": "An ornate black iron street lamp post with a gold-trimmed glass lantern on top glowing warm inside, a curled iron bracket, on a square light stone foot.",
+   "task": "253e732f-6d23-45e8-9042-c3eace82ea0c"
+  },
+  {
+   "id": "N12",
+   "name": "Spirit healer shrine",
+   "tris": 2500,
+   "status": "optimized",
+   "prompt": "A neutral ancient stone shrine: a pale blue glowing crystal floating above a carved stone pedestal, surrounded by a small ring of short mossy standing stones with carved glowing runes.",
+   "task": "702ea76e-3af8-42a5-9ad0-da60fee2c023"
+  },
+  {
+   "id": "N11a",
+   "name": "Gravestone (rounded)",
+   "tris": 600,
+   "status": "optimized",
+   "prompt": "A weathered old gravestone with a rounded top, slightly tilted, moss on the edges, a simple carved circle, grey stone.",
+   "task": "756f834c-26c7-40a4-a708-55e33d2218a6"
+  },
+  {
+   "id": "N11b",
+   "name": "Gravestone (cross)",
+   "tris": 600,
+   "status": "optimized",
+   "prompt": "A weathered old stone grave cross with a circle around the crossing, moss on the base, grey stone, slightly tilted.",
+   "task": "2ebb32b4-401a-4001-92d3-ccc41251aa2c"
+  },
+  {
+   "id": "N15",
+   "name": "Waymarker",
+   "tris": 800,
+   "status": "optimized",
+   "prompt": "A wooden signpost with two blank arrow-shaped boards pointing in different directions and a small lantern hanging from it, standing on a small stone foot.",
+   "task": "562e9283-bb47-45aa-abb4-e12db949cbcf"
+  },
+  {
+   "id": "N06",
+   "name": "Broad oak tree",
+   "tris": 4000,
+   "status": "optimized",
+   "prompt": "A broad stylized oak tree with a thick twisted trunk, a big round canopy of clumped bright green leaves, a few exposed roots at the base.",
+   "task": "666287bf-6d87-4d4d-bd3b-8139260d01af"
+  },
+  {
+   "id": "N08",
+   "name": "Dead tree",
+   "tris": 2000,
+   "status": "optimized",
+   "prompt": "A gnarled dead tree with twisted bare grey branches and a thick trunk, a red cloth strip tied on one branch, ominous.",
+   "task": "40a31a23-cbe7-484e-a841-1ddbb8b1ed06"
+  },
+  {
+   "id": "N03a",
+   "name": "Boulder A",
+   "tris": 1500,
+   "status": "optimized",
+   "prompt": "A large rounded granite boulder with cracks and moss on top, warm grey stone, flat bottom.",
+   "task": "e2d00b28-f484-4ee7-9131-cfb0f296162c"
+  },
+  {
+   "id": "N03b",
+   "name": "Boulder B",
+   "tris": 1500,
+   "status": "optimized",
+   "prompt": "A large angular split boulder of warm grey stone in two leaning halves, moss on top, flat bottom.",
+   "task": "9cede52d-a965-4e81-91ac-b4276a93c94d"
+  },
+  {
+   "id": "N09a",
+   "name": "Ruined column",
+   "tris": 1500,
+   "status": "optimized",
+   "prompt": "A broken ancient fluted stone column with a cracked top, moss and ivy climbing up, a fallen chunk at its base, warm weathered stone.",
+   "task": "aeddf1bd-4974-4d63-bffe-0d8b29a6ecb3"
+  },
+  {
+   "id": "N10",
+   "name": "Ruined arch wall",
+   "tris": 3000,
+   "status": "optimized",
+   "prompt": "A fragment of an ancient ruined stone wall with half of a broken arch, moss and ivy, a few fallen stones at its base, warm weathered stone, flat back.",
+   "task": "ffe2892c-8ca3-4739-bf62-a291584beaae"
+  },
+  {
+   "id": "N01a",
+   "name": "Cliff piece A",
+   "tris": 5000,
+   "status": "optimized",
+   "prompt": "A tall steep rocky cliff face made of layered stratified stone, warm grey with brown tones, grass and moss on the ledges, a few hanging roots, flat back, wider at the base. Modular canyon wall piece.",
+   "task": "ae587852-16ec-46be-8ca8-d540d1006ae0"
+  },
+  {
+   "id": "N01b",
+   "name": "Cliff piece B",
+   "tris": 5000,
+   "status": "optimized",
+   "prompt": "A massive rocky cliff outcrop with jagged vertical stone columns, warm grey stone, moss on top, a small waterfall-free crack, flat back, wide base. Modular canyon wall piece.",
+   "task": "bb8f80d4-df86-4f21-b330-a452deb5363e"
+  },
+  {
+   "id": "N02a",
+   "name": "Rock spire",
+   "tris": 3500,
+   "status": "optimized",
+   "prompt": "A tall jagged rock spire formation of several stacked leaning stone pillars, warm grey stone, moss and grass on top, dramatic silhouette.",
+   "task": "54cd2b68-f24d-4b5f-8ab7-7d5cf61f7b4d"
+  },
+  {
+   "id": "N05a",
+   "name": "Pine tree A",
+   "tris": 1500,
+   "status": "optimized",
+   "prompt": "A tall stylized pine tree with chunky layered tiers of dark green needles and a straight brown trunk, simple shapes readable from far away.",
+   "task": "1872e2c6-7e75-4d6c-95b1-c8d4a355f705"
+  },
+  {
+   "id": "N05b",
+   "name": "Pine tree B",
+   "tris": 1500,
+   "status": "optimized",
+   "prompt": "A slim stylized fir tree with drooping layered tiers of deep blue-green needles and a thin brown trunk, simple shapes.",
+   "task": "c7391b7f-8941-4c9b-8ed1-a14c4b9faf30"
+  },
+  {
+   "id": "N07",
+   "name": "Bush",
+   "tris": 800,
+   "status": "optimized",
+   "prompt": "A round stylized leafy bush of clumped green leaves with a few small yellow flowers.",
+   "task": "95e18373-7024-4648-9c2e-c70cdfe69947"
+  },
+  {
+   "id": "N13",
+   "name": "Reeds",
+   "tris": 600,
+   "status": "optimized",
+   "prompt": "A clump of tall river reeds and cattails with a few broad leaves, green and yellow.",
+   "task": "28b73249-1816-42ae-a9c0-e2c3fd250e8f"
+  },
+  {
+   "id": "N14",
+   "name": "Fallen log",
+   "tris": 1000,
+   "status": "optimized",
+   "prompt": "A fallen mossy tree log with a broken end and small mushrooms growing on it.",
+   "task": "80dcf5c4-36f6-4aa9-9601-ea921dd86944"
+  },
+  {
+   "id": "E15",
+   "name": "Ember war tent",
+   "tris": 3500,
+   "status": "optimized",
+   "prompt": "A large war tent of stitched dark hides over timber poles, bone decorations, red painted tribal symbols, a tall pole with a red and black banner, a smoke hole at the top. Brutal warband camp.",
+   "task": "26bdf1d5-2853-4a64-8345-042524b55cf1"
+  },
+  {
+   "id": "E13",
+   "name": "Spike barricade",
+   "tris": 1500,
+   "status": "optimized",
+   "prompt": "A defensive barricade of sharpened wooden stakes crossed in X shapes, bound with rope, iron tips, a red rag tied on one stake.",
+   "task": "670ed5ba-93bf-4740-bf73-194bf797605f"
+  },
+  {
+   "id": "E06",
+   "name": "Skull totem",
+   "tris": 2000,
+   "status": "optimized",
+   "prompt": "A tall tribal war totem pole of carved dark wood with stacked horned skulls, red war paint, feathers and bone charms, iron spikes at the top.",
+   "task": "1693c912-4425-4e69-a899-7ebc28ca1c18"
+  },
+  {
+   "id": "S15",
+   "name": "Sunward cottage",
+   "tris": 5000,
+   "status": "optimized",
+   "prompt": "A cozy medieval cottage of light stone with a royal blue slate roof, timber window frames, a chimney, flower boxes and a small blue pennant. Peaceful village house.",
+   "task": "e52bb449-75cd-4359-a3fe-100b7859f83e"
+  },
+  {
+   "id": "S12",
+   "name": "Knight statue",
+   "tris": 5000,
+   "status": "optimized",
+   "prompt": "A heroic white marble statue of a knight in plate armor holding a great sword point-down in front of him, cloak flowing, on a square plinth with gold trim, proud pose.",
+   "task": "79571758-7d9a-4a46-8170-139b429a37e5"
+  },
+  {
+   "id": "S01",
+   "name": "Sunward citadel (backdrop)",
+   "tris": 20000,
+   "status": "optimized",
+   "prompt": "A grand white limestone castle citadel on a rocky hill, tall round towers with steep royal blue conical slate roofs and gold spire tips, a central keep, curtain walls with crenellations, long blue and gold banners, warm glowing windows. Majestic and symmetrical, strong silhouette, wide base.",
+   "task": "e52a3275-4da1-493c-a5e0-811b09a252a1"
+  },
+  {
+   "id": "E01",
+   "name": "Ember war-fortress (backdrop)",
+   "tris": 20000,
+   "status": "optimized",
+   "prompt": "A massive brutal war fortress of dark basalt and black iron on a rocky hill, heavy leaning walls with huge wooden spikes and giant bone tusks jutting out, squat towers with jagged iron roofs, a gate shaped like a fanged maw, enormous red and black war banners, fire glowing in the windows. Intimidating, strong silhouette, wide base.",
+   "task": "54f24e30-e2ce-436a-a3af-b66568096499"
+  }
+ ]
+}
