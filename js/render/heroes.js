@@ -17,7 +17,7 @@ import { applyRace, RACES, RACE_OF } from './races.js';
 import { consolidate } from './consolidate.js';
 import { CHAMPION_MODELS, RACE_HEIGHT, championModel, loadChampion, setRetargetSource, analyse, retargetClip } from './champions.js';
 import { preloadCreatures } from './creatures.js';
-import { loadAttackAnims, ANIM_CLIPS, RAW_CLIPS, ATTACK_ANIMS, animSource } from './attack-anims.js';
+import { loadAttackAnims, ANIM_CLIPS, RAW_CLIPS, ATTACK_ANIMS, animSource, loadManifest, MANIFEST_CLIPS, MANIFEST_RAW, clipMeta, clipSource, attacksFor, idleFor, resolveClip } from './attack-anims.js';
 export { ANIM_CLIPS }; // for the test harness (cut times)
 import { validSpec } from '../data/classes.js';
 
@@ -123,6 +123,7 @@ const ATTACK_FALLBACK = { 'berserker:executioner': ['TreeChopping_Loop'], 'warri
 const IMPACT = { Sword_Regular_A: 0.25, Sword_Regular_B: 0.27, Sword_Regular_C: 0.65, Sword_Attack: 0.4, TreeChopping_Loop: 0.13, Punch_Jab: 0.17, Punch_Cross: 0.22,
   Melee_Hook: 0.25, Shield_OneShot: 0.1, OverhandThrow: 0.38, Zombie_Scratch: 0.58 };
 const STRIKE_LEAD = 0.07; // s between pressing an instant strike and its animation connecting
+const RUN_RATE_MAX = 1.7; // highest playback rate of a manifest run clip (stride-matched below it)
 const RANGED_LEAD = 0.14; // s from a ranged basic attack (the bolt leaves at once) to the release of its Tripo motion
 
 const LOWER_ROOTS = ['pelvis', 'thigh_l', 'thigh_r', 'calf_l', 'calf_r', 'foot_l', 'foot_r', 'ball_l', 'ball_r', 'root'];
@@ -181,6 +182,17 @@ export async function loadHeroAssets(onProgress = () => {}) {
       const rc = cleanClip(RAW_CLIPS[n]); CLIPS['raw:' + n] = splitClip(rc, lowerSet); CLIPS['raw:' + n].clean = rc; CLIPS['raw:' + n].src = 'tripo';
     }
   } catch (e) { console.warn('attack animations failed, using the library clips', e); }
+  // remodel clips from the animation manifest (docs/ATTACK_ANIMATIONS.md "Manifest-driven clips"): each set file has
+  // its own source skeleton; markers come from the manifest (strike / release -> IMPACT)
+  try {
+    await loadManifest();
+    for (const [n, c] of Object.entries(MANIFEST_CLIPS)) {
+      const m = clipMeta(n), source = clipSource(n);
+      const cc = cleanClip(c); CLIPS[n] = splitClip(cc, lowerSet); Object.assign(CLIPS[n], { clean: cc, src: 'tripo', speed: m.speed, source });
+      if (m.impact != null) IMPACT[n] = m.impact;
+      const rc = cleanClip(MANIFEST_RAW[n]); CLIPS['raw:' + n] = splitClip(rc, lowerSet); Object.assign(CLIPS['raw:' + n], { clean: rc, src: 'tripo', source });
+    }
+  } catch (e) { console.warn('animation manifest failed, using the old clips', e); }
   const tl = new THREE.TextureLoader(manager);
   TEX = { wood: texSet(tl, 'weathered_planks', 0.6), metal: texSet(tl, 'rusty_metal_02', 0.5) };
   prepareHeads();
@@ -190,6 +202,8 @@ export const heroesReady = () => ready;
 let LOADER = null;
 let TRIPO_ON_UAL = null;          // retarget of the Tripo animation skeleton onto the UAL body (code-built champions)
 const TRIPO_UAL_CLIPS = {};       // its clips, retargeted once
+const TRIPO_ON = {};              // other animation skeletons (manifest set files) onto the UAL body, by source key
+const has = n => !!CLIPS[n];      // for the manifest's resolve helpers: names this module can play
 // Stream the generated champion models in the background, one at a time, `first` keys first. A champion
 // whose model has not arrived yet is built the old way for that match.
 export async function preloadChampions(first = []) {
@@ -348,6 +362,99 @@ export const setTrollKnee = v => { TROLL_KNEE = v; };
 const SHIELDS = new Set(['shield', 'orcshield', 'kiteshield', 'towershield']);
 const GRIP_GEN = {};
 
+// ------------------------------------------------------------------ assembled champions: hand poses (docs/remodel/03 §5)
+// An assembled champion (tools/assemble-champion.mjs) has its items merged into its skin on socket joints, so the
+// fingers are posed around them by a layer after the mixer. Flexion in degrees (positive = toward the palm) of the
+// 01 / 02 / 03 joints of index, middle, ring, pinky; spread turns the 01 joints about the palm normal (positive = away
+// from the middle finger); thumb = [opposition of thumb_01 toward the palm about the hand's long axis, 02, 03].
+export const HAND_POSES = {
+  fist_1h: { f: [[70, 95, 55], [75, 95, 55], [80, 95, 55], [85, 95, 55]], spread: -4, thumb: [45, 25, 35] },
+  fist_2h: { f: [[62, 85, 50], [66, 88, 50], [70, 88, 50], [75, 88, 50]], spread: -4, thumb: [40, 25, 30] },
+  wand_pinch: { f: [[25, 30, 15], [55, 70, 40], [75, 90, 50], [85, 90, 50]], spread: 0, thumb: [50, 20, 25] },
+  bow_grip: { f: [[55, 78, 45], [60, 82, 45], [65, 82, 45], [70, 82, 45]], spread: -2, thumb: [35, 30, 30] },
+  bow_draw: { f: [[20, 80, 40], [20, 80, 40], [20, 80, 40], [80, 90, 60]], spread: 0, thumb: [30, 40, 40] },
+  tome: { f: [[10, 15, 10], [10, 15, 10], [12, 15, 10], [15, 18, 10]], spread: 3, thumb: [10, 40, 20] },
+  orb_cup: { f: [[30, 35, 25], [30, 35, 25], [32, 35, 25], [35, 38, 25]], spread: 8, thumb: [20, 15, 15] },
+  spell_open: { f: [[8, 10, 5], [8, 10, 5], [10, 10, 5], [12, 12, 5]], spread: 15, thumb: [0, 5, 5] },
+  claw: { f: [[-10, 60, 70], [-10, 60, 70], [-10, 60, 70], [-10, 60, 70]], spread: 15, thumb: [10, 40, 50] },
+  fist_unarmed: { f: [[90, 100, 70], [90, 100, 70], [92, 100, 70], [95, 100, 70]], spread: -4, thumb: [60, 40, 40] },
+  relaxed: { f: [[15, 22, 12], [18, 25, 12], [22, 28, 14], [26, 30, 16]], spread: 2, thumb: [15, 15, 10] },
+};
+// tuning: blend time (s) when a hand's pose changes, wrist-lock strength with a shield (03 §4.2), how much of the
+// curl the model already has at rest is taken off the table's angles (1 = the table's angles are from a straight finger),
+// and how far a shield is rolled on the forearm so its top stays up and its tip points down (0 = rigid on the socket)
+export const HAND_LAYER = { blend: 0.08, wristLock: 0.8, restComp: 1, shieldUpright: 1 };
+const FINGERS = ['index', 'middle', 'ring', 'pinky'], SPREAD_K = [1, 0, -0.5, -1]; // spread share, + = toward the thumb side
+const DEG = Math.PI / 180;
+// the hand pose an item asks for (an item entry of the GLB may name its own)
+function itemPose(id, it) {
+  if (it && HAND_POSES[it.pose]) return it.pose;
+  const n = String(id).toLowerCase();
+  if (/wand/.test(n)) return 'wand_pinch';
+  if (/crossbow/.test(n)) return 'fist_1h';
+  if (/bow/.test(n)) return 'bow_grip';
+  if (/tome|book/.test(n)) return 'tome';
+  if (/relic|orb/.test(n)) return 'orb_cup';
+  if (/staff|great|hammer|headsman|2h/.test(n)) return 'fist_2h';
+  return 'fist_1h'; // swords, axes, maces, scepters, daggers, shield handles
+}
+// the socket a look weapon sits on (03 §3.1)
+const socketOf = w => (SHIELDS.has(w) ? 'shield_l' : /_l$/.test(GRIP[w]?.bone || '') ? 'grip_l' : 'grip_r');
+
+// Rest-pose rig of one hand for the finger layer. nodes: lower-case name -> node, world matrices at rest (bind pose).
+// Per finger / thumb joint: its rest local rotation and, in its own local frame, the flex axis (boneDir × N: a positive
+// angle curls toward the palm), the spread axis (01 joints) and the thumb's opposition axis (thumb_01).
+// Palm normal N = ±normalize((middle_01 − hand) × (index_01 − pinky_01)), − for the right hand, + for the left
+// (fingers × thumb side is the back of a right hand and the palm of a left one). Checked on every champion GLB:
+// N ≈ −Y in the palms-down T-pose, the thumb lies on the +N side, and a 90° flex moves middle_03 onto the palm side.
+function restHand(nodes, s) {
+  const V = THREE.Vector3, at = o => new V().setFromMatrixPosition(o.matrixWorld);
+  const hand = nodes['hand_' + s], m1 = nodes['middle_01_' + s] || nodes['ring_01_' + s], i1 = nodes['index_01_' + s], p1 = nodes['pinky_01_' + s] || nodes['ring_01_' + s];
+  if (!hand || !m1 || !i1 || !p1 || i1 === p1) return null;
+  const H = at(hand), L = at(m1).sub(H);
+  if (L.lengthSq() < 1e-12) return null; L.normalize();                     // wrist -> knuckles
+  const W = at(i1).sub(at(p1)); W.addScaledVector(L, -W.dot(L));
+  if (W.lengthSq() < 1e-12) return null; W.normalize();                     // thumb side
+  const N = new V().crossVectors(L, W).normalize().multiplyScalar(s === 'r' ? -1 : 1);
+  const oppAxis = new V().crossVectors(W, N).normalize();                   // turns the thumb (on +W) toward the palm (+N)
+  const wq = new THREE.Quaternion(), tv = new V(), ts = new V();
+  const toLocal = (o, v) => { o.matrixWorld.decompose(tv, wq, ts); return v.clone().applyQuaternion(wq.invert()).normalize(); };
+  const joints = [];
+  for (let d = 0; d < 5; d++) {
+    const name = d < 4 ? FINGERS[d] : 'thumb';
+    for (let j = 1; j <= 3; j++) {
+      const node = nodes[`${name}_0${j}_${s}`]; if (!node) continue;
+      const P = at(node), next = nodes[`${name}_0${j + 1}_${s}`];
+      const prev = j > 1 ? nodes[`${name}_0${j - 1}_${s}`] : (nodes[`${name}_metacarpal_${s}`] || hand);
+      // bone direction: toward the next joint; the last joint continues the segment that leads to it
+      const dir = next ? at(next).sub(P) : prev ? P.clone().sub(at(prev)) : L.clone();
+      if (dir.lengthSq() < 1e-12) dir.copy(L); dir.normalize();
+      const flex = new V().crossVectors(dir, N); if (flex.lengthSq() < 0.04) flex.crossVectors(L, N); flex.normalize();
+      // curl the model already has at this joint (Tripo hands are often modelled half closed), from the segment before it
+      let restFlex = 0;
+      if (next && prev && (d < 4 || j > 1)) {
+        const a = P.clone().sub(at(prev)), b = dir.clone();
+        a.addScaledVector(flex, -a.dot(flex)); b.addScaledVector(flex, -b.dot(flex));
+        if (a.lengthSq() > 1e-12 && b.lengthSq() > 1e-12) { a.normalize(); b.normalize(); restFlex = THREE.MathUtils.clamp(Math.atan2(new V().crossVectors(a, b).dot(flex), a.dot(b)), -0.5, 0.8); }
+      }
+      const spread = d < 4 && j === 1 ? new V().crossVectors(dir, W) : null; // a positive angle swings the finger toward the thumb side
+      joints.push({ node, d, j, rest: node.quaternion.clone(), restFlex, flex: toLocal(node, flex),
+        spread: spread && spread.lengthSq() > 0.04 ? toLocal(node, spread) : null,
+        opp: d === 4 && j === 1 ? toLocal(node, oppAxis) : null });
+    }
+  }
+  return joints.length ? { joints } : null;
+}
+// flexion / spread / opposition (radians) of one rest joint in a pose
+function poseAngles(p, J, out) {
+  const comp = HAND_LAYER.restComp;
+  if (J.d < 4) { out[0] = p.f[J.d][J.j - 1] * DEG - J.restFlex * comp; out[1] = J.j === 1 ? p.spread * SPREAD_K[J.d] * DEG : 0; out[2] = 0; }
+  else { out[0] = J.j === 1 ? 0 : p.thumb[J.j - 1] * DEG - J.restFlex * comp; out[1] = 0; out[2] = J.j === 1 ? p.thumb[0] * DEG : 0; }
+  return out;
+}
+const _hq = new THREE.Quaternion(), _hr = new THREE.Quaternion(), _ha = [0, 0, 0];
+const _sq = new THREE.Quaternion(), _sx = new THREE.Vector3(), _sy = new THREE.Vector3(), _sz = new THREE.Vector3(), _su = new THREE.Vector3(), _Z = new THREE.Vector3(0, 0, 1);
+
 // Strap a shield along the OUTER side of the left forearm, held by the fist behind it: measure the skinned
 // forearm + hand + fingers in the rest pose, then place the shield's back just outside that surface.
 function fitShield(ch, wp) {
@@ -409,6 +516,7 @@ export class Character {
     const lookKey = spec && LOOKS[cls + ':' + spec] ? cls + ':' + spec : cls;
     const look = LOOKS[lookKey] || LOOKS.warrior;
     this.cls = cls; this.spec = spec; this.lookKey = lookKey; this.look = look;
+    this.idle = idleFor(cls, spec, { has }) || look.idle; // the stance set's idle (animation manifest), else the look's
     this.act = null; this.opacity = 1; this.time = Math.random() * 10; this.side = 0;
     this.root = new THREE.Group();
     // a generated model for this spec (champions.js) replaces body, race and code armor
@@ -462,10 +570,13 @@ export class Character {
     // the intended world direction at rest and then simply follows the hand bone.
     this.weapons = {};
     this.offHand = look.weapons.some(w => /shield|tome|relic|fireOrb/i.test(w)); // the left hand holds something that stays in guard
+    // an assembled champion already carries (some of) its items in its skin: those get no code-built weapon
+    const merged = this.assembled ? this.mergedItems(look) : {};
     this.mixer0 = new THREE.AnimationMixer(body);
     const rest = this.mixer0.clipAction(this.clip(look.idle).full); rest.play(); this.mixer0.update(0.01);
     this.root.updateMatrixWorld(true);
     for (const w of look.weapons) {
+      if (merged[w]) { this.weapons[w] = this.itemMarker(w, merged[w]); continue; }
       const wp = makeWeapon(w, look), gp = (this.generated && GRIP_GEN[w]) || GRIP[w];
       let bone = (this.generated && SHIELDS.has(w)) ? fitShield(this, wp) : null;
       if (!bone) { bone = this.bones[gp.bone] || this.bones.hand_r; solveGrip(wp, bone, gp, this.bones); }
@@ -476,6 +587,7 @@ export class Character {
       this.weapons[w] = wp;
     }
     this.fistGrips(look);
+    if (this.assembled) this.setupHands(look, merged);
     // class armor, fitted to this body in the same rest pose
     this.armor = (look.noArmor || champ) ? null : equipArmor(this, cls, makeMaterials(TEX), spec);
     rest.stop(); this.mixer0.uncacheRoot(body); this.mixer0 = null;
@@ -494,8 +606,11 @@ export class Character {
       }
       head.add(h); this.halo = h; h.userData.noMerge = true;
     }
-    // fold the body, outfit, head, hair and rigid armor into one skinned mesh per material (draw calls)
-    this.drawGroups = consolidate(this);
+    // fold the body, outfit, head, hair and rigid armor into one skinned mesh per material (draw calls). An assembled
+    // champion's skin (body + items) is already one draw per material: it stays as loaded (its geometry shared by
+    // every champion of that spec); only code-built extras are folded.
+    let keep; if (this.assembled) { keep = new Set(); body.traverse(o => { if (o.isSkinnedMesh) keep.add(o); }); }
+    this.drawGroups = consolidate(this, keep);
     this.root.traverse(o => { if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; for (const mm of ms) if (!this.materials.includes(mm)) { mm.userData.baseOpacity = mm.opacity; mm.userData.baseTransparent = mm.transparent; this.materials.push(mm); if (!mm.transparent) addRim(mm); } } });
 
     // ---- animation
@@ -509,7 +624,7 @@ export class Character {
     this.tipR = ['orcaxe', 'frostwand', 'firewand', 'stormmace', 'runesword', 'sunhammer', 'holysword', 'cleaver', 'greatsword', 'warAxe', 'greatAxe', 'fang', 'stormaxe', 'sunmace', 'archstaff'].map(k => W[k]?.userData.tip).find(Boolean);
     this.tipL = (W.fangL || W.warAxeL || W.stormaxeL || W.runeswordL)?.userData.tip;
     this.tmpQ = new THREE.Quaternion(); this.tmpE = new THREE.Euler();
-    this.setLoco(look.idle, 0);
+    this.setLoco(this.idle, 0);
   }
 
   // The weapons' idle grips are set by eye for the hanging idle hand. The Tripo attack motions hold a weapon the real
@@ -520,7 +635,7 @@ export class Character {
   fistGrips(look) {
     const B = this.bones, V = THREE.Vector3;
     for (const [w, wp] of Object.entries(this.weapons)) {
-      if (/shield|tome|relic|fireOrb/i.test(w)) continue;
+      if (/shield|tome|relic|fireOrb/i.test(w) || wp.userData.assembled) continue; // merged items never turn in the hand
       const hand = wp.parent; if (!hand || !/^hand_[lr]$/i.test(Object.keys(B).find(k => B[k] === hand) || hand.name)) continue;
       const s = /_l$/i.test(Object.keys(B).find(k => B[k] === hand) || hand.name) ? 'l' : 'r';
       // the fingers' direction, and the thumb side (from the thumb, or index minus little / ring finger: some rigs lack one)
@@ -547,7 +662,9 @@ export class Character {
   buildGenerated(champ, look) {
     const body = SkeletonUtils.clone(champ.scene);
     if (!champ.fit) {
-      const h = new THREE.Box3().setFromObject(champ.scene).getSize(new THREE.Vector3()).y;
+      // an assembled model's merged items would stretch its bounding box: it states the body's own height instead
+      const hb = champ.remodel ? Number(champ.remodel.bodyHeightScene) : 0;
+      const h = hb > 0 && Number.isFinite(hb) ? hb : new THREE.Box3().setFromObject(champ.scene).getSize(new THREE.Vector3()).y;
       const hs = new THREE.Box3().setFromObject(GL.Male_Ranger.scene).getSize(new THREE.Vector3()).y;
       champ.fit = hs / Math.max(0.01, h);
     }
@@ -567,7 +684,137 @@ export class Character {
     body.scale.setScalar(champ.fit * look.scale * (RACE_HEIGHT[this.race] || 1));
     this.retarget = champ.A; this.clipCache = champ.clips; this.champ = champ;
     this.generated = true;
+    if (champ.remodel) {
+      // assembled (tools/assemble-champion.mjs): items merged into the skin on socket joints (grip_r, grip_l, shield_l)
+      // with their marker empties (<item>_tip, <item>_fx_core …). The hand rig is read here, while the body is at rest.
+      this.assembled = true;
+      const nodes = this.nodesLc = {};
+      body.traverse(o => { const n = (o.name || '').toLowerCase(); if (n && !(n in nodes)) nodes[n] = o; });
+      body.updateMatrixWorld(true);
+      this.handRest = { r: restHand(nodes, 'r'), l: restHand(nodes, 'l'), wristL: nodes.hand_l ? nodes.hand_l.quaternion.clone() : null };
+    }
     return body;
+  }
+
+  // ---- assembled champions
+  // look weapon id -> the GLB's item entry: the same id first, then a still unmatched item on the socket that weapon uses
+  mergedItems(look) {
+    const items = (Array.isArray(this.champ?.remodel?.items) ? this.champ.remodel.items : []).filter(it => it && it.name);
+    const lc = s => String(s || '').toLowerCase(), out = {}, used = new Set();
+    for (const w of look.weapons) { const it = items.find(i => !used.has(i) && lc(i.name) === lc(w)); if (it) { out[w] = it; used.add(it); } }
+    for (const it of items) {
+      if (used.has(it)) continue;
+      const w = look.weapons.find(k => !out[k] && socketOf(k) === lc(it.socket)); if (w) { out[w] = it; used.add(it); }
+    }
+    return out;
+  }
+  // a merged item's stand-in in this.weapons: an empty on its socket joint whose userData.tip is the item's tip empty
+  // (its fx_core for shields / items without a tip), so focus, tipR / tipL, weaponTipWorld and trails keep working
+  itemMarker(w, it) {
+    const lc = s => String(s || '').toLowerCase(), nodes = this.nodesLc || {};
+    const sock = nodes[lc(it.socket || socketOf(w))] || null, pre = lc(it.name) + '_', markers = {};
+    const scan = root => root.traverse(o => { const n = lc(o.name); if (o !== sock && !o.isBone && n.startsWith(pre) && !markers[n.slice(pre.length)]) markers[n.slice(pre.length)] = o; });
+    if (sock) scan(sock);
+    if (!Object.keys(markers).length) scan(this.body);
+    const holder = sock || this.bones[GRIP[w]?.bone] || this.bones.hand_r || this.body;
+    const wp = new THREE.Object3D(); wp.name = 'item_' + w; holder.add(wp);
+    wp.userData = { assembled: true, item: it.name, socket: sock ? sock.name : null, markers, noMerge: true,
+      tip: markers.tip || markers.fx_core || markers.rim_top || wp };
+    return wp;
+  }
+  // Finger layer (03 §5) and shield wrist lock (03 §4.2), assembled champions only: every hand that holds an item
+  // gets that item's pose; an empty hand keeps the animation's fingers.
+  setupHands(look, merged) {
+    const R = this.handRest; if (!R) return;
+    const lc = s => String(s || '').toLowerCase(), want = {};
+    for (const w of look.weapons) {
+      const it = merged[w], side = /_l$/.test(lc(it ? it.socket || socketOf(w) : socketOf(w))) ? 'l' : 'r';
+      if (!want[side]) want[side] = itemPose(w, it);
+    }
+    // the bones this layer writes: their animated value is put back before the mixer runs, because the mixer only
+    // writes a bone whose value changed since its last frame (a held clip would otherwise build on the posed value)
+    this.layerSaved = [];
+    // a shield's strap holds the fist on its handle: hand_l is pulled toward its rest (bind) rotation each frame
+    const shield = Object.entries(merged).some(([w, it]) => lc(it.socket || socketOf(w)) === 'shield_l');
+    const hl = this.nodesLc.hand_l;
+    this.wristLock = shield && hl && R.wristL ? { node: hl, rest: R.wristL } : null;
+    if (this.wristLock) this.layerSaved.push({ node: hl, q: hl.quaternion.clone() });
+    // the shield's socket joint (no animation track): rolled about its face normal each frame, from its bind rotation
+    const sn = shield && this.nodesLc.shield_l;
+    this.shieldUp = sn ? { node: sn, rest: sn.quaternion.clone() } : null;
+    // weapon sockets (grip_r / grip_l with a merged weapon): turned over in the fist for clips whose manifest grip is
+    // 'rev' (the blade leaves the fist on the little-finger side), blended, so the motions' hand roll fits the blade
+    this.baseGrip = clipMeta(this.idle)?.grip || 'fist';
+    this.gripTurn = ['grip_r', 'grip_l'].map(s => this.nodesLc[s]).filter(n => n && Object.entries(merged).some(([w, it]) => !SHIELDS.has(w) && lc(it.socket || socketOf(w)) === lc(n.name)))
+      .map(n => ({ node: n, rest: n.quaternion.clone(), k: this.baseGrip === 'rev' ? 1 : 0 }));
+    this.hands = [];
+    for (const s of ['r', 'l']) {
+      const rig = R[s]; if (!rig) continue;
+      const n = rig.joints.length, h = { side: s, joints: rig.joints, pose: null, w: 0, t: 1, tracked: false, from: new Float32Array(n * 3), cur: new Float32Array(n * 3) };
+      this.hands.push(h);
+      if (want[s]) { this.setHandPose(s, want[s]); h.w = 1; } // held from the first frame, no blend in
+    }
+  }
+  // change a hand's pose ('fist_1h', 'bow_draw' …, or null to hand the fingers back to the animation): blended in HAND_LAYER.blend s
+  setHandPose(side, pose) {
+    const h = this.hands && this.hands.find(x => x.side === side); if (!h) return;
+    pose = pose && HAND_POSES[pose] ? pose : null; if (h.pose === pose) return;
+    if (pose && !h.tracked) { h.tracked = true; for (const J of h.joints) this.layerSaved.push({ node: J.node, q: J.node.quaternion.clone() }); }
+    h.from.set(h.cur); h.t = pose && h.w > 0 ? 0 : 1; h.pose = pose;
+  }
+  handLayer(dt) {
+    for (const S of this.layerSaved) S.q.copy(S.node.quaternion); // the animation's own values (restored before the next mixer update)
+    if (this.wristLock) this.wristLock.node.quaternion.slerp(this.wristLock.rest, HAND_LAYER.wristLock);
+    if (this.shieldUp) this.uprightShield();
+    if (this.gripTurn?.length) this.turnGrips(dt);
+    const bt = Math.max(1e-3, HAND_LAYER.blend), q = _hq, r = _hr, a = _ha;
+    for (const h of this.hands || []) {
+      const P = h.pose && HAND_POSES[h.pose];
+      h.w = P ? Math.min(1, h.w + dt / bt) : Math.max(0, h.w - dt / bt);
+      if (h.w <= 0) continue;
+      if (h.t < 1) h.t = Math.min(1, h.t + dt / bt);
+      const k = h.t * h.t * (3 - 2 * h.t), J = h.joints, cur = h.cur, from = h.from;
+      for (let i = 0; i < J.length; i++) {
+        const e = J[i], o = i * 3;
+        if (P) { poseAngles(P, e, a); for (let c = 0; c < 3; c++) cur[o + c] = from[o + c] + (a[c] - from[o + c]) * k; }
+        q.copy(e.rest);
+        if (cur[o + 1] && e.spread) q.multiply(r.setFromAxisAngle(e.spread, cur[o + 1]));
+        if (cur[o + 2] && e.opp) q.multiply(r.setFromAxisAngle(e.opp, cur[o + 2]));
+        if (cur[o]) q.multiply(r.setFromAxisAngle(e.flex, cur[o]));
+        if (h.w < 1) e.node.quaternion.slerp(q, h.w); else e.node.quaternion.copy(q);
+      }
+    }
+  }
+
+  // The shield sits on the forearm (socket shield_l, +Y = its top, +Z = its face). Its bind frame follows the thumb,
+  // which is only "up" with the forearm held level across the chest; in every other pose (arm hanging, swinging, a clip's
+  // own guard) the shield would lie on its side. Roll it about its face normal so +Y points as close to world up as
+  // the face allows: the face direction (what the shield covers) stays the forearm's. Fades out when the face points
+  // up or down (no "up" left in the shield's plane).
+  // the grip a merged weapon needs now: the playing attack's manifest grip once it is mostly in, else the locomotion
+  // clip's, else the idle's (library clips carry none)
+  gripMode() {
+    const g = n => (n ? clipMeta(n.split('|')[0])?.grip ?? null : null), c = this.cur;
+    return (c && c.w > 0.5 && g(c.name)) || g(this.loco.name) || this.baseGrip;
+  }
+  turnGrips(dt) {
+    const want = this.gripMode() === 'rev' ? 1 : 0, step = Math.max(dt, 0) / 0.12;
+    for (const G of this.gripTurn) {
+      G.k += Math.max(-step, Math.min(step, want - G.k));
+      G.node.quaternion.copy(G.rest); if (G.k > 0) G.node.quaternion.multiply(_hr.setFromAxisAngle(_Z, Math.PI * G.k));
+    }
+  }
+  uprightShield() {
+    const S = this.shieldUp, n = S.node, k = HAND_LAYER.shieldUpright;
+    if (!(k > 0) || !n.parent) { n.quaternion.copy(S.rest); return; }
+    n.parent.getWorldQuaternion(_sq).multiply(S.rest);                 // the shield's world rotation, unrolled
+    _sz.set(0, 0, 1).applyQuaternion(_sq); _sy.set(0, 1, 0).applyQuaternion(_sq);
+    _su.set(0, 1, 0).addScaledVector(_sz, -_sz.y); const l = _su.length(); // world up in the shield's plane
+    const w = k * THREE.MathUtils.smoothstep(l, 0.15, 0.45);
+    if (w <= 0) { n.quaternion.copy(S.rest); return; }
+    _su.multiplyScalar(1 / l);
+    const ang = Math.atan2(_sz.dot(_sx.crossVectors(_sy, _su)), _sy.dot(_su));
+    n.quaternion.copy(S.rest).multiply(_hr.setFromAxisAngle(_Z, ang * w));
   }
 
   // clip set { full, upper, lower } for this champion (retargeted + cached per generated model)
@@ -576,9 +823,9 @@ export class Character {
     // the right arm attacks (the generated motions swing the free arm for balance)
     if (name.endsWith('|offL')) {
       const cache = this.retarget ? this.clipCache : (this.offCache || (this.offCache = {}));
-      const key = name + ':' + this.look.idle;
+      const key = name + ':' + this.idle;
       if (key in cache) return cache[key];
-      const base = this.clip(name.slice(0, -5)), idle = this.clip(this.look.idle);
+      const base = this.clip(name.slice(0, -5)), idle = this.clip(this.idle);
       if (!base || !idle) return (cache[key] = base);
       const LEFT = /^(clavicle|upperarm|lowerarm|hand|index|middle|ring|pinky|thumb)(_twist)?(_\d+|_metacarpal)?(_\d+)?_l$/i;
       const hold = (clip, from) => {
@@ -594,15 +841,20 @@ export class Character {
       return (cache[key] = { full: hold(base.full, idle.full), upper: hold(base.upper, idle.upper), lower: base.lower });
     }
     const S = CLIPS[name];
-    if (S && S.src === 'tripo') { // authored on the Tripo animation skeleton: retarget onto this body (cached per model)
+    if (S && S.src === 'tripo') { // authored on a Tripo animation skeleton: retarget onto this body (cached per model)
+      const src = S.source || animSource(), sk = src && src.key !== 'attacks' ? src.key : null; // sk: a manifest set's own skeleton
       if (!this.retarget) {
-        if (!(name in TRIPO_UAL_CLIPS)) TRIPO_UAL_CLIPS[name] = TRIPO_ON_UAL ? splitClip(retargetClip(S.clean, TRIPO_ON_UAL), LOWER) : null;
+        if (!(name in TRIPO_UAL_CLIPS)) {
+          const on = sk ? (TRIPO_ON[sk] ||= analyse(GL.Male_Ranger.scene, src.rest)) : TRIPO_ON_UAL;
+          TRIPO_UAL_CLIPS[name] = on ? splitClip(retargetClip(S.clean, on), LOWER) : null;
+        }
         return TRIPO_UAL_CLIPS[name];
       }
       const cache = this.clipCache, key = 'tripo:' + name;
       if (key in cache) return cache[key];
-      const champ = this.champ; champ.AT = champ.AT || analyse(champ.scene, animSource().rest);
-      return (cache[key] = splitClip(retargetClip(S.clean, champ.AT), LOWER));
+      const champ = this.champ;
+      const AT = sk ? ((champ.ATs ||= {})[sk] ||= analyse(champ.scene, src.rest)) : (champ.AT ||= analyse(champ.scene, animSource().rest));
+      return (cache[key] = splitClip(retargetClip(S.clean, AT), LOWER));
     }
     if (!this.retarget) return CLIPS[name];
     const cache = this.clipCache;
@@ -635,15 +887,23 @@ export class Character {
   play(kind, dur = 0.5, hitAt) {
     if (kind === 'flinch') { this.hit(1); return; }
     const spec = ACTIONS[kind]; if (!spec) return;
-    let list = spec[this.lookKey] || spec[this.cls] || spec.any; if (!list) return;
-    if (kind === 'attack' && !CLIPS[list[0]]) list = ATTACK_FALLBACK[this.lookKey] || ATTACK_FALLBACK[this.cls] || list;
-    this.side = 1 - this.side;
-    const base = list[this.side % list.length];
-    // a Tripo right-hand attack keeps a shield / tome / relic in the left hand still
-    const name = CLIPS[base]?.src === 'tripo' && this.offHand && ATTACK_ANIMS[base]?.hand !== 'l' ? base + '|offL' : base;
+    // the stance set's attacks (animation manifest): a flat list picks at random without repeating the last one,
+    // a nested list ([[right], [left]], dual wield) alternates its sub-lists on its own counter (05 §4.3 / §4.5)
+    const man = kind === 'attack' && attacksFor(this.cls, this.spec, { has });
+    let list = man || spec[this.lookKey] || spec[this.cls] || spec.any; if (!list) return;
+    if (kind === 'attack' && !man && !CLIPS[list[0]]) list = ATTACK_FALLBACK[this.lookKey] || ATTACK_FALLBACK[this.cls] || list;
+    let base;
+    if (man) {
+      if (Array.isArray(list[0])) { this.dwSide = 1 - (this.dwSide || 0); list = list[this.dwSide % list.length]; }
+      const pool = list.length > 1 ? list.filter(x => x !== this.lastAtk) : list;
+      base = this.lastAtk = pool[Math.floor(Math.random() * pool.length)];
+    } else { this.side = 1 - this.side; base = list[this.side % list.length]; }
+    const m = clipMeta(base);
+    // a Tripo right-hand attack keeps a shield / tome / relic in the left hand still (manifest clips say so: offL)
+    const name = CLIPS[base]?.src === 'tripo' && this.offHand && (m ? m.offL : ATTACK_ANIMS[base]?.hand !== 'l') ? base + '|offL' : base;
     const clip = this.clip(name); if (!clip) return;
     if (this.cur) { this.cur.out = true; }
-    const full = !!spec.full;
+    const full = m ? m.layer === 'full' : !!spec.full;
     const a = this.action(name, full ? 'full' : 'upper');
     a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.play();
     // fit the clip into roughly the requested time (attacks follow the swing timer)
@@ -679,7 +939,7 @@ export class Character {
     if (this.deadT > 0) return;
     this.hitT = 0.3; this.hitBig = strength >= 2 ? 1 : 0;
     if (!this.cur || this.cur.kind === 'hit') {
-      const name = strength >= 2 ? 'Hit_Knockback' : Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head';
+      const name = strength >= 2 ? 'Hit_Knockback' : MANIFEST_CLIPS.cm_hit_front ? 'cm_hit_front' : Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head';
       const a = this.action(name, 'upper'); if (!a) return;
       a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.timeScale = 1.4; a.play();
       if (this.cur) this.cur.out = true;
@@ -734,13 +994,19 @@ export class Character {
     if (this.stopT > 0) { this.stopT -= dt; dt *= 0.06; }
     const speed = st.speed || 0;
     // ---- choose the locomotion / pose clip
-    let loco = this.look.idle, rate = 1;
+    let loco = this.idle, rate = 1;
     if (st.dead) loco = 'Death01';
     else if (st.victory) loco = this.cls === 'warrior' ? 'Sword_Idle' : 'Dance_Loop';
     else if (st.tempest) { loco = 'Sword_Regular_Combo'; rate = 1.6; }
     else if (st.air) loco = 'Jump_Loop';
     else if (speed > 1.12) { loco = 'Sprint_Loop'; rate = speed / 1.3; }
-    else if (speed > 0.08) { loco = this.look.walk || 'Jog_Fwd_Loop'; rate = Math.max(0.55, speed) * (st.back ? -0.85 : 1); }
+    else if (speed > 0.08) {
+      loco = this.look.walk || resolveClip('cm_run', has) || 'Jog_Fwd_Loop'; rate = Math.max(0.55, speed) * (st.back ? -0.85 : 1);
+      // a manifest run: playback rate = ground speed / (stride x height / 1.95), so the feet don't slide (capped: a
+      // short-strided clip on a fast champion would spin its legs; it slides a little instead)
+      const rm = clipMeta(loco);
+      if (rm?.stride && st.v) { const h = 1.865 * (this.look.scale || 1) * (RACE_HEIGHT[this.race] || 1); rate = Math.min(RUN_RATE_MAX, Math.max(0.55, st.v * this.clip(loco).full.duration / (rm.stride * h / 1.95))) * (st.back ? -0.85 : 1); }
+    }
     else if (st.casting) loco = this.look.castPose || 'Spell_Simple_Idle_Loop';
     this.setLoco(loco, st.dead ? 0.15 : 0.2);
     const dying = st.dead;
@@ -794,14 +1060,17 @@ export class Character {
         c.fullA.setEffectiveWeight(lowerOnly * 0.999);
       }
     }
+    if (this.layerSaved) for (const S of this.layerSaved) S.node.quaternion.copy(S.q); // hand layer: back to the animated values
     this.mixer.update(dt);
+    if (this.layerSaved) this.handLayer(dt); // assembled champions: fingers closed on the merged items, shield wrist lock
     // weapons turn into the fist grip while a Tripo attack plays (see fistGrips)
     if (this.fistWeapons) {
       // the attack that is fading in (or the one fading out) decides the grip; 'idle' clips keep the idle hold
-      const gripOf = x => (x && CLIPS[x.name.split('|')[0]]?.src === 'tripo' ? ATTACK_ANIMS[x.name.split('|')[0]]?.grip || 'fist' : null);
+      const gripOf = x => { const id = x && x.name.split('|')[0]; return id && CLIPS[id]?.src === 'tripo' ? (clipMeta(id)?.grip ?? ATTACK_ANIMS[id]?.grip) || 'fist' : null; };
       const a = gripOf(c) ? c : gripOf(this.prevAct) ? this.prevAct : null, mode = gripOf(a);
-      const g = !a || mode === 'idle' ? 0 : a === c ? actW : a.w;
-      const key = { rev: 'revQ', palm: 'palmQ', palmRev: 'palmRevQ' }[mode] || 'fistQ';
+      const lm = gripOf({ name: this.loco.name }), same = lm && lm !== 'idle' && (!a || mode === lm);
+      const g = same ? 1 : !a || mode === 'idle' ? 0 : a === c ? actW : a.w;
+      const key = { rev: 'revQ', palm: 'palmQ', palmRev: 'palmRevQ' }[same ? lm : mode] || 'fistQ';
       for (const wp of this.fistWeapons) wp.quaternion.slerpQuaternions(wp.userData.idleQ, wp.userData[key] || wp.userData.fistQ, g);
     }
 

@@ -364,7 +364,7 @@ export class World {
       }
       const won = (view.state === 'roundEnd' || view.state === 'matchEnd') && f.alive && view.lastWinner === f.team;
       ch.update(dt, {
-        speed: f.alive ? cs.speed / baseSpeed : 0, back, strafe, air: f.y - floorAt(f.x, f.z, f.y) > 0.1, casting: !!f.cast, form: f.form, tree: hasBuff(f, 'treeform'), castProgress: f.cast ? f.cast.t / f.cast.dur : 0,
+        speed: f.alive ? cs.speed / baseSpeed : 0, v: f.alive ? cs.speed : 0, back, strafe, air: f.y - floorAt(f.x, f.z, f.y) > 0.1, casting: !!f.cast, form: f.form, tree: hasBuff(f, 'treeform'), castProgress: f.cast ? f.cast.t / f.cast.dur : 0,
         stunned: hasBuff(f, 'stun'), disoriented: hasBuff(f, 'disorient'), dead: !f.alive, victory: won, tempest: hasBuff(f, 'tempest'),
       });
       // stealth visibility

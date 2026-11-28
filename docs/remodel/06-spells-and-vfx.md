@@ -83,7 +83,7 @@ Every effect uses its **school**, not its class. Colours as `core / glow / dark`
 | Poison | `#e8ffb0` | `#9be36a` | `#2a4a10` | bubbles, drips, green mist | Assassination Rogue |
 | Shadowstep | `#d8c8ff` | `#7a3aff` | `#0a0418` | black smoke, afterimage | Subtlety Rogue |
 | Blood / rage | `#ffd0b0` | `#ff3a1a` | `#5a0808` | blood drops, steam, red embers | Berserker, Warrior bleeds |
-| Physical | `#ffffff` | `#fff0d8` | `#6a6a70` | sparks, dust, weapon trail | all melee hits |
+| Physical | `#ffffff` | `#fff0d8` | `#6a6a70` | sparks, dust, weapon trail, gun smoke | all melee hits, Sharpshooter shots |
 | Beast | `#fff0c0` | `#e8a040` | `#5a3a10` | claw streaks, paw prints, roar ring | Hunter pet, Feral |
 
 **Rule for the cast-start burst, muzzle flash, cast circle, projectile, impact and DoT**: always the school of
@@ -217,19 +217,19 @@ Column **Clip** refers to `05-animations.md`. "→" = travels to the target. Siz
 
 | Ability | Clip | Hands / cast | Delivery | Impact | Persistent |
 |---|---|---|---|---|---|
-| **Holy Spark** (auto, Disc) | `mc_atk_1..3` | holy muzzle at the scepter tip | gold spark with 4 short rays | gold pop | — |
-| **Mind Spike** (auto, Shadow) | `mc_atk_1..3` | **void** muzzle (today gold) | violet spike with 2 orbiting black motes | violet crack | — |
-| **Sacred Bolt** (cast 1.3) | `mc_pre_*` → `mc_rel_dir` | holy circle, light gathers at the left palm | gold bolt with a halo ring | burst, 3 rays, flash | Holy Burn → `dot_holy` |
-| **Mend** (cast 1.6, heal) | `mc_pre_heal_*` → `mc_rel_ally` | **holy** circle (today cyan), **gold** cast-start (today green) | a ribbon of gold light arcs from the palm to the ally | `heal_land` (gold) + pillar | — |
-| **Divine Aegis** (absorb, ally) | `mc_rel_ally` | — | gold motes stream to the ally | — | gold `shell` with 2 crossed rune rings turning (as today, cleaner) |
-| **Seraph's Step** (speed + cleanse) | `mc_wings` | — | — | cleanse burst | **wings of light** for 2 s (promised, today missing) + gold `speed` streaks |
-| **Blinding Light** (9 m, disorient) | `mc_omni` | — | white-gold flash sphere r 6, 6 rays | per enemy `disorient` | — |
-| **Halo of Judgment** (28 m) | `mc_omni` | — | a gold halo ring expanding to r 27 at chest height | enemies: holy burst; allies: `heal_land` | — |
+| **Holy Spark** (auto, Disc) | `st_atk_1..3` | holy muzzle at the staff's sun disc (`tip`) | gold spark with 4 short rays | gold pop | — |
+| **Mind Spike** (auto, Shadow) | `st_atk_1..3` | **void** muzzle (today gold) at the staff's void crystal (`tip`) | violet spike with 2 orbiting black motes | violet crack | — |
+| **Sacred Bolt** (cast 1.3) | `st_pre_*` → `st_rel_dir` | holy circle, light gathers at the left palm | gold bolt with a halo ring | burst, 3 rays, flash | Holy Burn → `dot_holy` |
+| **Mend** (cast 1.6, heal) | `st_pre_heal_*` → `st_rel_ally` | **holy** circle (today cyan), **gold** cast-start (today green) | a ribbon of gold light arcs from the palm to the ally | `heal_land` (gold) + pillar | — |
+| **Divine Aegis** (absorb, ally) | `st_rel_ally` | — | gold motes stream to the ally | — | gold `shell` with 2 crossed rune rings turning (as today, cleaner) |
+| **Seraph's Step** (speed + cleanse) | `st_wings` | — | — | cleanse burst | **wings of light** for 2 s (promised, today missing) + gold `speed` streaks |
+| **Blinding Light** (9 m, disorient) | `st_omni` | — | white-gold flash sphere r 6, 6 rays | per enemy `disorient` | — |
+| **Halo of Judgment** (28 m) | `st_omni` | — | a gold halo ring expanding to r 27 at chest height | enemies: holy burst; allies: `heal_land` | — |
 | **Halo** (Disc look) | — | — | — | — | gold halo over the head: `head_top` socket, 2 ribbons (no separate meshes) |
-| **Shadow Word: Pain** (DoT) | `mc_rel_quick` | void muzzle at the left hand | instant: violet tendril snaps onto the target | — | `dot_shadow` (today fire) |
-| **Mind Blast** (cast 1.4, self-heal) | `mc_pre_*` → `mc_rel_dir` | **void** circle, cast-start violet (today white), black smoke gathers at the temple | violet orb with a void-eye core | violet crack burst; violet motes flow back to the priest (heal) | — |
-| **Psychic Scream** (8 m) | `mc_scream` | — | violet shockwave ring + screaming void-face particle | per enemy `disorient` (violet wisps instead of white) | — |
-| **Void Eruption** | `mc_clench` | — | void tendrils burst out of the target's DoTs | violet pillar, 60 burst | — |
+| **Shadow Word: Pain** (DoT) | `st_rel_quick` | void muzzle at the left hand | instant: violet tendril snaps onto the target | — | `dot_shadow` (today fire) |
+| **Mind Blast** (cast 1.4, self-heal) | `st_pre_*` → `st_rel_dir` | **void** circle, cast-start violet (today white), black smoke gathers at the temple | violet orb with a void-eye core | violet crack burst; violet motes flow back to the priest (heal) | — |
+| **Psychic Scream** (8 m) | `st_scream` | — | violet shockwave ring + screaming void-face particle | per enemy `disorient` (violet wisps instead of white) | — |
+| **Void Eruption** | `st_clench` | — | void tendrils burst out of the target's DoTs | violet pillar, 60 burst | — |
 | **Shadowform** (passive) | — | — | — | — | **void orb** (promised, `voidOrb` flag unused) floating at `spell_l`, and faint violet smoke at the feet; body slightly darkened (tint 15 %) |
 
 ### 5.8 Shaman — Elemental / Enhancement (Orc)
@@ -254,18 +254,19 @@ Column **Clip** refers to `05-animations.md`. "→" = travels to the target. Siz
 
 | Ability | Clip | Hands / cast | Delivery | Impact | Persistent |
 |---|---|---|---|---|---|
-| **Quick Shot** (auto, 62 m/s) | `bw_shot` / `bw_shot_2` | string snap, small dust | the **arrow mesh** with a thin white streak (today an ice shard) | wood splinters + `melee_hit` | — |
-| **Heavy Arrow** (auto, SS, 70 m/s) | `bw_shot` | — | heavy arrow with steel vanes, stronger streak | sparks | — |
+| **Quick Shot** (auto, BM, 62 m/s) | `bw_shot` / `bw_shot_2` | string snap, small dust | the **arrow mesh** with a thin white streak (today an ice shard) | wood splinters + `melee_hit` | — |
+| **Blunderbuss Shot** (auto, SS, 70 m/s; `classes.js`: "Heavy Arrow" → rename) | `rf_shot` / `rf_shot_2` | muzzle flash + thick white smoke puff at `muzzle` (smoke flipbook, drifts and fades 1.5 s) | **`shot`**: a short spread of 5–7 glowing pellet streaks around the sim path (no mesh) | spark + splinter burst | — |
 | **Kill Command** | `bw_command` | — | — | the gorilla's slam (`go_command`) lands with a beast shockwave; **today nothing** | — |
-| **Serpent Sting** (DoT) | `bw_shot` | — | arrow with a green streak | green splash | `dot_poison` (today fire) |
+| **Serpent Sting** (DoT, BM) | `bw_shot` | — | arrow with a green streak | green splash | `dot_poison` (today fire) |
+| **Serpent Shot** (the same ability for the SS; `classes.js` has one shared "Serpent Sting" → per-spec name) | `rf_shot` | poison-green muzzle flash, green-tinged smoke | **`slug`**: a poisoned slug trailing green smoke | green splash + poison bubbles | `dot_poison` |
 | **Disengage** (back 12 m) | `cm_dash_back` | — | dust at the take-off, leaf/feather trail | dust at landing | — |
 | **Intimidation** (stun) | `bw_command` | — | the gorilla's `go_leap` (or roar ring if it can't reach) | beast roar ring at the target | `stun` (today no effect at all) |
 | **Bestial Bond** (heal self + pet) | `bw_bond` | — | a beast-amber ribbon links hunter and pet | `heal_land` on both | — |
 | **Bestial Wrath** (frenzy) | `bw_roar` + `go_beat` | roar ring | — | — | hunter and pet: amber-red eyes glow, red steam from the shoulders, the pet grows 10 % (today invisible) |
-| **Aimed Shot** (cast 2.0) | `bw_aim_*` | no rune circle: the arrow tip glows brighter with progress, wind gathers at the bow | heavy arrow with a white shock-cone at release | big spark burst | — |
-| **Concussive Shot** (slow) | `bw_shot` | — | arrow with a blue-white ring | concussion ring at the head | `slow_physical` |
-| **Freezing Trap** (r 2.5, 20 s) | `bw_toss` | — | the trap (mesh) arcs to the spot and opens | spring: jaws snap, frost burst | victim: `frozen` (today white disorient motes) |
-| **Piercing Volley** (instant line) | `bw_power` | — | 3 arrows in a tight line with a gold shock streak along the path (not a beam) | spark burst per target | — |
+| **Aimed Shot** (cast 2.0) | `rf_aim_*` | **no rune circle** (physical): a slow-match glow at the pan (`fx_core`), sparks spitting faster with progress, a thin smoke wisp | release: huge muzzle blast + a smoke ring at `muzzle`; a heavy `slug` with a bright tracer streak | big spark burst + splinters | — |
+| **Concussive Shot** (slow) | `rf_shot` | — | a heavy `slug` with a blue-white shock ring around it | concussion ring at the head | `slow_physical` |
+| **Freezing Trap** (r 2.5, 20 s) | `rf_toss` | — | the trap (mesh) arcs to the spot and opens | spring: jaws snap, frost burst | victim: `frozen` (today white disorient motes) |
+| **Piercing Blast** (instant line; `classes.js`: "Piercing Volley" → rename) | `rf_power` | huge muzzle blast + smoke at `muzzle` | a cone of pellet streaks racing along the line to the target with a shockwave ring travelling with them (not a beam; drawn on the existing `volley` fx event) | spark burst per target | smoke lingering along the line 2 s |
 
 ### 5.10 Necromancer — Summoner / Curser (Undead)
 
@@ -345,7 +346,7 @@ both specs use them the same way).
 
 ---
 
-## 7. Projectile catalogue (25 kinds)
+## 7. Projectile catalogue (26 kinds)
 
 | Kind | Look | Size | Trail | Impact id |
 |---|---|---|---|---|
@@ -364,8 +365,9 @@ both specs use them the same way).
 | `magma_burst` | magma rock mesh | 0.4 | smoke | molten splash |
 | `spirit_bolt` | small fireball from the spirit | 0.35 | embers | fire pop |
 | `axe_throw` | the war axe mesh, spinning | item | red streak | metal clang |
-| `arrow` | arrow mesh | 0.85 | white streak | splinters |
-| `crossbow_bolt` → rename `heavy_arrow` | heavy arrow mesh | 0.85 | stronger streak | sparks |
+| `arrow` | arrow mesh (Beastmaster only) | 0.85 | white streak | splinters |
+| `shot` (Blunderbuss Shot) | 5–7 glowing pellet streaks in a spread ±0.25 m around the sim path, velocity-stretched particles, no mesh | 0.04 each | short spark streaks | sparks + splinters |
+| `slug` (Aimed Shot, Concussive Shot, Serpent Shot) | one glowing lead slug, velocity-stretched particle, no mesh; tinted per ability (Serpent: green smoke, Concussive: blue-white ring, Aimed: bright tracer) | 0.08 | tracer streak | spark burst |
 | `bone_bolt` | bone shard mesh | 0.35 | green smoke | bone splinters |
 | `hex_bolt` | violet sigil disc | 0.3 | violet smoke | violet crack |
 | `soul_rot` | green skull-faced orb | 0.45 | green smoke | necrotic burst |
@@ -375,8 +377,12 @@ both specs use them the same way).
 | `hammer_of_light` | spectral hammer (item mesh, holy shader) | 0.8× item | gold streak | big holy burst |
 | `sentinels_shield` | the tower shield, spinning flat | item | gold streak | clang + gold ring |
 
-Projectile visuals start at the release point (`tip` / `spell_*` / Fire Spirit) and blend into the sim path over
-0.18 s (as today).
+Projectile visuals start at the release point (`tip` / `muzzle` / `spell_*` / Fire Spirit) and blend into the sim
+path over 0.18 s (as today).
+
+Code rename needed for the Sharpshooter: the projectile kind `crossbow_bolt` (`classes.js` auto, Aimed Shot,
+Concussive Shot; `vfx.js` style, `audio.js` `HIT_SOUND`) splits into `shot` (the auto) and `slug` (the two
+abilities); Serpent Sting spawns `arrow` for both specs today and needs `slug` when cast by the Sharpshooter.
 
 ---
 

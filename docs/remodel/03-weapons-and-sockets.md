@@ -164,7 +164,7 @@ transform. Nothing is solved at runtime.
 | Rule | Value |
 |---|---|
 | Origin | centre of the **handle** (where the fist closes) |
-| +Y | toward the shield's top (= direction elbow → fist, the forearm's direction) |
+| +Y | toward the shield's top. The fitted socket puts it on the thumb side, which is "up" only with the forearm held level across the chest; in game the shield is **rolled about its face normal** each frame so +Y points as close to world up as the face allows (the tip points down in every pose; heroes.js `uprightShield`, `HAND_LAYER.shieldUpright`, fades out when the face points up or down). The roll keeps the back plane, so the clearance below holds in every frame. |
 | +X | along the handle |
 | +Z | the shield's **face** (boss, emblem). The back plane is at **z = +0.035 m** (the fist's back touches it); the forearm strap (enarme) at y = −0.24 m, z = +0.035 m |
 | Hang | on `shield_l` (forearm), **not** on the hand: the strap locks a real shield to the forearm. While a shield is equipped, `hand_l`'s local rotation is pulled 80 % toward its rest-fist rotation each frame ("wrist lock"), so the fist stays on the handle whatever the clip does. |
@@ -194,6 +194,23 @@ The bow is the only **skinned** item: 4 bones, so the string draws and the limbs
 Bow space: origin = grip centre, **+Y = up** (top limb), **+Z = toward the archer** (string side), +X = the
 arrow-shelf side (the arrow rests on the left of the riser for a right-handed archer). The bow hangs on `grip_l`
 with the `bow_grip` pose. The string is 2 thin quads skinned to `limb_top`/`string_mid`/`limb_bot` (no lines).
+Only the Beastmaster carries a bow; the Sharpshooter's gun is a rigid item (§4.5).
+
+### 4.5 Guns
+
+The Sharpshooter's `blunderbuss` is the only gun: a rigid item (no bones; the flint hammer is part of the mesh and
+never moves — the half-cock in `rf_shot` is hand motion plus a spark), held in both hands.
+
+| Rule | Value |
+|---|---|
+| Origin | centre of the **right fist on the stock's wrist** (the narrow pistol-style neck behind the trigger guard, Ø 34 mm) |
+| +Y | parallel to the bore, toward the muzzle |
+| +X | the **trigger side** (the gun's underside, where the right hand's knuckles point); the bore line lies above the fist, at x ≈ −0.07 |
+| +Z | X × Y — the **lock side** (flint hammer and pan), out of the back of the right hand |
+| Hang | on `grip_r` with the `trigger` pose (§5); the left hand is snapped by IK onto `grip2` on the fore-end (§6) |
+| Named empties | `muzzle` (centre of the bell's mouth, +Y out of the bore: projectile origin and muzzle flash; the effect system reads it as `tip`), `grip2` (centre of the left hand's grip on the fore-end, frame = a left-hand grip frame), `stock` (centre of the butt plate: shoulder contact), `fx_core` (the flash pan: slow-match glow, priming flash) |
+| Shoulder contact | in aimed clips (`rf_shot`, `rf_aim_*`) `stock` sits on the front of the right shoulder within 3 cm of the deltoid surface (motion strip, §8) |
+| Ammunition | none modelled: pellets and slugs are effects (`06` §7); the cartridges and powder horn belong to the body (`02`) |
 
 ---
 
@@ -210,8 +227,9 @@ Angles in degrees of **flexion** (positive = toward the palm) about each joint's
 
 | Pose | Index 01/02/03 | Middle | Ring | Pinky | Spread | Thumb opp / 02 / 03 | Used by |
 |---|---|---|---|---|---|---|---|
-| `fist_1h` (Ø 34 mm) | 70 / 95 / 55 | 75 / 95 / 55 | 80 / 95 / 55 | 85 / 95 / 55 | −4 | 45 / 25 / 35 | swords, axes, maces, scepters, daggers, shield handle |
-| `fist_2h` (Ø 38 mm) | 62 / 85 / 50 | 66 / 88 / 50 | 70 / 88 / 50 | 75 / 88 / 50 | −4 | 40 / 25 / 30 | two-handed weapons (both hands), staves |
+| `fist_1h` (Ø 34 mm) | 70 / 95 / 55 | 75 / 95 / 55 | 80 / 95 / 55 | 85 / 95 / 55 | −4 | 45 / 25 / 35 | swords, axes, maces, daggers, shield handle |
+| `trigger` (Ø 34 mm stock wrist) | 10 / 20 / 10 | 75 / 95 / 55 | 80 / 95 / 55 | 85 / 95 / 55 | −4 | 45 / 25 / 35 | gun hand (right): `fist_1h` with the index finger laid along the trigger guard |
+| `fist_2h` (Ø 38 mm) | 62 / 85 / 50 | 66 / 88 / 50 | 70 / 88 / 50 | 75 / 88 / 50 | −4 | 40 / 25 / 30 | two-handed weapons (both hands), staves, the gun's fore-end (left hand) |
 | `wand_pinch` | 25 / 30 / 15 | 55 / 70 / 40 | 75 / 90 / 50 | 85 / 90 / 50 | 0 | 50 / 20 / 25 | wands (index lies along the wand) |
 | `bow_grip` (Ø 45 mm riser) | 55 / 78 / 45 | 60 / 82 / 45 | 65 / 82 / 45 | 70 / 82 / 45 | −2 | 35 / 30 / 30 | bow hand |
 | `bow_draw` | 20 / 80 / 40 | 20 / 80 / 40 | 20 / 80 / 40 | 80 / 90 / 60 | 0 | 30 / 40 / 40 | string hand while drawing (three-finger hook) |
@@ -243,7 +261,9 @@ source, so the left hand is **snapped by IK**:
   validation strip (§8) shows these frames in red.
 
 Also used for: the bow's string hand (target `string_mid` → reversed: the string follows `nock_r`, the hand is not
-IK-driven), the staff in two-hand casts (optional `grip2` on staves; weight from the clip).
+IK-driven), the staff in two-hand casts (optional `grip2` on staves, priests included; weight from the clip), the
+blunderbuss's fore-end (`grip2` 0.40 m **ahead** of the origin along +Y, not below it; weight 1.0 in every `rf`
+clip except `rf_toss`, `05` §4.11).
 
 ---
 
@@ -268,21 +288,23 @@ is packed into **its champion's texture atlas** (the right half of the 2048×102
 | `fang` + `fangL` | Rogue (both) | `grip_r` + `grip_l` | `fist_1h` | **0.50 m** (0.48) | blade 0.34 × 0.05 curved toward +X, serrated back, guard 0.10; Assassination: green poison channel | 0.04 below the guard | `tip`, `trail_base`, `fx_core` (venom bead) | 400 each, one GLB | 512×512 |
 | `frostwand` / `firewand` | Mage Frost / Fire | `grip_r` | `wand_pinch` | **0.50 m** (0.66) | shaft Ø 22 mm; 3-prong head cradling a crystal (frost) / an ember (fire) 0.10 | the pinch, 0.14 above the butt | `tip` (projectile origin), `fx_core` (crystal) | 450 each | 512×512 |
 | `tome_frost` / `tome_fire` (was `tome`) | Mage Frost / Fire | `grip_l` | `tome` | **0.30 × 0.24 × 0.07 m** (0.26 × 0.20) | metal corners, clasp, glowing sigil on the cover | spine centre | `fx_core` (sigil) | 500 each | 512×512 |
-| `sun_scepter` (Discipline) / `void_scepter` (Shadow) (was `sunmace`) | Priest | `grip_r` | `fist_1h` | **0.90 m** (1.05) | flanged sun head Ø 0.19 with wings / caged void crystal with tendril prongs | 0.11 above the butt | `tip` = head top, `fx_core` | 700 each | 512×1024 |
+| `sun_staff` (Discipline) / `void_staff` (Shadow) (was `sunmace`) | Priest | `grip_r` (+ optional `grip2`) | `fist_2h` | **2.05 m** (1.05) | shaft Ø 38 mm, butt at y −0.90, head y +0.83 … +1.15. Discipline: white-gold shaft topped by a radiant sun disc Ø 0.24 (12 short rays, face on +X) between two swept gold wings spanning 0.46, a glowing core Ø 0.07 at the disc's centre. Shadow: blackened shaft topped by a void crystal 0.16 tall in an iron cage, 4 tendril prongs curling up around it 0.30 | 0.90 above the butt | `tip` = head centre (projectile origin), `fx_core` (sun core / void crystal), optional `grip2` at y −0.35 | 1,000 each | 512×1024 |
 | `stormmace` | Shaman Elemental | `grip_r` | `fist_1h` | **0.88 m** (0.99) | carved stone head 0.20 with copper bands and a lightning rune | 0.11 above the butt | `tip`, `fx_core` | 700 | 512×1024 |
 | `relic` | Shaman Elemental | `grip_l` | `orb_cup` | **0.36 m** (0.38) | spirit mask idol with horns and feathers on a short haft | bottom centre | `fx_core` (eyes) | 500 | 512×512 |
 | `stormaxe` + `stormaxeL` | Shaman Enhancement | `grip_r` + `grip_l` | `fist_1h` | **0.92 m** (1.07) | crescent bit with storm rune, feathers tied below the head | 0.10 above the butt | `tip`, `trail_base`, `fx_core` | 800 each, one GLB | 512×1024 shared |
 | `bow` | Hunter Beastmaster | `grip_l` (rigged) | `bow_grip` / right `bow_draw` | **1.40 m** (1.39) | recurve, riser 0.20, brace 0.18, bone-and-sinew limbs, tusks on the tips | riser grip | `nock_rest` (arrow shelf), `fx_core` | 900 + 4 bones | 1024² |
-| `longbow` | Hunter Sharpshooter | `grip_l` (rigged) | same | **1.80 m** (1.83) | longbow with steel caps and a leather-wrapped riser, brace 0.17 | riser grip | same | 900 + 4 bones | 1024² |
-| `arrow` | Hunter (both) | `nock_r` during the draw; projectile after | — | 0.85 m | fletching 0.10 (Beastmaster: feathers, Sharpshooter: steel vanes) | the nock | `tip` | 120 | 128² |
+| `blunderbuss` (was `longbow`) | Hunter Sharpshooter | `grip_r` + IK `grip2` | `trigger` / left `fist_2h` | **1.25 m** (1.83) | old flintlock blunderbuss (§4.5): butt plate at y −0.33, muzzle at y +0.92; brass barrel 0.70 flaring into a bell-mouthed muzzle Ø 0.14; dark wooden stock wrapped in leather, stock wrist Ø 34 mm, fore-end Ø 38 mm at the left hand; three brass barrel bands and a brass butt plate; flint hammer and pan on +Z; small troll trophies (two tusks, a feather bunch) tied on a thong under the butt stock (+X, y −0.20), clear of the cheek and the shoulder | right fist on the stock's wrist | `muzzle` (= `tip`: projectile origin + flash), `grip2` (fore-end, y +0.40, x −0.03), `stock` (butt plate), `fx_core` (flash pan) | 1,000 | 1024² |
+| `arrow` | Hunter Beastmaster | `nock_r` during the draw; projectile after | — | 0.85 m | feather fletching 0.10 | the nock | `tip` | 120 | 128² |
 | `bonestaff_summoner` / `bonestaff_curser` (was `bonestaff`) | Necromancer | `grip_r` | `fist_2h` | **2.15 m** (2.2) | butt at y −0.95, head at y +1.20: rib crown + skull (Summoner) / caged soul lantern + chains (Curser) | 0.95 above the butt | `tip` (head), `fx_core`, optional `grip2` at y −0.35 | 1,000 each | 512×1024 |
 | `druidstaff` | Druid Restoration | `grip_r` | `fist_2h` | **2.05 m** (1.87) | living heartwood, head = antler-branch cradle with a seed-light, leaves | 0.90 above the butt | `tip`, `fx_core`, optional `grip2` | 1,000 | 512×1024 |
 | claws | Druid Feral (humanoid, only seen in the class screen) | part of the body mesh (gauntlets) | `claw` | — | 3 blades per hand, 0.16 | — | `tip_r`/`tip_l` sockets on `middle_03_*` | in body | body |
 
 Ids keep today's code names where one model covers one spec; a new id gives each spec its own silhouette, as in
-WoW where two specs of one class never share a weapon look. Total: **24 item models**, ≈ 19,000 triangles
-for all of them; at most **2 items per champion** on screen. Dwarves (Berserker) carry the same sizes — a huge axe
-on a short body is part of the look.
+WoW where two specs of one class never share a weapon look. Total: **24 item models**, ≈ 20,400 triangles
+for all of them (one copy each); at most **2 items per champion** on screen. Dwarves (Berserker) carry the same
+sizes — a huge axe on a short body is part of the look. Both priests carry a two-handed staff (stance set `st`);
+the Sharpshooter's shots are pellets and slugs drawn by the effect system (`06` §7), so the `arrow` is the
+Beastmaster's alone.
 
 ---
 
@@ -293,7 +315,7 @@ on a short body is part of the look.
    on `grip2` (IK error < 1 cm).
 2. **Motion strip**: for every attack and cast clip, 8 frames from the click to the recovery, side view, with the
    weapon tip's path drawn: the tip leads with +X at the strike frame (cuts) or points at the target (thrusts,
-   wand flicks, staff thrusts) within 20°.
+   wand flicks, staff thrusts, gun shots: the `muzzle`'s +Y) within 20°.
 3. **No turning**: an item's local transform on its socket never changes at runtime (except the bow's string and
    limbs). If a clip needs a different grip, it is the clip that is wrong (re-generate it), not the item.
 4. **Performance**: the item adds 0 draw calls (it is merged into the champion's draw, see `07-performance.md`).

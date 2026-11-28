@@ -72,3 +72,123 @@ six frames from the click through the strike to the recovery, for every class.
 Generate it in Tripo (Animate → AI, on the K12 guard), click its card and wait a few seconds (only loaded motions
 can be exported), export GLB with the skeleton and all motions, add a line to `attacks.map.json`, re-extract, add
 an entry to `ATTACK_ANIMS` (hand, strike time, grip) and use the id in `ACTIONS.attack` (heroes.js).
+
+## Manifest-driven clips (remodel)
+
+Status (2026-11-28): **live for the pilot**. `sns.json` (sns_idle, sns_atk_1..3) and `cm.json` (cm_run, cm_hit_front)
+ship. The `sns` set is on for Protection Paladin only (the assembled pilot); Protection Warrior keeps its old clips until
+its own model is assembled (its axe and round shield need their own pass). `cm_run` and `cm_hit_front` are common:
+every champion without its own walk runs and flinches with them. The remodel's 192 clips
+(`docs/remodel/05-animations.md`) come in per stance set and are described by a manifest instead of `ATTACK_ANIMS`.
+Pilot: `sns` (Protection Paladin / Warrior) + the common `cm_run` and `cm_hit_front`.
+
+### Files
+
+- `assets/models/anims/manifest.json` — the 05 §7 format: `clips`, `sets` (`'class:spec'` → set), `attacks`
+  (set → ids; `[[right…], [left…]]` for dual wield), `idle` (set → id), `abilities`, `fallback` (id or
+  `'pattern_*'` → id or [ids]), plus `files` (`"sns.json": false` while a set isn't made: it isn't fetched, so no
+  404). A clip: `{ file, src, trim, layer, loop, markers, speed }` and optionally `hand` (`r`/`l`, striking hand),
+  `grip` (today's weapon turn), `offL` (true = replace the left arm by the idle pose), `stride` (m per cycle),
+  `ikL`, `keepTurn` (hip heading kept, default 0.25), `measured: false` (placeholder markers). `trim` is
+  `[start, end]` s in the set file's clip, `null` = whole clip; **markers are s into the trimmed clip**.
+- `assets/models/anims/<set>.json` — same shape as `attacks.json`, made by
+  `node tools/anim-extract.mjs <export.glb> [more.glb] --set <set> [--map m.json] [--out f.json]`. The map defaults
+  to `<set>.map.json`; its ids are the manifest ids (`[["^\\[sns_atk_1\\]", "sns_atk_1"], …]`, or `{ id: regex }`;
+  an optional third element `{ markers }` is carried into the file as defaults). The tool lists the manifest clips
+  still missing from the file and, when it writes to the default place, flips `files["<set>.json"]` to `true`.
+
+### API (`js/render/attack-anims.js`)
+
+| | |
+|---|---|
+| `loadManifest()` | fetches the manifest and every set file that exists; builds each clip like `loadAttackAnims` (UAL names, `steadyHeading`, `trim`). Never throws; memoised |
+| `MANIFEST` | the parsed tables (empty until loaded) |
+| `MANIFEST_CLIPS[id]` / `MANIFEST_RAW[id]` | trimmed / untrimmed `THREE.AnimationClip`, only for clips that loaded; `userData` = `clipMeta(id)` + `src: 'tripo'` |
+| `clipMeta(id)` | `{ layer, loop, markers, impact (strike ?? release), speed, trim, hand, grip, offL, stride, ikL, keepTurn, measured, loaded, from, to, source }`; `null` for non-manifest names |
+| `clipSource(id)` | the skeleton the clip was made on (`{ key, rest, … }`); a set made on the K12 guard shares `animSource()` (`key: 'attacks'`) |
+| `setOf(cls, spec)` | stance set (`setOf('warrior','protection')`, `setOf('paladin:protection')`); no spec → the class's default spec |
+| `attacksFor(cls, spec, { has, always })` | the set's attack clips, resolved; `null` while none of them has loaded (keep today's list) |
+| `idleFor(cls, spec, { has, always })` | the set's idle clip; `null` while it hasn't loaded |
+| `resolveClip(id, has)` | `id` if loaded, else its fallback chain down to a UAL / `attacks.json` name; `has(name)` skips names heroes.js lacks |
+| `measureStrike(id)` | hand-peak strike of a loaded clip in raw and trimmed time (05 §8.3), next to the manifest value |
+
+### heroes.js integration (done 2026-11-28)
+
+Pass `this.cls, this.spec`, not `this.lookKey`: Protection Warrior's look key is plain `'warrior'`.
+`const has = n => !!CLIPS[n];`
+
+1. **Import** `loadManifest, MANIFEST_CLIPS, MANIFEST_RAW, clipMeta, clipSource, attacksFor, idleFor, resolveClip`.
+2. **`loadHeroAssets`**, in the existing `try` right after the `ANIM_CLIPS` loop (`loadAttackAnims` first, so a set
+   made on the same master reuses its source):
+   ```js
+   await loadManifest();
+   for (const [n, c] of Object.entries(MANIFEST_CLIPS)) {
+     const m = clipMeta(n), source = clipSource(n);
+     const cc = cleanClip(c); CLIPS[n] = splitClip(cc, lowerSet); Object.assign(CLIPS[n], { clean: cc, src: 'tripo', speed: m.speed, source });
+     if (m.impact != null) IMPACT[n] = m.impact; // the strike / release marker replaces ATTACK_ANIMS[n].at
+     const rc = cleanClip(MANIFEST_RAW[n]); CLIPS['raw:' + n] = splitClip(rc, lowerSet); Object.assign(CLIPS['raw:' + n], { clean: rc, src: 'tripo', source });
+   }
+   ```
+3. **Retarget per source** in `clip(name)`'s Tripo branch: `const src = S.source || animSource();` and cache the
+   analysis per `src.key` — code-built bodies `TRIPO_ON[src.key] ||= analyse(GL.Male_Ranger.scene, src.rest)`
+   (`'attacks'` = today's `TRIPO_ON_UAL`), generated ones `champ.ATs[src.key] ||= analyse(champ.scene, src.rest)`
+   (`'attacks'` = today's `champ.AT`).
+4. **Idle**: in the constructor `this.idle = idleFor(cls, spec, { has }) || look.idle;` (never write `look.idle`:
+   looks are shared) and use `this.idle` wherever `this.look.idle` is read (`setLoco` at the end of the
+   constructor, `update()`'s default loco, the `|offL` idle pose).
+5. **`ACTIONS.attack`** in `play()`: `const man = kind === 'attack' && attacksFor(this.cls, this.spec, { has });`
+   `let list = man || spec[this.lookKey] || spec[this.cls] || spec.any;` — a flat list picks at random without
+   repeating the last one (05 §4.3), a nested list alternates its sub-lists R → L on its own counter (05 §4.5);
+   neither moves `this.side` (05 §10.2).
+6. **Strike timing**: unchanged code — `IMPACT[base]` now holds the marker (step 2) and `CLIPS[base].speed` the
+   manifest speed, so the existing wind-up compression lands `strike` on `hitAt` (`release` at `RANGED_LEAD`). The
+   05 §6 cap is 2.0× (today 2.2×).
+7. **Off-hand and grip**: `const m = clipMeta(base);` → `|offL` only when `m ? m.offL : ATTACK_ANIMS[base]?.hand !== 'l'`
+   (sns clips hold the shield themselves); in `update()`'s `gripOf`, `(clipMeta(id)?.grip ?? ATTACK_ANIMS[id]?.grip) || 'fist'`.
+8. **Layers** (`m.layer`): `full` → play the `full` part (`full = m ? m.layer === 'full' : !!spec.full`);
+   `upper` → as today (the full copy drives the legs only while standing still); `lower` → a locomotion clip
+   (`setLoco`), its upper half replaced by `<set>_run_up` once that exists; `additive` → after retargeting,
+   `THREE.AnimationUtils.makeClipAdditive(clip)` and `action.blendMode = THREE.AdditiveAnimationBlendMode`
+   (not before: `retargetClip` needs absolute rotations). `m.loop` → `LoopRepeat`, else `LoopOnce`.
+9. **Locomotion / hits**: run clip `resolveClip('cm_run', has)` (`Jog_Fwd_Loop` until `cm.json` ships;
+   `look.walk` still wins); with a manifest clip, `timeScale = v · duration / (stride · height / 1.95)` (v = sim
+   speed in m/s). `hit()` plays `cm_hit_front` only when `MANIFEST_CLIPS.cm_hit_front` exists, else keeps today's
+   random `Hit_Chest` / `Hit_Head`.
+
+While `files` says `false`, `attacksFor` / `idleFor` return `null` (the fallback with `always`) and
+`resolveClip` gives today's clips, so wiring this in changes nothing until a set file ships. Markers flagged `measured: false` are the 05 §4 targets: set `trim` so the cut
+matches them, or measure (`measureStrike(id)`, then frame by frame with `CLIPS['raw:<id>']`) and write them in.
+
+At load (`buildClip`), after the trim: a `loop` clip is **closed** (the difference between its last and first key is
+spread over the clip, so it has no pop), and `inPlace` (default `true`) does the same for `pelvis.position` of a
+one-shot: the AI motions carry root motion (the pilot run travelled 2 m in 2 s) and the sim moves the champion.
+A manifest run (`stride` set) plays at ground speed / (stride × height / 1.95), at most `RUN_RATE_MAX` (1.7,
+heroes.js); `world.js` passes the speed in m/s as `st.v`.
+
+### What the pilot taught (Tripo AI motions, 2026-11-28)
+
+- **Never name the off-hand item in an attack prompt.** "… and a tower shield on the LEFT forearm" made the model
+  swing the shield arm in all six clips, even with "only the right arm attacks, the left arm does not move". The
+  sword-only style of `attacks.json` works: "A swordsman in a ready stance holding a one-handed sword in his right
+  hand …, his left fist stays in front of his chest". The shield is held in guard by `offL: true` instead. An idle
+  may name the shield (it shapes the stance).
+- **Two variants per clip** (20 credits each), then pick on the source skeleton: the right hand's path must be longer
+  than the left's, `measureStrike` gives the strike, a front-view strip (`|offL`, the real items) decides.
+- **Trims**: each attack keeps ~0.4 s before the hand's speed peak and ~0.6 s after (1.0 s clips: chop [0.20, 1.20],
+  forehand [0.30, 1.30], backhand [0.17, 1.17] raw s). Checked in game: the strike lands on hitAt (0.13 / 0.18 /
+  0.24 s) within one frame, and the two attacks alternate at random without repeats.
+- **Loops**: the period comes from leg-pose self-similarity (the run: 0.667 s, seam 4.9° per bone before closing),
+  the stride from the planted foot's speed against the pelvis (the run: 1.86 m per cycle on a 1.95 m champion, a
+  2.8 m/s jog). "Sprinting" prompts gave faster but irregular motions (seam 8–10°, no clean period); the jog is used
+  and slides a little above 1.7× (champions run ~7 m/s).
+- **Grip**: these motions hold the hand so that the blade leaves the fist on the **little-finger side** (as the old
+  `attacks.json` sword clips: `grip: 'rev'`). With the thumb-side socket the tip was below knee height in 79 % of the idle
+  and 55–74 % of the swings. A manifest `grip` now also turns an assembled weapon: the `grip_r` / `grip_l` socket joint
+  is rotated 180° about its palm axis (heroes.js `gripMode` / `turnGrips`, blended over 0.12 s; the playing attack's
+  grip, else the locomotion clip's, else the idle's). All four `sns` clips are `rev`: the tip never drops below the
+  knees, the idle holds the sword high. Strikes re-measured as the blade tip's speed peak: chop 0.33, backhand 0.45.
+- **Forehand** (`sns_atk_2`): with the shield held in guard (`offL`) the cut passes behind the shield at the strike;
+  it is out of the attack list until a re-roll that sweeps in front at arm's length.
+- **Hit**: the chest-hit clip leans back until 0.42 s and is upright again at 0.78 s; trimmed to [0, 0.78].
+- Source of the pilot clips: `assets/models/anims/src/anim_pilot_v3.glb` (all 19 motions made on the master, task
+  3aae5edf-641b-4820-aec8-088f014ad17f); `sns.map.json` / `cm.map.json` pick the four + two used.

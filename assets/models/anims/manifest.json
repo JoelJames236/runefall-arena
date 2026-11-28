@@ -1,0 +1,25 @@
+{
+  "_doc": "Animation manifest (docs/remodel/05-animations.md §7, docs/ATTACK_ANIMATIONS.md 'Manifest-driven clips'). Read by loadManifest() in js/render/attack-anims.js. Times in s. trim: [start, end] in the set file's clip, null = whole clip. markers: s into the TRIMMED clip. files: false = not produced yet (not fetched, its clips use `fallback`); tools/anim-extract.mjs --set flips it to true. measured: false = placeholder markers (05 §4), measure before tuning. Loops are closed at load (last key = first key, error spread over the clip); inPlace (default true) keeps the pelvis where it started. stride = metres per loop of the trimmed clip on a 1.95 m champion. offL: the left arm is held in the idle pose (the shield stays in guard).",
+  "version": 1,
+  "files": { "sns.json": true, "cm.json": true },
+  "clips": {
+    "sns_idle": { "file": "sns.json", "src": "sns_idle", "trim": null, "layer": "full", "loop": true, "markers": {}, "speed": 1.0, "grip": "rev" },
+    "sns_atk_1": { "file": "sns.json", "src": "sns_atk_1", "trim": [0.20, 1.20], "layer": "upper", "loop": false, "markers": { "strike": 0.33 }, "speed": 1.0, "hand": "r", "grip": "rev", "offL": true },
+    "sns_atk_2": { "file": "sns.json", "src": "sns_atk_2", "trim": [0.30, 1.30], "layer": "upper", "loop": false, "markers": { "strike": 0.62 }, "speed": 1.0, "hand": "r", "grip": "rev", "offL": true },
+    "sns_atk_3": { "file": "sns.json", "src": "sns_atk_3", "trim": [0.17, 1.17], "layer": "upper", "loop": false, "markers": { "strike": 0.45 }, "speed": 1.0, "hand": "r", "grip": "rev", "offL": true },
+    "cm_run": { "file": "cm.json", "src": "cm_run", "trim": [0.188, 0.854], "layer": "lower", "loop": true, "markers": { "foot_l": 0, "foot_r": 0.333 }, "stride": 1.86, "speed": 1.0 },
+    "cm_hit_front": { "file": "cm.json", "src": "cm_hit_front", "trim": [0.0, 0.78], "layer": "upper", "loop": false, "markers": {}, "speed": 1.0 }
+  },
+  "sets": { "paladin:protection": "sns" },
+  "attacks": { "sns": ["sns_atk_1", "sns_atk_3"] },
+  "idle": { "sns": "sns_idle" },
+  "abilities": {},
+  "fallback": {
+    "sns_atk_1": "sword_fore",
+    "sns_atk_2": "sword_back",
+    "sns_atk_3": "sword_fore",
+    "sns_idle": "Idle_Shield_Loop",
+    "cm_run": "Jog_Fwd_Loop",
+    "cm_hit_front": "Hit_Chest"
+  }
+}

@@ -15,3 +15,6 @@ assets/models/creatures/src/
 assets/models/thornwater/src/
 assets/models/colosseum/src/
 assets/models/anims/src/
+
+# raw Tripo exports for the remodel items; the grip-space items live in assets/models/items/
+assets/models/items/src/

@@ -46,7 +46,7 @@ export const CHAMPION_MODELS = {
 export const RACE_HEIGHT = { dwarf: 0.8 };
 const DIR = 'assets/models/champions/';
 
-const loaded = {};   // key -> { scene, clips, A, fit } once loaded, null if failed
+const loaded = {};   // key -> { scene, clips, remodel, A, fit } once loaded, null if failed
 const pending = {};
 
 export const DISABLED = new Set(); // keys forced back to the code-built champion (viewer comparison)
@@ -57,7 +57,10 @@ export function loadChampion(loader, key) {
   if (key in loaded) return Promise.resolve(loaded[key]);
   if (pending[key]) return pending[key];
   pending[key] = new Promise(res => loader.load(DIR + CHAMPION_MODELS[key], g => {
-    loaded[key] = { scene: g.scene, clips: {} }; res(loaded[key]);
+    // assembled champions (tools/assemble-champion.mjs) carry their items merged into the skin on socket joints:
+    // asset.extras.remodel = { key, bodyHeightScene, metresPerUnit, items: [{ name, socket, file, tris }], sockets }
+    const r = g.asset?.extras?.remodel;
+    loaded[key] = { scene: g.scene, clips: {}, remodel: r && typeof r === 'object' ? r : null }; res(loaded[key]);
   }, undefined, err => { console.warn('champion model failed, using fallback:', key, err); loaded[key] = null; res(null); }));
   return pending[key];
 }
@@ -70,7 +73,8 @@ function childFor(b, bones) {
   const n = lc(b.name);
   if (n.startsWith('hand_')) return bones['middle_01_' + n.slice(-1)] || null;
   if (n === 'pelvis') return bones.spine_01 || null;
-  const kids = b.children.filter(c => c.isBone && !/leaf|twist|ik_/.test(lc(c.name)));
+  // socket joints of assembled champions (grip_r, grip_l, shield_l) are never the limb's continuation
+  const kids = b.children.filter(c => c.isBone && !/leaf|twist|ik_|^grip_|^shield_/.test(lc(c.name)));
   return kids.find(c => /^(spine|neck|head)/.test(lc(c.name))) || kids[0] || null;
 }
 function restInfo(root) {

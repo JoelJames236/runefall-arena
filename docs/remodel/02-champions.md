@@ -208,7 +208,7 @@ Colours are `main / second / accent / glow`. "Silhouette" = what must read from 
 | Colours | `#f4eedc` / `#e0b84a` / `#6a8ac8` soft blue / glow `#ffd98a` |
 | Glows | circlet gem, cuff runes |
 | Silhouette | winged pauldrons |
-| Items | `sun_scepter` · set `mc` |
+| Items | `sun_staff` (`grip_r` + optional `grip2`) · set `st` |
 | Prompt core | "human priestess with hair in two buns, white and gold plate bodice over long white vestments split into panels to the shins, small gold wing-shaped pauldrons, a gold circlet with a gem, long sleeves with gold cuffs, soft blue trim" |
 
 ### Priest — Shadow (Human) · `priest_shadow`
@@ -220,7 +220,7 @@ Colours are `main / second / accent / glow`. "Silhouette" = what must read from 
 | Colours | `#3a1e52` / `#14101c` / `#8a8aa0` pale / glow `#9a50ff` |
 | Glows | eyes under the cowl, chest clasp |
 | Silhouette | cowl + tendril pauldrons |
-| Items | `void_scepter` · set `mc` |
+| Items | `void_staff` (`grip_r` + optional `grip2`) · set `st` |
 | Prompt core | "gaunt pale human shadow priest, deep hood shading the face with glowing violet eyes, pauldrons of curling dark tendrils, tattered violet robes split into panels to the shins, a chained clasp on the chest, black gloves" |
 
 ### Shaman — Elemental (Orc) · `shaman_elemental`
@@ -262,12 +262,12 @@ Colours are `main / second / accent / glow`. "Silhouette" = what must read from 
 
 | | |
 |---|---|
-| Body | as Beastmaster, braided hair |
-| Armour | **wide-brimmed feathered hat**, long leather coat split at the back to the knee, bolt bandolier, steel bracers, quiver on the back |
+| Body | as Beastmaster, braided hair — the troll marksman with a blunderbuss |
+| Armour | **wide-brimmed feathered hat**, long leather coat split at the back to the knee, a **bandolier of paper cartridges** across the chest (left shoulder to right hip), a carved **powder horn on the left hip** (clear of the stock in hip-fire), steel bracers; no quiver |
 | Colours | `#4a8a9a` / `#4a3a2a` coat / `#a0a8b0` steel / glow — |
 | Silhouette | wide hat |
-| Items | `longbow` · set `bw` |
-| Prompt core | "tall lanky blue-skinned jungle troll marksman with long tusks and braided hair, a wide-brimmed leather hat with feathers, a long leather coat split into panels to the knees, an arrow bandolier, steel bracers, a quiver on the back over the right shoulder" |
+| Items | `blunderbuss` (`grip_r` + IK `grip2`) · set `rf` — a separate item, never part of the body generation |
+| Prompt core | "tall lanky blue-skinned jungle troll marksman with long tusks and braided hair, a wide-brimmed leather hat with feathers, a long leather coat split into panels to the knees, a bandolier of paper cartridges across the chest, a carved horn powder flask on the left hip, steel bracers" (inside the §1.6 frame: empty hands, no weapon) |
 
 ### Necromancer — Summoner (Undead) · `necromancer_summoner`
 

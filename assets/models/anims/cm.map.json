@@ -1,0 +1,4 @@
+[
+ ["^\\[cm_run\\] ", "cm_run"],
+ ["^\\[cm_hit_front\\] ", "cm_hit_front"]
+]

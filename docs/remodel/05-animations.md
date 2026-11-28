@@ -1,6 +1,6 @@
 # 05 — Animations (champions: attacks, spells, movement, reactions)
 
-The complete humanoid animation set: **192 clips** in 9 sets, with the motion each clip must show, its length, its
+The complete humanoid animation set: **193 clips** in 10 sets, with the motion each clip must show, its length, its
 timing markers and who plays it. Pets and forms are in `04-pets-summons-forms.md`.
 
 Reference model: WoW gives every weapon stance its own ready pose, attacks (several random variants), parry and
@@ -61,10 +61,11 @@ animation it falls back to a related one. We copy that structure, not any motion
 | `th` | two-handed weapon | Warrior Arms (orc), Berserker Executioner (dwarf), Paladin Crusader (human) | great axe / headsman axe / sun hammer, left hand on `grip2` (IK) |
 | `dw` | two one-handed axes | Berserker Fury (dwarf), Shaman Enhancement (orc) | war axe → war axe / storm axe → storm axe |
 | `dg` | two daggers | Rogue Subtlety, Rogue Assassination (human) | fang → fang |
-| `mc` | one-hand mace or scepter, free or item hand | Priest Discipline, Priest Shadow (human), Shaman Elemental (orc, relic) | scepter / storm mace → empty / relic |
+| `mc` | one-hand mace + item hand | Shaman Elemental (orc) | storm mace → relic |
 | `wd` | wand + book | Mage Frost, Mage Fire (sun elf) | wand → tome |
-| `st` | staff | Necromancer Summoner, Necromancer Curser (undead), Druid Restoration (bull-folk) | staff (one hand, optional `grip2`) |
-| `bw` | bow | Hunter Beastmaster, Hunter Sharpshooter (jungle troll) | (string hand) → bow |
+| `st` | staff | Necromancer Summoner, Necromancer Curser (undead), Druid Restoration (bull-folk), Priest Discipline, Priest Shadow (human) | staff (one hand, optional `grip2`) |
+| `bw` | bow | Hunter Beastmaster (jungle troll) | (string hand) → bow |
+| `rf` | rifle (blunderbuss) | Hunter Sharpshooter (jungle troll) | blunderbuss in the right fist (`trigger` pose), left hand on its `grip2` (IK) |
 | `cm` | common, every humanoid | all | — |
 
 Druid Feral's humanoid body is only seen on the class screen (the preview shows Cat form); it uses `dw_idle` with
@@ -239,31 +240,25 @@ Basic attacks alternate strictly R → L → R … (their own counter, not touch
 
 **18 clips.**
 
-### 4.7 `mc` — mace or scepter + free / item hand (Priest Discipline & Shadow, Shaman Elemental)
+### 4.7 `mc` — mace + item hand (Shaman Elemental)
 
 | Id | Layer | Len | Markers | Motion | Used by |
 |---|---|---|---|---|---|
-| `mc_idle` | full | 2.60 loop | — | scepter held at the side angled up, left hand open at the waist (Elemental: relic held forward in the left hand) | idle |
-| `mc_run_up` | upper | 0.70 loop | — | scepter held upright, left arm pumping | run |
-| `mc_sprint_up` | upper | 0.60 loop | — | scepter low, both arms pumping | sprint |
-| `mc_atk_1` | upper | 0.75 | release 0.28 | scepter raised and swung forward to point at the target | basic attack (Holy Spark, Mind Spike, Static Shock) |
-| `mc_atk_2` | upper | 0.75 | release 0.26 | scepter thrust forward from the hip | basic attack |
-| `mc_atk_3` | upper | 0.75 | release 0.26 | backhand flick of the scepter toward the target | basic attack |
-| `mc_pre_start` / `mc_pre_loop` | upper | 0.25 / 1.20 loop | loop_from 0.25 | scepter held up beside the head, left palm forward gathering energy (Elemental: relic raised) | Sacred Bolt, Mind Blast, Lightning Lash |
-| `mc_rel_dir` | upper | 0.50 | release 0.10 | left palm (or relic) thrust at the target, scepter follows | their release |
-| `mc_pre_heal_start` / `mc_pre_heal_loop` | upper | 0.25 / 1.20 loop | loop_from 0.25 | scepter raised high, left hand reaching gently toward the ally, head tilted | Mend (1.6 s) |
-| `mc_rel_ally` | upper | 0.50 | release 0.12 | open left palm swept toward the ally | Mend release, Divine Aegis |
-| `mc_rel_quick` | upper | 0.40 | release 0.08 | quick flick of the left hand at the target | Shadow Word: Pain, Magma Burst |
-| `mc_omni` | full | 0.80 | release 0.25 | scepter and left hand raised overhead, then flung wide | Blinding Light, Halo of Judgment |
-| `mc_scream` | full | 0.80 | release 0.22 | hunch, then both arms thrust forward, head forward, scream | Psychic Scream |
-| `mc_clench` | upper | 0.70 | release 0.30 | reach toward the target and clench the left fist, pulling back | Void Eruption |
+| `mc_idle` | full | 2.60 loop | — | storm mace held at the side angled up, relic held forward in the left hand | idle |
+| `mc_run_up` | upper | 0.70 loop | — | mace held upright, relic arm pumping | run |
+| `mc_sprint_up` | upper | 0.60 loop | — | mace low, both arms pumping | sprint |
+| `mc_atk_1` | upper | 0.75 | release 0.28 | mace raised and swung forward to point at the target | basic attack (Static Shock) |
+| `mc_atk_2` | upper | 0.75 | release 0.26 | mace thrust forward from the hip | basic attack |
+| `mc_atk_3` | upper | 0.75 | release 0.26 | backhand flick of the mace toward the target | basic attack |
+| `mc_pre_start` / `mc_pre_loop` | upper | 0.25 / 1.20 loop | loop_from 0.25 | mace held up beside the head, relic raised in the left hand gathering energy | Lightning Lash |
+| `mc_rel_dir` | upper | 0.50 | release 0.10 | relic thrust at the target, mace follows | its release |
+| `mc_rel_quick` | upper | 0.40 | release 0.08 | quick flick of the left hand (relic) at the target | Magma Burst |
 | `mc_area` | full | 0.75 | strike 0.25 | raise both arms, then slam the left fist into the ground | Quake Totem |
 | `mc_plant` | full | 0.75 | strike 0.28 | crouch and drive a totem into the ground with the left hand | Stoneskin Totem |
 | `mc_summon` | full | 0.90 | release 0.40 | raise the relic overhead and call | Fire Spirit |
-| `mc_wings` | upper | 0.45 | release 0.10 | arms swept back like wings, chest up (plays over running legs) | Seraph's Step |
-| `mc_victory` | full | 3.00 | — | scepter raised in blessing, kneel (priest) / relic raised, roar (shaman — same clip, the roar is VFX + sound) | victory |
+| `mc_victory` | full | 3.00 | — | mace and relic raised, roar (the roar is VFX + sound) | victory |
 
-**21 clips.**
+**14 clips.**
 
 ### 4.8 `wd` — wand + book (Mage Frost, Mage Fire)
 
@@ -287,23 +282,26 @@ Basic attacks alternate strictly R → L → R … (their own counter, not touch
 
 **17 clips.**
 
-### 4.9 `st` — staff (Necromancer Summoner & Curser, Druid Restoration)
+### 4.9 `st` — staff (Necromancer Summoner & Curser, Druid Restoration, Priest Discipline & Shadow)
 
 | Id | Layer | Len | Markers | Motion | Used by |
 |---|---|---|---|---|---|
-| `st_idle` | full | 2.60 loop | — | staff held upright beside the right foot at head height, left hand loose (necromancer: clawed) | idle |
+| `st_idle` | full | 2.60 loop | — | staff held upright beside the right foot at head height, left hand loose (necromancer: clawed; priest: open at the waist) | idle |
 | `st_run_up` | upper | 0.70 loop | — | staff held diagonally forward, left arm pumping | run |
 | `st_sprint_up` | upper | 0.60 loop | — | staff trailing low | sprint |
-| `st_atk_1` | upper | 0.75 | release 0.28 | staff drawn back and thrust head-first at the target | basic attack |
+| `st_atk_1` | upper | 0.75 | release 0.28 | staff drawn back and thrust head-first at the target | basic attack (Bone Bolt, Hex Bolt, Wrath, Holy Spark, Mind Spike) |
 | `st_atk_2` | upper | 0.75 | release 0.28 | staff head swept forward in an arc | basic attack |
 | `st_atk_3` | upper | 0.75 | release 0.30 | staff raised overhead and brought down to point | basic attack |
-| `st_pre_start` / `st_pre_loop` | upper | 0.25 / 1.20 loop | loop_from 0.25 | staff head aimed at the target, left hand clawing energy together | Soul Rot |
-| `st_rel_dir` | upper | 0.50 | release 0.10 | thrust the staff head forward | Soul Rot release |
-| `st_pre_heal_start` / `st_pre_heal_loop` | upper | 0.25 / 1.20 loop | loop_from 0.25 | staff raised high, left palm toward the ally | Regrowth (1.4 s) |
-| `st_rel_ally` | upper | 0.50 | release 0.12 | left palm swept toward the ally | Regrowth release, Rejuvenation |
-| `st_rel_quick` | upper | 0.40 | release 0.08 | left-hand throw at the target | Bone Spear, Curse of Agony, Curse of Weakness |
+| `st_pre_start` / `st_pre_loop` | upper | 0.25 / 1.20 loop | loop_from 0.25 | staff head aimed at the target, left hand clawing energy together (priest: left palm forward, gathering) | Soul Rot, Sacred Bolt, Mind Blast |
+| `st_rel_dir` | upper | 0.50 | release 0.10 | thrust the staff head forward | their release |
+| `st_pre_heal_start` / `st_pre_heal_loop` | upper | 0.25 / 1.20 loop | loop_from 0.25 | staff raised high, left palm toward the ally | Regrowth (1.4 s), Mend (1.6 s) |
+| `st_rel_ally` | upper | 0.50 | release 0.12 | left palm swept toward the ally | Regrowth and Mend release, Rejuvenation, Divine Aegis |
+| `st_rel_quick` | upper | 0.40 | release 0.08 | left-hand throw at the target | Bone Spear, Curse of Agony, Curse of Weakness, Shadow Word: Pain |
 | `st_curse` | upper | 0.70 | release 0.25 | left claw reaches out and twists slowly | Doom |
-| `st_clench` | upper | 0.70 | release 0.30 | point the staff at the ghoul, clench the left fist | Corpse Explosion |
+| `st_clench` | upper | 0.70 | release 0.30 | point the staff at the ghoul (Void Eruption: at the target), clench the left fist, pulling back | Corpse Explosion, Void Eruption |
+| `st_omni` | full | 0.80 | release 0.25 | staff and free hand raised overhead, then flung wide | Blinding Light, Halo of Judgment |
+| `st_scream` | full | 0.80 | release 0.22 | hunch, then both arms thrust forward (staff held across in the right fist), head forward, scream | Psychic Scream |
+| `st_wings` | upper | 0.45 | release 0.10 | arms swept back like wings, staff trailing in the right hand, chest up (plays over running legs) | Seraph's Step |
 | `st_siphon` | upper | 0.80 | release 0.35 | both hands pull something toward the chest | Soul Siphon |
 | `st_buff` | upper | 0.70 | release 0.22 | staff vertical before the face, eyes closed | Bone Shield |
 | `st_summon` | full | 1.00 | release 0.45 | slam the staff's butt into the ground, left hand raised and pulled upward | Abomination; Tree of Life (just before the model swap) |
@@ -311,9 +309,9 @@ Basic attacks alternate strictly R → L → R … (their own counter, not touch
 | `st_ground` | full | 0.60 | strike 0.20 | strike the staff's butt on the ground | Entangling Roots |
 | `st_victory` | full | 3.00 | — | staff raised, then planted with a flourish | victory |
 
-**22 clips.**
+**24 clips** (21 before the priests moved here; the old count of 22 was a miscount).
 
-### 4.10 `bw` — bow (Hunter Beastmaster, Hunter Sharpshooter)
+### 4.10 `bw` — bow (Hunter Beastmaster)
 
 The bow string follows `nock_r` while the right hand draws; an `arrow` item is shown on `nock_r` from the `nock`
 marker until `release`, then becomes the projectile.
@@ -323,31 +321,54 @@ marker until `release`, then becomes the projectile.
 | `bw_idle` | full | 2.40 loop | — | bow held in the left hand, arrow nocked, string half drawn, hunched | idle |
 | `bw_run_up` | upper | 0.70 loop | — | bow held low in the left hand, right arm pumping (arrow hidden) | run |
 | `bw_sprint_up` | upper | 0.60 loop | — | bow low, leaning | sprint |
-| `bw_shot` | upper | 0.90 | release 0.12, nock 0.45, full_draw 0.80 | loose at full draw, reach to the quiver, nock, draw again | basic attack, Serpent Sting, Concussive Shot |
+| `bw_shot` | upper | 0.90 | release 0.12, nock 0.45, full_draw 0.80 | loose at full draw, reach to the quiver, nock, draw again | basic attack (Quick Shot), Serpent Sting |
 | `bw_shot_2` | upper | 0.90 | release 0.12, nock 0.40, full_draw 0.80 | loose, quick re-nock from the hip, draw | basic attack variant |
-| `bw_aim_start` | upper | 0.35 | loop_from 0.35 | raise the bow and draw to an anchor at the jaw | Aimed Shot (2.0 s cast) |
-| `bw_aim_loop` | upper | 1.00 loop | — | holding full draw dead still, slow breath | Aimed Shot |
-| `bw_aim_rel` | upper | 0.50 | release 0.05 | release from the anchor, follow-through | Aimed Shot release |
-| `bw_power` | full | 0.80 | release 0.20 | lean back into a power shot, recoil a step | Piercing Volley |
-| `bw_toss` | upper | 0.55 | release 0.16 | underarm toss with the right hand | Freezing Trap |
 | `bw_command` | upper | 0.70 | release 0.20 | point at the target with the bow arm, shout | Kill Command, Intimidation |
 | `bw_bond` | upper | 0.70 | release 0.25 | right hand on the chest, then reaching toward the pet | Bestial Bond |
 | `bw_roar` | full | 0.90 | release 0.25 | arms wide, bow raised high, roar | Bestial Wrath |
 | `bw_victory` | full | 3.00 | — | bow raised high, arrow fired into the sky | victory |
 
-**14 clips.**
+**9 clips.**
 
-### 4.11 Totals
+### 4.11 `rf` — rifle (Hunter Sharpshooter)
+
+The blunderbuss (`03` §4.5) hangs on `grip_r` (`trigger` pose); left-hand IK on its `grip2` (the fore-end) is **on**
+in every clip except `rf_toss` (IK off). In aimed clips the butt (`stock`) sits on the right shoulder. Prompt weapon
+line: "holding a heavy old flintlock blunderbuss with a flared muzzle in both hands, right hand on the wrist of the
+stock with the index finger along the trigger guard, left hand under the wooden fore-end". Timing: like every ranged
+auto (§6) the shot leaves at the click — the clip's `release` (0.12 / 0.10, inside the 0.14 s contract) is the
+muzzle flash, the shouldering before it is a fast snap, and the recoil, half-cock and blowing into the pan follow it.
+
+| Id | Layer | Len | Markers | Motion | Used by |
+|---|---|---|---|---|---|
+| `rf_idle` | full | 2.40 loop | — | blunderbuss held across the body at port arms (right fist on the stock's wrist at the right hip, left hand on the fore-end before the left shoulder), muzzle up-left, hunched troll stance, slow breathing | idle |
+| `rf_run_up` | upper | 0.70 loop | — | blunderbuss carried at port arms across the chest, muzzle up-left | run |
+| `rf_sprint_up` | upper | 0.60 loop | — | blunderbuss held low across the hips in both hands, leaning | sprint |
+| `rf_shot` | upper | 0.90 | release 0.12 | snap the gun to the right shoulder and fire, hard recoil kick throws the muzzle up and the shoulder back, then half-cock the hammer with the right thumb and blow into the pan | basic attack (Blunderbuss Shot), Serpent Shot, Concussive Shot |
+| `rf_shot_2` | upper | 0.90 | release 0.10 | hip-fire: stock tucked under the right arm, fire, the recoil jolts both arms back, settle | basic attack variant |
+| `rf_aim_start` | upper | 0.35 | loop_from 0.35 | shoulder the gun, cheek down on the stock, sight along the barrel | Aimed Shot (2.0 s cast) |
+| `rf_aim_loop` | upper | 1.00 loop | — | holding the aim dead steady, slow breath | Aimed Shot |
+| `rf_aim_rel` | upper | 0.50 | release 0.05 | fire from the aim, heavy recoil rocks the upper body back, recover | Aimed Shot release |
+| `rf_power` | full | 0.80 | release 0.20 | braced wide stance, gun levelled at the hip, a huge blast knocks the shooter back one step | Piercing Blast |
+| `rf_toss` | upper | 0.55 | release 0.16 | gun held in the right hand alone, muzzle up; underarm toss with the left hand (IK off) | Freezing Trap |
+| `rf_victory` | full | 3.00 | — | fire the blunderbuss into the sky, then blow the smoke off the muzzle | victory |
+
+**11 clips.**
+
+### 4.12 Totals
 
 | Set | Clips | Set | Clips |
 |---|---|---|---|
-| `cm` | 33 files | `dg` | 18 |
-| `sns` | 20 | `mc` | 21 |
-| `th` | 26 | `wd` | 17 |
-| `dw` | 21 | `st` | 22 |
-| | | `bw` | 14 |
-| **Total** | **192 humanoid clips** | | |
+| `cm` | 33 files | `mc` | 14 |
+| `sns` | 20 | `wd` | 17 |
+| `th` | 26 | `st` | 24 |
+| `dw` | 21 | `bw` | 9 |
+| `dg` | 18 | `rf` | 11 |
+| **Total** | **193 humanoid clips** | | |
 | + Dread Knight (`09` §5) | 12 | | |
+
+(2026-11-28: priests moved from `mc` to `st` (−7 / +3 clips), the Sharpshooter from `bw` to the new `rf` (−5 / +11);
+191 before, listed as 192 because `st` was miscounted.)
 
 Every one of the 106 abilities and 21 basic attacks now has its own motion (the per-ability table is in
 `06-spells-and-vfx.md`, column "Clip").
@@ -367,7 +388,7 @@ Every one of the 106 abilities and 21 basic attacks now has its own motion (the 
 5. **Look-at**: spine_05 / neck / head turn toward the current target: yaw ≤ 40° (split 30 / 30 / 40 %),
    pitch ≤ 25° (aim at targets on the bridge). Off during dashes, CC and death.
 6. **Race posture**: hunch and knee bend (existing, re-tuned per model).
-7. **IK**: left hand → `grip2` (two-handers), shield wrist lock, bow string → `nock_r`.
+7. **IK**: left hand → `grip2` (two-handers, the blunderbuss's fore-end), shield wrist lock, bow string → `nock_r`.
 8. **Finger layer**: per held item (03 §5).
 
 ---
@@ -377,7 +398,7 @@ Every one of the 106 abilities and 21 basic attacks now has its own motion (the 
 | Event | Sim | Animation | Rule |
 |---|---|---|---|
 | Melee basic attack | blow lands `hitAt = clamp(0.06 + speed·0.065, 0.13, 0.24)` after the click (0.157 rogue … 0.203 executioner) | `strike` marker lands exactly at `hitAt` | wind-up played at `strike / hitAt` (≤ 2.0×), rest at natural speed; **never skip** the start |
-| Ranged basic attack | bolt spawns at the click | `release` at **0.14 s** (as today) | wind-up compressed the same way. Option R2 (below) removes the compression |
+| Ranged basic attack | bolt spawns at the click | `release` at **0.14 s** (as today; `bw_shot` / `rf_shot` already release at ≤ 0.12) | wind-up compressed the same way. Option R2 (below) removes the compression |
 | Instant ability | damage at the press | `strike` / `release` marker | **R1**: the sim delays the effect of instant melee abilities by `hitAt` (same formula as the basic attack) so the clip's strike lands on the damage. Without R1 the ability clip must strike ≤ 0.08 s after the start |
 | Cast | `caststart` → `cast.t` counts down → execute | `<set>_pre_start` → `<set>_pre_loop` until execute → release clip (release ≤ 0.12 s) | `castProgress` drives VFX intensity (hand glow, circle) and a 0–1 additive "strain" (shoulders up 3°, hands tremble) |
 | Cast interrupted / failed | `castfail` / interrupt | `cm_interrupt` | stops the pre-loop |
@@ -441,6 +462,9 @@ feet planted [or: "one step forward and back"], powerful and fast, realistic wei
 Rules learned from `attacks.json` (docs/ATTACK_ANIMATIONS.md): say which hand holds what, say where the weapon
 travels ("from over the right shoulder down to the left hip"), ask for one motion per clip, keep "in place". Names
 are cut to 64 characters — start every prompt with a unique tag (`[th_atk_1]`) so the export maps by regex.
+**Never name the off-hand item in an attack prompt** (pilot: a named shield made the model swing the shield arm in 6
+of 6 clips); describe the free hand ("his left fist stays in front of his chest") and hold the item with `offL`.
+Generate two variants per clip and pick (docs/ATTACK_ANIMATIONS.md "What the pilot taught").
 
 ### 8.3 Per clip
 

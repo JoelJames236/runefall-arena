@@ -30,6 +30,7 @@ Ids: lowercase, `_`-separated; champions `<class>_<spec>`; items as in `03` §7;
 | `tools/anim-extract.mjs` | Tripo export → clip-set JSON; add: one file per set, marker pass-through | yes, extend |
 | `tools/collect-export.ps1` | moves Tripo downloads into place; add sets `items`, `creatures`, `anims-<set>` | yes, extend |
 | `tools/item-prep.mjs` | applies the grip-space transform (origin, axes, scale from a small JSON per item) and adds the named empties (`tip`, `trail_base`, `fx_core`, `grip2` …) | new |
+| `tools/item-simplify.mjs` | cuts a prepped item to its triangle budget when Tripo's retopology stops above it (the holy sword: 1,310 → 899; Tripo's 850 target gave 1,280): quadric edge collapses on the position-welded mesh, outline locked, each moved corner keeps its normal and takes its own triangle's UV mapping | new (pilot) |
 | `tools/assemble-champion.mjs` | body + items + sockets → one skinned GLB, atlas, LODs, KTX2, meshopt (`07` §3) | new |
 | `tools/quad-rig-normalize.mjs` | renames a Tripo four-legged rig to the standard names, rejects incomplete rigs (`04` §2.1) | new (logic exists in `creatures.js readRig`) |
 | `viewer.html` | add: socket editor (tripods, test cylinders, sliders, copy JSON), item rack in grip space, motion strip renderer (8 frames, tip path), LOD toggle, per-model draw / triangle readout, old vs new side by side (exists) | extend |
@@ -40,11 +41,11 @@ Ids: lowercase, `_`-separated; champions `<class>_<spec>`; items as in `03` §7;
 
 | Phase | Work | Gate (must pass before the next phase) |
 |---|---|---|
-| **0 · Pilot** | **Paladin Protection** end to end (the hardest grip case: sword + shield + wrist lock): body, `holysword`, `towershield`, sockets, assembler, `sns_idle` + `sns_atk_1..3` + `cm_run` + `cm_hit_front` | 1 draw, ≤ 13.4 k tris, the sword sits in the fist in every frame of the strip, the shield's back clears the forearm, the attack strikes on `hitAt` |
+| **0 · Pilot** | **Paladin Protection** end to end (the hardest grip case: sword + shield + wrist lock): body, `holysword`, `towershield`, sockets, assembler, `sns_idle` + `sns_atk_1..3` + `cm_run` + `cm_hit_front` | 1 draw, ≤ 13.4 k tris, the sword sits in the fist in every frame of the strip, the shield's back clears the forearm, the attack strikes on `hitAt`. **Passed 2026-11-28**: 1 mesh / 1 primitive, 13,141 tris, the sword rigid in the fist and its tip never below the knees (grip `rev`), shield back ≥ 2.8 cm off the forearm in every frame, strike on hitAt ± 6 ms; open: `sns_atk_2` re-roll, a longer-stride `cm_run`, KTX2 (the file is 3.3 MB) |
 | 1 · Systems | code: sockets, finger layer, IK, manifest-driven playback, form state machine, the effect system's pools and atlas renderer | the pilot runs through the new code path; the old path still works as a fallback |
 | 2 · Items | the other 22 items + arrow; `item-prep` JSON per item | each item passes `03` §8 on a test body |
-| 3 · Champions | 19 bodies in batches by stance set (`th`, `dw`, `dg`, `mc`, `wd`, `st`, `bw`, then the second `sns`) | per model `02` §4 |
-| 4 · Animations | animation master, then sets in this order: `cm` → `sns` → `th` → `dw` → `dg` → `mc` → `wd` → `st` → `bw` | per clip `05` §9; per set a bot match |
+| 3 · Champions | 19 bodies in batches by stance set (`th`, `dw`, `dg`, `mc`, `wd`, `st`, `bw`, `rf`, then the second `sns`) | per model `02` §4 |
+| 4 · Animations | animation master, then sets in this order: `cm` → `sns` → `th` → `dw` → `dg` → `mc` → `wd` → `st` → `bw` → `rf` | per clip `05` §9; per set a bot match |
 | 5 · Creatures | gorilla, ghoul, abomination (humanoid rigs); quadruped pilot (2 cat clips) → wolf, cat, bear; tree; totems, trap, projectile meshes | `04` per creature |
 | 6 · Effects | atlas, then per class in the order of `06` §5 | per class: every ability fired in the viewer harness, screenshots, budgets |
 | 7 · Sim follow-ups | R1 (instant melee abilities land at `hitAt`), optionally R2–R4 | balance matrix + 2v2 auto-tune re-run, `docs/BALANCE.md` updated |
@@ -65,19 +66,19 @@ AI animation **20** credits. Balance ≈ **15,800**.
 |---|---|---|
 | Champions (model + retopo + rig) | 20 × 100 | 2,000 |
 | Champion re-rigs (≈ 30 %) | 6 × 20 | 120 |
-| Items (model + retopo; bows rigged locally) | 24 × 80 | 1,920 |
+| Items (model + retopo; the bow rigged locally) | 24 × 80 | 1,920 |
 | Creatures (model + retopo + rig) + re-rigs | 7 × 100 + 3 × 20 | 760 |
 | Props: 3 totems, trap, 7 projectile meshes | 11 × 80 | 880 |
 | Animation master | 1 × 100 | 100 |
-| Humanoid champion clips | 192 × 20 | 3,840 |
+| Humanoid champion clips | 193 × 20 | 3,860 |
 | Humanoid creature clips (gorilla 13, ghoul 10, abomination 8, tree 11) | 42 × 20 | 840 |
 | Four-legged clips (wolf 9, cat 20, bear 18; Plan A) | 47 × 20 | 940 |
-| Re-roll reserve for clips (20 %) | | 1,124 |
-| **Total** | | **≈ 12,520** |
+| Re-roll reserve for clips (20 %) | | 1,128 |
+| **Total** | | **≈ 12,550** |
 | New class Dread Knight (`09` §7): 2 champions, 2 items, 12 clips + reserve | | ≈ 650 |
-| **Total with the Dread Knight** | | **≈ 13,170** |
+| **Total with the Dread Knight** | | **≈ 13,200** |
 
-Leaves ≈ 3,280 credits of margin (≈ 2,630 with the Dread Knight). If Plan B (procedural four-legged motion) is used: −940.
+Leaves ≈ 3,250 credits of margin (≈ 2,600 with the Dread Knight). If Plan B (procedural four-legged motion) is used: −940.
 
 ---
 
@@ -126,4 +127,4 @@ Leaves ≈ 3,280 credits of margin (≈ 2,630 with the Dread Knight). If Plan B 
 | KTX2 transcoder fails to load | no textures | fallback JPEG textures in the same GLB slot (larger download) |
 | R1 shifts combat feel / balance | win rates move | re-run the balance matrix and auto-tune (`docs/BALANCE.md`) |
 | Heroic sizes collide with the fixed hitboxes | weapons look like they miss | strike markers are measured on the real items; hit effects drawn at the contact point (tip) |
-| Unit prices rise after the sale | budget | margin ≈ 3,280 credits; Plan B saves 940; split items share GLBs where possible |
+| Unit prices rise after the sale | budget | margin ≈ 3,250 credits; Plan B saves 940; split items share GLBs where possible |

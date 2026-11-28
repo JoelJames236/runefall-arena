@@ -5,8 +5,13 @@
 // the UAL clips), every clip gets its strike moment measured (the striking hand's peak speed) and is trimmed to
 // wind-up + strike + follow-through + recovery around it. heroes.js plays them like any other clip and times the
 // strike to land when the sim deals the blow.
+//
+// The remodel's clip sets (docs/remodel/05-animations.md) come through the animation manifest instead
+// (assets/models/anims/manifest.json → loadManifest below): one JSON per stance set, cut and timed by the manifest's
+// trim / markers, with a fallback to today's clips for every clip that isn't made yet.
 import * as THREE from 'three';
 import { restOf } from './champions.js';
+import { validSpec } from '../data/classes.js';
 
 const FILE = 'assets/models/anims/attacks.json';
 // name → how to cut and play it.
@@ -131,6 +136,23 @@ function steadyHeading(clip, sk, keep = 0.25) {
   const pt = clip.tracks.find(t => t.name === 'pelvis.position');
   if (pt) { const v = new THREE.Vector3(), p0 = new THREE.Vector3().fromArray(pt.values, 0); for (let i = 0; i < pt.times.length; i++) { v.fromArray(pt.values, i * 3); v.x = p0.x + (v.x - p0.x) * 0.6; v.z = p0.z + (v.z - p0.z) * 0.6; v.toArray(pt.values, i * 3); } }
 }
+// Make a clip end the way it starts: the difference between its last and first key is taken out of every key in
+// proportion to its time (quaternions: the rotation from the last to the first key, slerped in). A loop then has no
+// pop, and a pelvis that ran or stepped away (AI motions carry root motion) stays in place.
+function closeLoop(clip, only = null) {
+  const q = new THREE.Quaternion(), c = new THREE.Quaternion(), e = new THREE.Quaternion(), I = new THREE.Quaternion();
+  for (const tr of clip.tracks) {
+    if (only && !only.test(tr.name)) continue;
+    const n = tr.times.length, v = tr.values, d = tr.times[n - 1] - tr.times[0]; if (n < 2 || !(d > 0)) continue;
+    if (tr.name.endsWith('.quaternion')) {
+      c.fromArray(v, (n - 1) * 4).invert().multiply(q.fromArray(v, 0)).normalize(); // last^-1 · first
+      for (let i = 1; i < n; i++) { q.fromArray(v, i * 4).multiply(e.slerpQuaternions(I, c, (tr.times[i] - tr.times[0]) / d)).normalize().toArray(v, i * 4); }
+    } else {
+      const k = tr.getValueSize(), err = Array.from({ length: k }, (_, j) => v[(n - 1) * k + j] - v[j]);
+      for (let i = 1; i < n; i++) { const f = (tr.times[i] - tr.times[0]) / d; for (let j = 0; j < k; j++) v[i * k + j] -= err[j] * f; }
+    }
+  }
+}
 // cut [a, b] out of a clip, sampling every track at its own keys inside the window plus both ends
 function trim(clip, a, b) {
   const tracks = clip.tracks.map(tr => {
@@ -146,7 +168,7 @@ export async function loadAttackAnims() {
   const d = await fetch(FILE).then(r => (r.ok ? r.json() : null)).catch(() => null);
   if (!d || !d.clips?.length) return ANIM_CLIPS;
   const sk = buildSkeleton(d.bones), probe = buildSkeleton(d.bones);
-  SOURCE = { root: sk.root, rest: restOf(sk.root) }; PROBE = probe;
+  SOURCE = { root: sk.root, rest: restOf(sk.root), key: 'attacks', nodes: sk.nodes, sig: sigOf(d.bones), bones: d.bones, probe }; PROBE = probe;
   for (const c of d.clips) {
     const spec = ATTACK_ANIMS[c.name]; if (!spec) continue;
     const raw = toClip(c, sk.nodes);
@@ -159,4 +181,152 @@ export async function loadAttackAnims() {
     RAW_CLIPS[c.name] = raw; // the whole generated motion (for checking the cut by eye: heroes.js registers it as "raw:<name>")
   }
   return ANIM_CLIPS;
+}
+
+// ------------------------------------------------------------------ animation manifest (remodel)
+// assets/models/anims/manifest.json (format: docs/remodel/05-animations.md §7):
+//   clips:    id → { file, src, trim: [a, b] | null, layer: 'full'|'upper'|'lower'|'additive', loop, markers, speed,
+//               optional hand ('r'/'l'), grip, offL, stride, ikL, keepTurn, measured }
+//   sets:     'class:spec' (or 'class') → set;  attacks: set → [ids] (or [[right ids], [left ids]]);  idle: set → id
+//   abilities: ability id → clip id / { cast: [ids], release: id };  fallback: id (or 'pattern_*') → id | [ids]
+//   files:    set file → false while it isn't produced (not fetched: no 404 in the console)
+// Set files are made by tools/anim-extract.mjs --set <set>. A set file that is missing, or a clip missing in it,
+// leaves that clip unloaded: resolveClip() then follows `fallback` to today's clips.
+const MANIFEST_FILE = 'assets/models/anims/manifest.json';
+const LAYERS = ['full', 'upper', 'lower', 'additive'];
+const TABLES = ['clips', 'sets', 'attacks', 'idle', 'abilities', 'fallback', 'files'];
+export const MANIFEST = Object.fromEntries(TABLES.map(k => [k, {}])); // the parsed manifest (empty tables until loaded / when missing)
+export const MANIFEST_CLIPS = {}; // id → THREE.AnimationClip (UAL bone names, heading steadied, trimmed); userData = clipMeta(id) + { src: 'tripo' }
+export const MANIFEST_RAW = {};   // id → the same motion untrimmed (for checking a trim / measuring a marker)
+const META = {};                  // id → clipMeta (every manifest clip, loaded or not)
+const SOURCES = [];               // the animation skeletons the set files were made on ({ key, root, rest, nodes, sig, bones })
+const CLIP_SRC = {};              // id → its source
+let manifestP = null;
+
+// a skeleton's identity: bone names, hierarchy and rest pose (sets made on the same master share one source)
+function sigOf(bones) { return bones.map(b => b.name + '>' + b.parent + '@' + b.t.join(',') + '/' + b.r.join(',')).join('|'); }
+function sourceFor(bones, file) {
+  const sig = sigOf(bones);
+  if (SOURCE && SOURCE.sig === sig) return SOURCE; // the attacks.json skeleton (K12 guard): heroes.js has analysed it already
+  let s = SOURCES.find(x => x.sig === sig);
+  if (!s) { const sk = buildSkeleton(bones); s = { key: 'set:' + file, root: sk.root, nodes: sk.nodes, rest: restOf(sk.root), sig, bones }; SOURCES.push(s); }
+  return s;
+}
+function metaOf(id, e) {
+  const markers = { ...(e.markers || {}) };
+  return {
+    id, file: e.file || null, src: e.src || id, trim: Array.isArray(e.trim) ? [+e.trim[0], +e.trim[1]] : null,
+    layer: LAYERS.includes(e.layer) ? e.layer : 'full', loop: !!e.loop, markers, speed: e.speed ?? 1,
+    impact: markers.strike ?? markers.release ?? null, // s into the trimmed clip at which the blow lands / the spell leaves
+    hand: e.hand || 'r', grip: e.grip ?? null, offL: !!e.offL, stride: e.stride ?? null, ikL: e.ikL ?? null,
+    keepTurn: e.keepTurn ?? 0.25, measured: e.measured !== false, loaded: false, from: 0, to: null, source: null,
+    inPlace: e.inPlace ?? true, // the pelvis ends where it started (the sim moves the champion; loops: every track closes)
+  };
+}
+function buildClip(id, c, src) {
+  const m = META[id];
+  // markers carried in the set file (anim-extract map meta) are defaults; the manifest wins
+  if (c.meta?.markers) { m.markers = { ...c.meta.markers, ...m.markers }; m.impact = m.markers.strike ?? m.markers.release ?? null; }
+  const raw = toClip(c, src.nodes); raw.name = id;
+  steadyHeading(raw, src, m.keepTurn);
+  let a = 0, b = raw.duration;
+  if (m.trim) {
+    a = Math.max(0, m.trim[0]); b = Math.min(raw.duration, m.trim[1]);
+    if (!(b > a)) { console.warn('manifest: bad trim for', id, m.trim, '(clip is', raw.duration.toFixed(2), 's) — using the whole clip'); a = 0; b = raw.duration; }
+  }
+  const clip = a > 0 || b < raw.duration ? trim(raw, a, b) : raw.clone(); clip.name = id;
+  if (m.loop) closeLoop(clip); else if (m.inPlace) closeLoop(clip, /^pelvis\.position$/);
+  Object.assign(m, { loaded: true, from: a, to: b, source: src.key });
+  clip.userData = { ...m, clip: m.src, src: 'tripo' }; // src: 'tripo' like ANIM_CLIPS (clip: its name in the set file)
+  MANIFEST_CLIPS[id] = clip; MANIFEST_RAW[id] = raw; CLIP_SRC[id] = src;
+}
+const fetchJSON = url => fetch(url).then(r => (r.ok ? r.json() : null)).catch(() => null);
+
+// Load the manifest and every set file it uses that exists. Never throws: whatever is missing falls back.
+// `url` / `data` are for tests (another manifest file, or a manifest object; set files are read next to `url`).
+export function loadManifest(url = MANIFEST_FILE, data = null) {
+  if (url === MANIFEST_FILE && !data) return manifestP || (manifestP = readManifest(url, null));
+  return readManifest(url, data);
+}
+async function readManifest(url, data) {
+  try {
+    const m = data || await fetchJSON(url);
+    if (!m || typeof m !== 'object') return MANIFEST;
+    for (const o of [MANIFEST, META, MANIFEST_CLIPS, MANIFEST_RAW, CLIP_SRC]) for (const k of Object.keys(o)) delete o[k];
+    Object.assign(MANIFEST, m); // version, _doc …
+    for (const k of TABLES) MANIFEST[k] = m[k] && typeof m[k] === 'object' ? m[k] : {};
+    for (const [id, e] of Object.entries(MANIFEST.clips)) META[id] = metaOf(id, e || {});
+    const dir = url.slice(0, url.lastIndexOf('/') + 1);
+    const files = [...new Set(Object.values(MANIFEST.clips).map(e => e && e.file).filter(f => f && MANIFEST.files[f] !== false))];
+    const sets = await Promise.all(files.map(f => fetchJSON(dir + f).then(d => [f, d])));
+    for (const [f, d] of sets) {
+      if (!d?.bones?.length || !d.clips?.length) continue; // missing / empty: its clips use the fallback
+      const src = sourceFor(d.bones, f), byName = new Map();
+      for (const c of d.clips) if (!byName.has(c.name)) byName.set(c.name, c);
+      for (const [id, e] of Object.entries(MANIFEST.clips)) {
+        if (!e || e.file !== f) continue;
+        const c = byName.get(META[id].src); if (!c) continue;
+        try { buildClip(id, c, src); } catch (err) { console.warn('manifest: clip', id, 'failed, using its fallback', err); }
+      }
+    }
+  } catch (err) { console.warn('animation manifest failed, using the old clips', err); }
+  return MANIFEST;
+}
+
+// clip id → { layer, loop, markers, impact, speed, trim, hand, grip, offL, stride, ikL, keepTurn, measured, loaded,
+// from, to, source } (read-only), or null for an id that isn't in the manifest (a library / attacks.json clip)
+export const clipMeta = id => META[id] || null;
+// the skeleton a manifest clip was authored on ({ key, root, rest }); attacks.json clips → animSource()
+export const clipSource = id => CLIP_SRC[id] || (ATTACK_ANIMS[id] ? SOURCE : null);
+
+// stance set of a champion: setOf('warrior', 'protection'), setOf('paladin:protection'); no / unknown spec → the
+// class's default spec (validSpec), then the bare class
+function keysOf(cls, spec) {
+  if (spec === undefined && typeof cls === 'string' && cls.includes(':')) [cls, spec] = cls.split(':');
+  const s = validSpec(cls, spec);
+  return s ? [cls + ':' + s, cls] : [cls];
+}
+export function setOf(cls, spec) { for (const k of keysOf(cls, spec)) if (MANIFEST.sets[k]) return MANIFEST.sets[k]; return null; }
+
+const fallbackOf = id => {
+  const F = MANIFEST.fallback;
+  if (id in F) return F[id];
+  for (const k of Object.keys(F)) if (k.includes('*') && new RegExp('^' + k.split('*').map(p => p.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$').test(id)) return F[k];
+  return null;
+};
+// The clip to play for `id`: the id itself once its manifest clip has loaded; else its fallback (followed through
+// other manifest ids, an array tries each in turn) down to a clip that isn't in the manifest — a UAL library or
+// attacks.json name, returned as it is (heroes.js knows it; pass has(name) to skip names it doesn't). null: nothing.
+export function resolveClip(id, has = null, seen = new Set()) {
+  if (!id || seen.has(id)) return null;
+  seen.add(id);
+  if (MANIFEST_CLIPS[id]) return id;
+  if (!(id in MANIFEST.clips) && (!has || has(id))) return id;
+  for (const c of [].concat(fallbackOf(id) ?? [])) { const r = resolveClip(c, has, seen); if (r) return r; }
+  return null;
+}
+const anyLoaded = ids => ids.some(x => (Array.isArray(x) ? anyLoaded(x) : !!MANIFEST_CLIPS[x]));
+const resolveAll = (ids, has) => ids.map(x => (Array.isArray(x) ? resolveAll(x, has) : resolveClip(x, has))).filter(x => (Array.isArray(x) ? x.length : x));
+// Basic-attack clips of a champion's set, resolved (a list, or [[right], [left]] for dual wield). null while the
+// champion has no set or none of the set's attack clips has loaded — heroes.js then keeps its own ACTIONS.attack
+// list (today's look stays exactly as it is until the first clip of the set ships). opts.always: resolve anyway.
+export function attacksFor(cls, spec, opts = {}) {
+  const set = setOf(cls, spec), ids = set && MANIFEST.attacks[set];
+  if (!Array.isArray(ids) || !ids.length || (!opts.always && !anyLoaded(ids))) return null;
+  const out = resolveAll(ids, opts.has);
+  return out.length ? out : null;
+}
+// Idle (stance) clip of a champion's set, resolved; null while it hasn't loaded (keep look.idle) unless opts.always.
+export function idleFor(cls, spec, opts = {}) {
+  const set = setOf(cls, spec), id = set && MANIFEST.idle[set];
+  if (!id || (!opts.always && !MANIFEST_CLIPS[id])) return null;
+  return resolveClip(id, opts.has);
+}
+// Production helper (05 §8.3): measure a loaded clip's strike on its source skeleton — the striking hand's peak
+// "speed × reach" (or speed alone: metric 'speed') — in raw and trimmed time, next to the manifest's value.
+export function measureStrike(id, win, metric) {
+  const raw = MANIFEST_RAW[id], m = META[id], src = CLIP_SRC[id]; if (!raw || !m || !src) return null;
+  src.probe = src.probe || buildSkeleton(src.bones);
+  const { at, score } = measureImpact(raw, src.probe, m.hand, win, metric);
+  return { id, raw: +at.toFixed(3), trimmed: +(at - m.from).toFixed(3), manifest: m.impact, score: +score.toFixed(2) };
 }
