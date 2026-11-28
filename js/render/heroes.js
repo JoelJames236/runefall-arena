@@ -87,7 +87,7 @@ LOOKS['necromancer:curser'] = { ...LOOKS.necromancer, tint: [0.15, 0.1, 0.2], gl
 LOOKS['druid:feral'] = { ...LOOKS.druid, weapons: [] };
 // Dread Knight (Risen): pale undead knight in dark plate, two frost runeblades / a blood-runed greatsword
 LOOKS.dreadknight = { outfit: 'Male_Ranger', head: 'Superhero_Male_FullBody', hair: [], hide: ['Head_Hood', 'Acc_Pauldron'],
-  tint: [0.16, 0.2, 0.3], tintAmt: 0.8, skinTint: [0.7, 0.76, 0.84], scale: 1.07, weapons: ['runesword', 'runeswordL'], idle: 'Sword_Idle', glow: 0x7ad0ff, race: 'undead' };
+  tint: [0.16, 0.2, 0.3], tintAmt: 0.8, skinTint: [0.7, 0.76, 0.84], scale: 1.07, weapons: ['runesword', 'runeswordL'], idle: 'Sword_Idle', glow: 0x7ad0ff, race: 'undead', hunch: 0 }; // Risen: upright, no undead stoop
 LOOKS['dreadknight:blood'] = { ...LOOKS.dreadknight, weapons: ['greatsword'], tint: [0.22, 0.07, 0.09], glow: 0xff3a4a };
 // undead summons (minions)
 LOOKS.ghoul = { outfit: 'Male_Peasant', head: 'Superhero_Male_FullBody', hair: [], hide: [], tint: [0.2, 0.24, 0.16], tintAmt: 0.8, skinTint: [0.5, 0.6, 0.42], scale: 0.95, weapons: [], idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', noArmor: true, race: 'undead' };

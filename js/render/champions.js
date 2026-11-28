@@ -36,6 +36,8 @@ export const CHAMPION_MODELS = {
   'necromancer:curser': 'necromancer_curser.glb',
   'druid:feral': 'druid_feral.glb',
   'druid:restoration': 'druid_restoration.glb',
+  'dreadknight:frost': 'dreadknight_frost.glb',
+  'dreadknight:blood': 'dreadknight_blood.glb',
   // pets on the same humanoid rig (UE5 Mannequin) and UAL clips
   gorilla: 'hunter_gorilla.glb', // Beastmaster's silverback gorilla
 };

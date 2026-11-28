@@ -17,7 +17,7 @@ rigged model per spec, without losing anything the game already does and without
 6. Add the key to `CHAMPION_MODELS` in `js/render/champions.js` and check it in `viewer.html`
    (side-by-side with the old champion, every animation, triangle and mesh count).
 
-**Status: all 20 specs generated, rigged and in the game** (9.2–10.2 k triangles each, 1.5–2.0 MB per GLB,
+**Status: all 20 specs generated, rigged and in the game** — plus the two Dread Knight specs (2026-11-28, below) (9.2–10.2 k triangles each, 1.5–2.0 MB per GLB,
 streamed in the background after the menu loads — your own class first). A 2v2 with four generated champions renders
 with 234 draw calls and 614 k triangles vs 334 / 817 k with the code-built champions, at the same frame time.
 Dwarves get a height factor (`RACE_HEIGHT` in champions.js) because Tripo normalises every model to the same height.
@@ -77,6 +77,14 @@ short capes / robes split for the legs.
 | Necromancer — Curser | Undead | violet cowl, chains, tattered high collar, lantern of souls on the belt | bone staff | Idle_Loop |
 | Druid — Feral | Bull-folk | fur and leather harness, claw gauntlets, great-cat pelt on the shoulders, fang belt, horns, hooves | – (claws) | Idle_Loop |
 | Druid — Restoration | Bull-folk | antler crown in bloom, bark-and-moss pauldrons, robe of leaves, horns, hooves | druid staff | Idle_Loop |
+| Dread Knight — Frost | Risen (undead human) | frost-rimed steel-blue plate with glowing blue runes, ice-crystal pauldrons, a crown of ice crystals over an open hood, white hair, navy cloth panels | two runeblades | Sword_Idle |
+| Dread Knight — Blood | Risen | black-and-crimson plate with red runes, bone-trimmed pauldrons, spiked crown-helm over a hood, crimson sash, skull belt | two-handed runeblade (greatsword) | Sword_Idle |
+
+**Dread Knight (2026-11-28)**: `dreadknight_frost.glb` 10,719 triangles / 1.77 MB, `dreadknight_blood.glb` 10,751 / 1.60 MB,
+UE5 Mannequin rig with all finger joints on both hands (the first rigs without a missing finger), 2 textures at 1024 px.
+H3.5 HD model 45 + retopology to 11,000 triangles 35 + auto-rig 20 = **100 credits each**. Original designs in the
+frost-king / blood-knight archetype (no other game's character). Previews: `docs/images/dreadknight-frost.jpg`,
+`docs/images/dreadknight-blood.jpg`. Their weapons are still the code-built runeblades.
 
 ## Creatures (second batch)
 

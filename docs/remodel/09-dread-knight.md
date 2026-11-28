@@ -1,7 +1,8 @@
 # 09 — New class: Dread Knight (Frost / Blood)
 
-Status: **playable** since 2026-11-28 with a code-built placeholder look (plate set + runeblades from the armory);
-the generated models, items, animations and effects of §3–§6 are still to do. A new, 11th class, shaped after the role model's **death knight archetype**:
+Status: **playable** since 2026-11-28, with **generated Tripo models for both specs** (`dreadknight_frost.glb`,
+`dreadknight_blood.glb`: ~10.7 k triangles, UE5 rig with every finger joint; previews in `docs/images/dreadknight-*.jpg`).
+Still to do from §4–§6: the runeblade item models (today the code-built armory blades), the 12 new clips and the effects. A new, 11th class, shaped after the role model's **death knight archetype**:
 a fallen knight raised from death, bound to runes, fighting in heavy plate with a runeblade. Two specs, as asked:
 **Frost = damage** (two runeblades), **Blood = tank** (a two-handed runeblade, self-healing). Working name
 **Dread Knight** (`dreadknight`) — our own name, as with every other class and race; the display name can be
@@ -17,7 +18,7 @@ performance `07`, pipeline `08`. The numbers in §2 are the ones in the game (`j
 | | |
 |---|---|
 | Fantasy | a champion who died, was raised by rune magic and now fights for its own ends: cold, relentless, armoured; it drags enemies to it with spectral chains and turns death magic into frost (Frost) or into its own blood (Blood) |
-| Race | **Risen** — a human knight raised from death: pale blue-grey skin, gaunt but strong (not rotting like the Necromancer's Undead), long white hair, dark lips, **glowing eyes** (ice-blue for Frost, crimson for Blood). Upright, imposing posture, no hunch. New entry in `races.js`. Head joint 1.75 m (`02` §1.3) |
+| Race | **Human** (decided 2026-11-28): a living human knight; the death-knight look comes entirely from the **armour** — a tall closed, spiked crown-helm with only glowing eye slits, heavy dark plate with skull and spike motifs, rune-lit gauntlets, a long ragged cloak. Skin barely visible (pale where it shows). Glowing eyes come from the helm (ice-blue Frost, crimson Blood). Posture upright and imposing, no hunch; head joint 1.72 m (`02` §1.3). Style target: as close to the role model's frost-king archetype as the rules allow — same overall mood (towering spiked helm, frost-and-skull plate, runeblade, cold blue glow), but our own shapes: no copied helm, armour, sword or emblem, and no names from that game in prompts |
 | Role | melee; Frost: burst damage and control; Blood: tank who heals from what he deals and takes |
 | Resource | **Runic Power** (RP), 0–100, starts at 10, +1 per second; filled by builders, basic attacks (Frost +8, Blood +6) and, for Blood, by damage taken (1 RP per 5 % of max health lost). Unlike rage, dealing damage gives **no** RP (tested: with rage rules the class won 87 % / 78 %) |
 | Class colour | steel grey-blue `#a8b4c8` (no other class is grey); spec accents Frost `#7ad0ff`, Blood `#ff3a4a` |
@@ -100,11 +101,11 @@ The class's signature tool, in **both specs** (the role model's "grip"-style pul
 
 ## 3. Models (`02` format)
 
-### Dread Knight — Frost (Risen) · `dreadknight_frost`
+### Dread Knight — Frost (Human) · `dreadknight_frost`
 
 | | |
 |---|---|
-| Body | tall Risen human knight, pale blue-grey skin, gaunt strong face, long white hair falling from under the helm, glowing ice-blue eyes |
+| Body | tall, broad human knight almost fully hidden in armour; closed spiked crown-helm (eye slits glowing ice-blue), only a pale jaw/chin may show; long white hair may fall from under the helm |
 | Armour | dark steel plate **rimed with frost**, **spiked pauldrons with blue-white ice crystals growing out of them**, a horned helm with an open skull-shaped face guard, a ragged dark-blue tabard to the knee, chains across the waist, rune-etched breastplate and gauntlets |
 | Colours | `#2a3240` dark steel / `#1e3a6a` navy cloth / `#c8e8ff` ice / glow `#7ad0ff` |
 | Glows | eyes, breastplate runes, ice crystals (≤ 3 % of the texture) |
@@ -112,7 +113,7 @@ The class's signature tool, in **both specs** (the role model's "grip"-style pul
 | Items | `runeblade_frost` (`grip_r`) + its copy on `grip_l` · set `dw` |
 | Prompt core | "tall undead knight with pale blue-grey skin, long white hair and glowing ice-blue eyes, dark steel plate armor rimed with frost, spiked pauldrons with blue-white ice crystals growing out of them, a horned helmet with an open skull-shaped face guard, ragged dark blue tabard to the knees, chains across the waist, glowing blue runes etched on the breastplate and gauntlets" |
 
-### Dread Knight — Blood (Risen) · `dreadknight_blood`
+### Dread Knight — Blood (Human) · `dreadknight_blood`
 
 | | |
 |---|---|
