@@ -1,0 +1,700 @@
+{
+ "$doc": [
+  "Grip-space prep rules per item (docs/remodel/03-weapons-and-sockets.md §4 / §7), read by tools/item-prep.mjs:",
+  "  node tools/item-prep.mjs --all [--only id,id] [--dry] [-v]   |   node tools/item-prep.mjs [raw out] --spec <id>",
+  "Raw = <id>_raw.glb, output = <id>.glb in this folder (override with raw / out). An item = its kind's fields + its own.",
+  "frame: long (weapons, staves, wands, arrow) | plate (shields, tome) | upright (relic) | bow | bore (gun).",
+  "head (+Y end, first decisive rule wins): wide (end 30 % with more cross-section) | narrow (gun: the slimmer half) | sword (widest section = guard, the blade is the longer side) | arrow (the end whose wide run is shorter) | up (toward file +Y, the generation convention) | wideTop (plates: the widest band lies toward the top).",
+  "axisFrom (long): thin (default: the axis is tilted onto the centre line of the thin sections) | grip (butt to guard only: curved blades) | pca.",
+  "xAxis (long): wide | thin (principal direction of xRegion's cross-sections) | front (file +Z, for symmetric heads). xRegion: head | guard | blade | tip | all.",
+  "xSign (long): farthest (the side the head reaches farthest: axe bits) | blunt (the end of the head with more cross-section: hammer face) | tipSide (curved blades) | bulge (the convex side) | front (+X toward file +Z) | frontZ (+Z toward file +Z: the stable choice for flat symmetric items).",
+  "yAxis (plate): long | up (round shields: file up). zSign (plate): bulge | front | spine (tome: X runs from the spine to the fore-edge).",
+  "size (m) along Y; sizeBy diameter = max of X and Y extents (round shields). origin: fromButt | fromTop | belowGuard (below the guard's lower face) | centre (shields; back: centre | rearmost) | bottom | spine | riser (+ y), plus offset [x,y,z]. x/z of fromButt/belowGuard/bottom = the handle's centre in that section.",
+  "empties: name -> rule or { rule, y, f, side, barrel, offset [x,y,z], rot [deg x,y,z] } | { at: [x,y,z] } | { same: <empty> }. Rules: top butt axisTop axisButt guard guardTop bladeMid bitTop bitBottom bitCheek headCentre headBottom headFace headCheek handle(y) boss rimTop cover eyes(f) muzzle stock pan(barrel) string shelf(y, side) riser(y).",
+  "tris = LOD0 budget (simplified after prep, UVs clamped to 0..1; kept only while the surface stays within 3 % of the length, else the lowest count within 1 % and a warning); handle = expected Ø (mm) at the origin, ±25 %; expect = grip-space extents x y z or bounds xmin … zmax (m), ±25 %.",
+  "handleFit: true | { zone: haft, butt, below, from, to, blend, rMax, d, fixed } — thins the grip zone section by section to the handle Ø (d overrides it). Default zone ±0.08 m around the origin, past grip2, up to 5 mm under the guard; zone haft = the whole haft from butt (0.06) above the butt to below (0.05) under the head. Only vertices within rMax (0.75 Ø + 1 cm) of the centre line move; fixed (m) = measure around the handle line within that radius instead of the nearest cluster (twisted strands).",
+  "procedural: arrow — built by tools/make-arrow.mjs at the item size (the raw is not used).",
+  "Overrides when a heuristic is wrong: flipY (head at the other end), flipX / flipZ (turn 180° about Y), rot [deg] (after the frame), mirror x|z (mirrors the geometry: left-hand models), origin.offset, per-empty offset / at."
+ ],
+ "kinds": {
+  "sword": {
+   "frame": "long",
+   "head": [
+    "sword",
+    "up"
+   ],
+   "xAxis": "wide",
+   "xRegion": "guard",
+   "xSign": [
+    "frontZ"
+   ],
+   "handle": 34,
+   "handleFit": true
+  },
+  "sword2": {
+   "frame": "long",
+   "head": [
+    "sword",
+    "up"
+   ],
+   "xAxis": "wide",
+   "xRegion": "guard",
+   "xSign": [
+    "frontZ"
+   ],
+   "handle": 38,
+   "handleFit": true
+  },
+  "dagger": {
+   "frame": "long",
+   "axisFrom": "grip",
+   "head": [
+    "sword",
+    "up"
+   ],
+   "xAxis": "wide",
+   "xRegion": "blade",
+   "xSign": [
+    "tipSide",
+    "frontZ"
+   ],
+   "handle": 34,
+   "handleFit": true
+  },
+  "axe": {
+   "frame": "long",
+   "head": [
+    "wide",
+    "up"
+   ],
+   "xAxis": "wide",
+   "xRegion": "head",
+   "xSign": [
+    "farthest",
+    "frontZ"
+   ],
+   "handle": 34,
+   "handleFit": {
+    "zone": "haft"
+   }
+  },
+  "axe2": {
+   "frame": "long",
+   "head": [
+    "wide",
+    "up"
+   ],
+   "xAxis": "wide",
+   "xRegion": "head",
+   "xSign": [
+    "frontZ"
+   ],
+   "handle": 38,
+   "handleFit": {
+    "zone": "haft"
+   }
+  },
+  "hammer": {
+   "frame": "long",
+   "head": [
+    "wide",
+    "up"
+   ],
+   "xAxis": "wide",
+   "xRegion": "head",
+   "xSign": [
+    "blunt",
+    "frontZ"
+   ],
+   "handle": 38,
+   "handleFit": {
+    "zone": "haft"
+   }
+  },
+  "mace": {
+   "frame": "long",
+   "head": [
+    "wide",
+    "up"
+   ],
+   "xAxis": "front",
+   "xSign": [
+    "front"
+   ],
+   "handle": 34,
+   "handleFit": {
+    "zone": "haft"
+   }
+  },
+  "wand": {
+   "frame": "long",
+   "head": [
+    "wide",
+    "up"
+   ],
+   "xAxis": "front",
+   "xSign": [
+    "front"
+   ],
+   "handle": 22,
+   "handleFit": {
+    "zone": "haft"
+   }
+  },
+  "staff": {
+   "frame": "long",
+   "head": [
+    "wide",
+    "up"
+   ],
+   "xAxis": "front",
+   "xSign": [
+    "front"
+   ],
+   "handle": 38,
+   "handleFit": {
+    "zone": "haft"
+   }
+  },
+  "shield": {
+   "frame": "plate",
+   "yAxis": "long",
+   "head": [
+    "wideTop",
+    "up"
+   ],
+   "zSign": [
+    "bulge",
+    "front"
+   ],
+   "origin": {
+    "centre": true,
+    "back": "centre"
+   },
+   "handle": null
+  },
+  "roundshield": {
+   "frame": "plate",
+   "yAxis": "up",
+   "zSign": [
+    "bulge",
+    "front"
+   ],
+   "sizeBy": "diameter",
+   "origin": {
+    "centre": true,
+    "back": "centre"
+   },
+   "handle": null
+  },
+  "tome": {
+   "frame": "plate",
+   "yAxis": "long",
+   "head": [
+    "up"
+   ],
+   "zSign": [
+    "spine",
+    "front"
+   ],
+   "origin": {
+    "spine": true
+   },
+   "handle": null
+  },
+  "relic": {
+   "frame": "upright",
+   "origin": {
+    "bottom": true
+   },
+   "handle": null
+  },
+  "bow": {
+   "frame": "bow",
+   "head": [
+    "up"
+   ],
+   "origin": {
+    "riser": true
+   },
+   "handle": 45,
+   "handleFit": {
+    "from": -0.06,
+    "to": 0.06
+   }
+  },
+  "gun": {
+   "frame": "bore",
+   "head": [
+    "narrow",
+    "up"
+   ],
+   "handle": 34,
+   "handleFit": {
+    "from": -0.04,
+    "to": 0.04,
+    "blend": 0.07
+   }
+  },
+  "arrow": {
+   "frame": "long",
+   "head": [
+    "arrow",
+    "up"
+   ],
+   "xAxis": "wide",
+   "xRegion": "tip",
+   "xSign": [
+    "frontZ"
+   ],
+   "handle": null,
+   "procedural": "arrow"
+  }
+ },
+ "items": {
+  "orcaxe": {
+   "kind": "axe",
+   "size": 0.98,
+   "tris": 900,
+   "origin": {
+    "fromButt": 0.12
+   },
+   "empties": {
+    "tip": "bitTop",
+    "trail_base": "bitBottom"
+   },
+   "expect": {
+    "xmax": 0.27,
+    "xmin": -0.11
+   },
+   "note": "Warrior Protection, grip_r, fist_1h. One bit on +X 0.36 tall × 0.27 deep, hooked beard, back spike −X 0.11; tip ≈ (0.27, 0.80), trail_base ≈ (0.25, 0.50)."
+  },
+  "orcshield": {
+   "kind": "roundshield",
+   "size": 0.86,
+   "tris": 1000,
+   "empties": {
+    "fx_core": "boss",
+    "rim_top": "rimTop"
+   },
+   "expect": {
+    "zmax": 0.125
+   },
+   "note": "Warrior Protection, shield_l. Ø 0.86 including the 8 rim spikes, 0.09 deep (zmax = 0.035 back plane + 0.09), boss Ø 0.17."
+  },
+  "greataxe_orc": {
+   "kind": "axe2",
+   "size": 1.75,
+   "tris": 1600,
+   "origin": {
+    "fromButt": 0.55
+   },
+   "empties": {
+    "tip": "bitTop",
+    "trail_base": "bitBottom",
+    "grip2": {
+     "rule": "handle",
+     "y": -0.45
+    },
+    "pommel": "butt"
+   },
+   "expect": {
+    "x": 0.8
+   },
+   "note": "Warrior Arms, grip_r + IK grip2, fist_2h. Double bit span 0.80 (tip = the +X bit's top corner), each bit 0.48 tall, top spike."
+  },
+  "headsman_axe": {
+   "kind": "axe",
+   "handle": 38,
+   "size": 1.7,
+   "tris": 1500,
+   "origin": {
+    "fromButt": 0.55
+   },
+   "empties": {
+    "tip": "bitTop",
+    "trail_base": "bitBottom",
+    "grip2": {
+     "rule": "handle",
+     "y": -0.42
+    },
+    "pommel": "butt"
+   },
+   "expect": {
+    "xmax": 0.4
+   },
+   "note": "Berserker Executioner, grip_r + IK grip2, fist_2h. Single crescent bit 0.62 tall × 0.40 deep on +X."
+  },
+  "warAxe": {
+   "kind": "axe",
+   "size": 0.92,
+   "tris": 800,
+   "origin": {
+    "fromButt": 0.1
+   },
+   "empties": {
+    "tip": "bitTop",
+    "trail_base": "bitBottom",
+    "fx_core": "bitCheek"
+   },
+   "note": "Berserker Fury, grip_r + grip_l (one GLB), fist_1h. Bearded bit on +X 0.32 tall, rune on the cheek."
+  },
+  "sunhammer": {
+   "kind": "hammer",
+   "size": 1.7,
+   "tris": 1400,
+   "origin": {
+    "fromButt": 0.5
+   },
+   "empties": {
+    "tip": "headFace",
+    "trail_base": "headBottom",
+    "fx_core": "headCheek",
+    "grip2": {
+     "rule": "handle",
+     "y": -0.4
+    }
+   },
+   "expect": {
+    "x": 0.46,
+    "z": 0.24
+   },
+   "note": "Paladin Crusader, grip_r + IK grip2, fist_2h. Head 0.46 × 0.24 × 0.24, sunburst striking face on +X, back spike on −X. The generated head (0.97 m) has blunt caps at both ends and the sun on its cheek: the ends stay on ±X (blunt 1.03× → frontZ), the sun on +Z = fx_core (headCheek); tip = the +X cap."
+  },
+  "holysword": {
+   "kind": "sword",
+   "size": 1.15,
+   "tris": 900,
+   "origin": {
+    "belowGuard": 0.05
+   },
+   "empties": {
+    "tip": "top",
+    "trail_base": "guard",
+    "fx_core": "guard",
+    "pommel": "butt"
+   },
+   "expect": {
+    "x": 0.32
+   },
+   "note": "Paladin Protection (pilot), grip_r, fist_1h. Blade 0.86 × 0.075, winged crossguard 0.32, grip 0.15, gem pommel."
+  },
+  "towershield": {
+   "kind": "shield",
+   "size": 1.2,
+   "tris": 1000,
+   "empties": {
+    "fx_core": "boss",
+    "rim_top": "rimTop"
+   },
+   "expect": {
+    "x": 0.66,
+    "zmax": 0.115
+   },
+   "note": "Paladin Protection (pilot), shield_l. 1.20 × 0.66, 0.08 deep, foot spike at −Y, sun emblem. The pilot's --flipz corrected the old convexity test (face = file +Z); bulge + front agree here, so no flip. Curved (0.27 deep): the rearmost point is the back plane (z +0.035), so the curved rims clear the forearm (Phase 2 check: the centre back plane cut 8–12 cm into the forearm).",
+   "origin": {
+    "centre": true,
+    "back": "rearmost"
+   }
+  },
+  "fang": {
+   "kind": "dagger",
+   "size": 0.5,
+   "tris": 400,
+   "origin": {
+    "belowGuard": 0.04
+   },
+   "empties": {
+    "tip": "top",
+    "trail_base": "guard",
+    "fx_core": "guard"
+   },
+   "expect": {
+    "x": 0.1
+   },
+   "note": "Rogue (both), grip_r + grip_l (one GLB), fist_1h. Blade 0.34 × 0.05 curved toward +X, serrated back, guard 0.10; Assassination: green poison channel (fx_core = venom bead)."
+  },
+  "frostwand": {
+   "kind": "wand",
+   "size": 0.5,
+   "tris": 450,
+   "origin": {
+    "fromButt": 0.14
+   },
+   "empties": {
+    "tip": "top",
+    "fx_core": "headCentre"
+   },
+   "note": "Mage Frost, grip_r, wand_pinch. Shaft Ø 22 mm, 3-prong head cradling a crystal 0.10."
+  },
+  "firewand": {
+   "kind": "wand",
+   "size": 0.5,
+   "tris": 450,
+   "origin": {
+    "fromButt": 0.14
+   },
+   "empties": {
+    "tip": "top",
+    "fx_core": "headCentre"
+   },
+   "note": "Mage Fire, grip_r, wand_pinch. Shaft Ø 22 mm, 3-prong head cradling an ember 0.10."
+  },
+  "tome_frost": {
+   "kind": "tome",
+   "size": 0.3,
+   "tris": 500,
+   "empties": {
+    "fx_core": "cover"
+   },
+   "expect": {
+    "x": 0.24,
+    "z": 0.07
+   },
+   "note": "Mage Frost, grip_l, tome pose. 0.30 × 0.24 × 0.07; origin = spine centre, +Y along the spine to the top, +Z = the cover away from the palm (the sigil), the book extends toward +X."
+  },
+  "tome_fire": {
+   "kind": "tome",
+   "size": 0.3,
+   "tris": 500,
+   "empties": {
+    "fx_core": "cover"
+   },
+   "expect": {
+    "x": 0.24,
+    "z": 0.07
+   },
+   "note": "Mage Fire, as tome_frost. Generated lying flat: the top is a coin flip on file up (dot 0.0); checked 2026-11-28 in the viewer: the flame sigil stands upright — flipY if a new export turns it."
+  },
+  "sun_staff": {
+   "kind": "staff",
+   "xAxis": "thin",
+   "xRegion": "head",
+   "xSign": [
+    "front"
+   ],
+   "size": 2.05,
+   "tris": 1000,
+   "origin": {
+    "fromButt": 0.9
+   },
+   "empties": {
+    "tip": "headCentre",
+    "fx_core": "headCentre",
+    "grip2": {
+     "rule": "handle",
+     "y": -0.35
+    }
+   },
+   "note": "Priest Discipline, grip_r (+ optional grip2), fist_2h. Butt y −0.90, head +0.83 … +1.15: sun disc Ø 0.24 (face on +X = the disc's normal, toward the file front) between swept wings spanning 0.46, core Ø 0.07."
+  },
+  "void_staff": {
+   "kind": "staff",
+   "size": 2.05,
+   "tris": 1000,
+   "origin": {
+    "fromButt": 0.9
+   },
+   "empties": {
+    "tip": "headCentre",
+    "fx_core": "headCentre",
+    "grip2": {
+     "rule": "handle",
+     "y": -0.35
+    }
+   },
+   "note": "Priest Shadow. Blackened shaft, void crystal 0.16 tall in an iron cage, 4 tendril prongs 0.30 (symmetric: +X = file front)."
+  },
+  "stormmace": {
+   "kind": "mace",
+   "size": 0.88,
+   "tris": 700,
+   "origin": {
+    "fromButt": 0.11
+   },
+   "empties": {
+    "tip": "top",
+    "fx_core": "headCentre"
+   },
+   "expect": {
+    "x": 0.2
+   },
+   "note": "Shaman Elemental, grip_r, fist_1h. Carved stone head 0.20, copper bands, lightning rune (faces the file front = +X)."
+  },
+  "relic": {
+   "kind": "relic",
+   "size": 0.36,
+   "tris": 500,
+   "empties": {
+    "fx_core": {
+     "rule": "eyes",
+     "f": 0.62
+    }
+   },
+   "note": "Shaman Elemental, grip_l, orb_cup. Spirit mask idol with horns and feathers on a short haft; origin bottom centre, +Y up, +Z = the mask's face. fx_core = the eyes (f = height fraction; tune with offset)."
+  },
+  "stormaxe": {
+   "kind": "axe",
+   "size": 0.92,
+   "tris": 800,
+   "origin": {
+    "fromButt": 0.1
+   },
+   "empties": {
+    "tip": "bitTop",
+    "trail_base": "bitBottom",
+    "fx_core": "bitCheek"
+   },
+   "note": "Shaman Enhancement, grip_r + grip_l (one GLB), fist_1h. Crescent bit with storm rune, feathers below the head."
+  },
+  "bow": {
+   "kind": "bow",
+   "size": 1.4,
+   "tris": 900,
+   "empties": {
+    "nock_rest": {
+     "rule": "shelf",
+     "y": 0.06,
+     "side": -1
+    },
+    "string_mid": "string",
+    "fx_core": {
+     "rule": "riser",
+     "y": 0.1
+    }
+   },
+   "note": "Hunter Beastmaster, grip_l (rigid for now; 4-bone rig later), bow_grip. Recurve 1.40, riser 0.20, brace 0.18. Origin = riser grip centre, +Y = top limb, +Z = string side (toward the archer), X = Y × Z = the archer's right; the shelf of a right-handed bow is on the archer's left, so nock_rest side −1 (see the report)."
+  },
+  "blunderbuss": {
+   "kind": "gun",
+   "size": 1.25,
+   "tris": 1000,
+   "origin": {
+    "fromButt": 0.33
+   },
+   "empties": {
+    "muzzle": "muzzle",
+    "grip2": {
+     "rule": "handle",
+     "y": 0.4,
+     "rot": [
+      0,
+      -90,
+      0
+     ]
+    },
+    "stock": "stock",
+    "fx_core": {
+     "rule": "pan",
+     "barrel": 0.7
+    }
+   },
+   "expect": {
+    "ymax": 0.92
+   },
+   "note": "Hunter Sharpshooter, grip_r (trigger) + IK grip2 (fist_2h). §4.5: origin on the stock's wrist (butt plate at y −0.33), +Y to the muzzle (+0.92), +X trigger side, +Z lock side; bore at x ≈ −0.07. grip2 rot −90° about Y: the left palm faces up under the fore-end (grip frame +X = the gun's +Z)."
+  },
+  "arrow": {
+   "kind": "arrow",
+   "size": 0.85,
+   "tris": 120,
+   "origin": {
+    "fromButt": 0
+   },
+   "empties": {
+    "tip": "top"
+   },
+   "note": "Hunter Beastmaster, nock_r during the draw, projectile after. Origin = the nock, +Y toward the arrowhead, fletching 0.10. Procedural (tools/make-arrow.mjs, 69 tris): the Tripo raw came out as a javelin (lead, 2026-11-28); the frame rules stay for a future raw."
+  },
+  "bonestaff_summoner": {
+   "kind": "staff",
+   "size": 2.15,
+   "tris": 1000,
+   "origin": {
+    "fromButt": 0.95
+   },
+   "empties": {
+    "tip": "headCentre",
+    "fx_core": "headCentre",
+    "grip2": {
+     "rule": "handle",
+     "y": -0.35
+    }
+   },
+   "note": "Necromancer Summoner, grip_r, fist_2h. Butt y −0.95, head to +1.20: rib crown + skull (the skull faces the file front = +X)."
+  },
+  "bonestaff_curser": {
+   "kind": "staff",
+   "size": 2.15,
+   "tris": 1000,
+   "origin": {
+    "fromButt": 0.95
+   },
+   "empties": {
+    "tip": "headCentre",
+    "fx_core": "headCentre",
+    "grip2": {
+     "rule": "handle",
+     "y": -0.35
+    }
+   },
+   "note": "Necromancer Curser. Caged soul lantern + chains."
+  },
+  "druidstaff": {
+   "kind": "staff",
+   "size": 2.05,
+   "tris": 1000,
+   "origin": {
+    "fromButt": 0.9
+   },
+   "handleFit": {
+    "zone": "haft",
+    "fixed": 0.07
+   },
+   "empties": {
+    "tip": "headCentre",
+    "fx_core": "headCentre",
+    "grip2": {
+     "rule": "handle",
+     "y": -0.35
+    }
+   },
+   "note": "Druid Restoration (handleFit fixed 0.07: the trunk is several twisted strands, measured around the handle line within 7 cm and thinned as one bundle), grip_r, fist_2h. Living heartwood, antler-branch cradle with a seed-light, leaves. Optional grip2 (no y in §7: −0.35 as the other staves)."
+  },
+  "runeblade_frost": {
+   "kind": "sword",
+   "size": 1.1,
+   "tris": 900,
+   "origin": {
+    "belowGuard": 0.05
+   },
+   "empties": {
+    "tip": "top",
+    "trail_base": "guard",
+    "fx_core": "bladeMid"
+   },
+   "expect": {
+    "x": 0.3
+   },
+   "note": "Dread Knight Frost (09 §4), grip_r + grip_l (one GLB). Blade 0.82 × 0.085, jagged back on −X (symmetric rule picks frontZ: flipX if the jag ends up on +X), ram-horn guard 0.30, skull pommel; fx_core = rune line centre."
+  },
+  "runeblade_blood": {
+   "kind": "sword2",
+   "size": 1.85,
+   "tris": 1500,
+   "origin": {
+    "belowGuard": 0.06
+   },
+   "empties": {
+    "tip": "top",
+    "trail_base": "guard",
+    "fx_core": "bladeMid",
+    "grip2": {
+     "rule": "handle",
+     "y": -0.3
+    }
+   },
+   "note": "Dread Knight Blood (09 §4), grip_r + IK grip2. Blade 1.30 × 0.14, bone-wing guard around a skull, long grip 0.42."
+  }
+ }
+}

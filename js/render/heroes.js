@@ -754,7 +754,7 @@ export class Character {
     const holder = sock || this.bones[GRIP[w]?.bone] || this.bones.hand_r || this.body;
     const wp = new THREE.Object3D(); wp.name = 'item_' + w; holder.add(wp);
     wp.userData = { assembled: true, item: it.name, socket: sock ? sock.name : null, markers, noMerge: true,
-      tip: markers.tip || markers.fx_core || markers.rim_top || wp };
+      tip: markers.tip || markers.muzzle || markers.fx_core || markers.rim_top || wp }; // a gun's muzzle is its tip (03 §4.5)
     return wp;
   }
   // Finger layer (03 §5) and shield wrist lock (03 §4.2), assembled champions only: every hand that holds an item
@@ -1118,8 +1118,10 @@ export class Character {
     if (this.form) this.form.hit(strength); // the form flinches too (additive, also during its attacks)
     this.hitT = 0.3; this.hitBig = strength >= 2 ? 1 : 0;
     if (!this.cur || this.cur.kind === 'hit') {
-      const name = strength >= 2 ? 'Hit_Knockback' : MANIFEST_CLIPS.cm_hit_front ? 'cm_hit_front' : Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head';
-      if (MANIFEST_CLIPS[name] && clipMeta(name).layer === 'additive') { this.playAdditive(name, 1.4); return; }
+      const base = strength >= 2 ? 'Hit_Knockback' : MANIFEST_CLIPS.cm_hit_front ? 'cm_hit_front' : Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head';
+      if (MANIFEST_CLIPS[base] && clipMeta(base).layer === 'additive') { this.playAdditive(base, 1.4); return; }
+      // a shield / tome / relic stays in guard through a manifest flinch (its elbow bend would push the forearm into the shield)
+      const name = MANIFEST_CLIPS[base] && this.offHand ? base + '|offL' : base;
       const a = this.action(name, 'upper'); if (!a) return;
       a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.timeScale = 1.4; a.play();
       if (this.cur) this.cur.out = true;

@@ -80,6 +80,10 @@ who.add(new Option('— all weapons —', 'weapons'));
 who.add(new Option('— remodel items (grip space) —', 'items'));
 await loadHeroAssets(); await preloadChampions();
 const first = Object.keys(CHAMPION_MODELS)[0]; if (first) who.value = first;
+// ?items=id,id (rack filter) / ?itemdir=folder/ (e.g. a preview batch of tools/item-prep.mjs --dir) open the item rack
+const QS = new URLSearchParams(location.search), ITEM_ONLY = QS.get('items') ? QS.get('items').split(',') : null, ITEM_DIR = QS.get('itemdir') || 'assets/models/items/';
+if (ITEM_ONLY || QS.get('itemdir')) who.value = 'items';
+window.__viewer = { THREE, scene, cam, ctl, get rack() { return rack; } }; // debugging / framing from the console
 
 let chars = [], rack = null;
 function build() {
@@ -116,7 +120,7 @@ function build() {
   setupQA(a);
 }
 // ------------------------------------------------------------------ QA tools (docs/remodel/08 §2)
-const ITEM_IDS = ['holysword', 'towershield', 'orcaxe', 'orcshield', 'greataxe_orc', 'headsman_axe', 'sunhammer', 'fang', 'frostwand', 'tome_frost',
+const ITEM_IDS = ['holysword', 'towershield', 'orcaxe', 'orcshield', 'greataxe_orc', 'headsman_axe', 'warAxe', 'sunhammer', 'fang', 'frostwand', 'tome_frost',
   'firewand', 'tome_fire', 'sun_staff', 'void_staff', 'stormmace', 'relic', 'stormaxe', 'bow', 'blunderbuss', 'arrow', 'bonestaff_summoner',
   'bonestaff_curser', 'druidstaff', 'runeblade_frost', 'runeblade_blood'];
 const clipSel = document.getElementById('clip'), lodSel = document.getElementById('lod'), sockChk = document.getElementById('sock');
@@ -157,7 +161,7 @@ function showSockets(a) {
   const ws = new THREE.Vector3();
   a.root.traverse(o => {
     const n = (o.name || '').toLowerCase();
-    const sock = /^(grip_[lr]|shield_l)$/.test(n), marker = !o.isBone && !o.isMesh && /_(tip|trail_base|fx_core|pommel|rim_top|grip2|nock_r|string_mid|muzzle)$/.test(n);
+    const sock = /^(grip_[lr]|shield_l)$/.test(n), marker = !o.isBone && !o.isMesh && /_(tip|trail_base|fx_core|pommel|rim_top|grip2|nock_r|nock_rest|string_mid|muzzle|stock)$/.test(n);
     if (!sock && !marker) return;
     o.getWorldScale(ws); const k = 1 / Math.max(1e-6, ws.x);
     const ax = new THREE.AxesHelper(sock ? 0.16 : 0.07); ax.userData.qa = true; ax.scale.setScalar(k); ax.material.depthTest = false; ax.renderOrder = 10; o.add(ax); helpers.push(ax);
@@ -173,14 +177,17 @@ async function loadItemRack() {
   const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js'), L = new GLTFLoader();
   rack = new THREE.Group(); scene.add(rack); const rows = [];
   let i = 0;
-  for (const id of ITEM_IDS) {
-    const g = await new Promise(res => L.load(`assets/models/items/${id}.glb`, res, undefined, () => res(null)));
+  for (const id of ITEM_ONLY || ITEM_IDS) {
+    const g = await new Promise(res => L.load(`${ITEM_DIR.replace(/\/?$/, '/')}${id}.glb`, res, undefined, () => res(null)));
     if (!g || who.value !== 'items') continue;
-    const it = g.scene; it.position.set((i % 6 - 2.5) * 0.9, i < 6 ? 0.2 : 1.9, 0); i++;
+    const nRow = Math.min(9, (ITEM_ONLY || ITEM_IDS).length), it = g.scene; // rows of 9, room for the 2.15 m staves
+    it.position.set((i % 9 - (nRow - 1) / 2) * 0.85, 1.0 + Math.floor(i / 9) * 2.6, 0); i++; // staff butts reach y −0.95
     const ax = new THREE.AxesHelper(0.2); ax.userData.qa = true; ax.material.depthTest = false; ax.renderOrder = 10; it.add(ax);
     const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.14, 16), new THREE.MeshBasicMaterial({ color: 0x40e0ff, transparent: true, opacity: 0.5, depthTest: false })); cyl.userData.qa = true; cyl.renderOrder = 9; it.add(cyl);
     const empties = []; it.traverse(o => { if (o !== it && !o.isMesh && o.name && o.name !== 'item' && !o.userData.qa) { const e = new THREE.AxesHelper(0.06); e.userData.qa = true; e.material.depthTest = false; o.add(e); empties.push(o.name); } });
-    const { tris } = countMeshes(it), box = new THREE.Box3(); it.traverse(o => { if (o.isMesh && !o.userData.qa) box.expandByObject(o); }); box.getSize(box.max);
+    // size from the mesh geometry only (expandByObject would also take in the empties' tripods, +0.06 m)
+    const { tris } = countMeshes(it), box = new THREE.Box3(); it.updateMatrixWorld(true);
+    it.traverse(o => { if (o.isMesh && !o.userData.qa) { o.geometry.computeBoundingBox(); box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); } }); box.getSize(box.max);
     rows.push(`${id} ${tris} tris ${box.max.y.toFixed(2)} m [${empties.join(' ')}]`); rack.add(it);
   }
   info.textContent = rows.length ? rows.join(' · ') : 'no item GLBs in assets/models/items/';

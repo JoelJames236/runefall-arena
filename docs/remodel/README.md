@@ -1,7 +1,7 @@
 # Runefall Arena — complete remodel blueprint
 
-Status (2026-11-28): **Phase 0 (pilot) and Phase 1 (systems) done** — see `08` §3 for the gates and what shipped;
-Phase 2 (items) is next. Written as a blueprint on 2026-11-27; it describes, precisely,
+Status (2026-11-28): **Phase 0 (pilot), Phase 1 (systems) and Phase 2 (items) done** — see `08` §3 for the gates and
+what shipped; Phase 3 (champions) is next. Written as a blueprint on 2026-11-27; it describes, precisely,
 every model, item, animation and effect needed to remodel all champions, pets, forms, spells and attacks, with
 World of Warcraft as the role model for look and structure (never its names, designs or content) and performance
 as a hard requirement.

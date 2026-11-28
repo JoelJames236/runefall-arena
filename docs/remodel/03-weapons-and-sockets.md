@@ -307,6 +307,12 @@ is packed into **its champion's texture atlas** (the right half of the 2048×102
 | `druidstaff` | Druid Restoration | `grip_r` | `fist_2h` | **2.05 m** (1.87) | living heartwood, head = antler-branch cradle with a seed-light, leaves | 0.90 above the butt | `tip`, `fx_core`, optional `grip2` | 1,000 | 512×1024 |
 | claws | Druid Feral (humanoid, only seen in the class screen) | part of the body mesh (gauntlets) | `claw` | — | 3 blades per hand, 0.16 | — | `tip_r`/`tip_l` sockets on `middle_03_*` | in body | body |
 
+**Made (Phase 2, 2026-11-28)**: all 24 in `assets/models/items/` from `items.json` (`tools/item-prep.mjs --all`; the arrow
+from `tools/make-arrow.mjs`). Handles are thinned to the Ø above (`handleFit`); a **curved shield's back plane is its
+rearmost point** (`"back": "rearmost"`, tower shield — the plate's centre cut 8–12 cm into the forearm); several heads came
+out bigger than the table (orc axe bit 0.49 m, headsman bit 0.59, hammer head 0.97, staff heads 0.7–1.3 m wide) and stay
+until they are judged on their champions (Phase 3). The bow is rigid until its rig (§4.4) is built with the Beastmaster.
+
 Ids keep today's code names where one model covers one spec; a new id gives each spec its own silhouette, as in
 WoW where two specs of one class never share a weapon look. Total: **24 item models**, ≈ 20,400 triangles
 for all of them (one copy each); at most **2 items per champion** on screen. Dwarves (Berserker) carry the same

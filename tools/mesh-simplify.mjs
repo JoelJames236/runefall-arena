@@ -10,10 +10,12 @@
 // border (the vertices' weights differ by more than `skinBorder`), so joints keep their shape. A collapse that flips
 // or squashes a neighbouring triangle is skipped.
 //
-//   simplify({ P, N, T, J?, W?, I }, targetTris, { skinBorder = 0.6, skinCost = 4, uvClamp? }) →
+//   simplify({ P, N, T, J?, W?, I }, targetTris, { skinBorder = 0.6, skinCost = 4, uvClamp?, lockNonManifold? }) →
 //     { P, N, T, J, W, I, stats: { start, end, welded, locked, passes } }
 // P / N: xyz per vertex, T: uv, J / W: 4 joints / 4 weights per vertex (optional), I: triangle indices.
 // uvClamp(uv, triUVs) may move a re-derived UV back into its atlas tile (it gets [u, v] and the triangle's 3 UVs).
+// lockNonManifold: also lock the vertices of edges shared by more than two triangles (Tripo item meshes have many;
+// collapsing them deletes whole strips — a wand lost its shaft). Off by default (the champion LODs keep their result).
 import { sub, cross, dot, norm } from './glb-lib.mjs';
 
 export function simplify(mesh, TARGET, opts = {}) {
@@ -36,7 +38,7 @@ export function simplify(mesh, TARGET, opts = {}) {
   const locked = new Uint8Array(ng);
   const ek = (a, b) => (a < b ? a * ng + b : b * ng + a), edgeCount = new Map();
   for (const t of tris) { const [a, b, c] = t.map(v => grp[v]); for (const [u, v] of [[a, b], [b, c], [c, a]]) edgeCount.set(ek(u, v), (edgeCount.get(ek(u, v)) || 0) + 1); }
-  for (const [k, n] of edgeCount) if (n === 1) { locked[Math.floor(k / ng)] = 1; locked[k % ng] = 1; }
+  for (const [k, n] of edgeCount) if (n === 1 || (opts.lockNonManifold && n > 2)) { locked[Math.floor(k / ng)] = 1; locked[k % ng] = 1; }
   const lockedCount = locked.reduce((s, x) => s + x, 0);
 
   // skin distance between two vertices: L1 over their joint weights (0 = same skinning, 2 = disjoint)
