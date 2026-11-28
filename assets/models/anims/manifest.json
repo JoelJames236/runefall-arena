@@ -5,13 +5,13 @@
   "clips": {
     "sns_idle": { "file": "sns.json", "src": "sns_idle", "trim": null, "layer": "full", "loop": true, "markers": {}, "speed": 1.0, "grip": "rev" },
     "sns_atk_1": { "file": "sns.json", "src": "sns_atk_1", "trim": [0.20, 1.20], "layer": "upper", "loop": false, "markers": { "strike": 0.33 }, "speed": 1.0, "hand": "r", "grip": "rev", "offL": true },
-    "sns_atk_2": { "file": "sns.json", "src": "sns_atk_2", "trim": [0.30, 1.30], "layer": "upper", "loop": false, "markers": { "strike": 0.62 }, "speed": 1.0, "hand": "r", "grip": "rev", "offL": true },
+    "sns_atk_2": { "file": "sns.json", "src": "sns_atk_2", "trim": [0.25, 1.25], "layer": "upper", "loop": false, "markers": { "strike": 0.43 }, "speed": 1.0, "hand": "r", "grip": "rev", "offL": true },
     "sns_atk_3": { "file": "sns.json", "src": "sns_atk_3", "trim": [0.17, 1.17], "layer": "upper", "loop": false, "markers": { "strike": 0.45 }, "speed": 1.0, "hand": "r", "grip": "rev", "offL": true },
-    "cm_run": { "file": "cm.json", "src": "cm_run", "trim": [0.188, 0.854], "layer": "lower", "loop": true, "markers": { "foot_l": 0, "foot_r": 0.333 }, "stride": 1.86, "speed": 1.0 },
+    "cm_run": { "file": "cm.json", "src": "cm_run", "trim": [0.375, 0.854], "layer": "lower", "loop": true, "markers": { "foot_l": 0.45, "foot_r": 0.20 }, "stride": 1.89, "speed": 1.0 },
     "cm_hit_front": { "file": "cm.json", "src": "cm_hit_front", "trim": [0.0, 0.78], "layer": "upper", "loop": false, "markers": {}, "speed": 1.0 }
   },
   "sets": { "paladin:protection": "sns" },
-  "attacks": { "sns": ["sns_atk_1", "sns_atk_3"] },
+  "attacks": { "sns": ["sns_atk_1", "sns_atk_2", "sns_atk_3"] },
   "idle": { "sns": "sns_idle" },
   "abilities": {},
   "fallback": {

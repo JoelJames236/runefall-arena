@@ -153,6 +153,17 @@ function closeLoop(clip, only = null) {
     }
   }
 }
+// The hips of a trimmed clip start where the AI's root motion had carried them by the trim's start (a run cut at
+// 0.4 s starts ~1.5 m ahead): take the horizontal offset of the first key from the rest pose out of every key, so the
+// body runs on its champion's spot. The height (the bob) stays. "Up" is the world up in the pelvis's parent frame.
+function recenter(clip, src) {
+  const pt = clip.tracks.find(t => t.name === 'pelvis.position'); if (!pt || !src.bones) return;
+  const i = src.bones.findIndex(b => /^mixamorig\d*[:_]?hips$/i.test(b.name) || b.name === 'pelvis'); if (i < 0) return;
+  const sk = buildSkeleton(src.bones), hips = sk.nodes[i], parentQ = hips.parent.getWorldQuaternion(new THREE.Quaternion());
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(parentQ.invert());
+  const d = new THREE.Vector3().fromArray(pt.values, 0).sub(hips.position); d.addScaledVector(up, -d.dot(up));
+  for (let k = 0; k < pt.values.length; k += 3) { pt.values[k] -= d.x; pt.values[k + 1] -= d.y; pt.values[k + 2] -= d.z; }
+}
 // cut [a, b] out of a clip, sampling every track at its own keys inside the window plus both ends
 function trim(clip, a, b) {
   const tracks = clip.tracks.map(tr => {
@@ -236,6 +247,7 @@ function buildClip(id, c, src) {
   }
   const clip = a > 0 || b < raw.duration ? trim(raw, a, b) : raw.clone(); clip.name = id;
   if (m.loop) closeLoop(clip); else if (m.inPlace) closeLoop(clip, /^pelvis\.position$/);
+  if (m.inPlace) recenter(clip, src);
   Object.assign(m, { loaded: true, from: a, to: b, source: src.key });
   clip.userData = { ...m, clip: m.src, src: 'tripo' }; // src: 'tripo' like ANIM_CLIPS (clip: its name in the set file)
   MANIFEST_CLIPS[id] = clip; MANIFEST_RAW[id] = raw; CLIP_SRC[id] = src;

@@ -136,7 +136,7 @@ All locomotion loops are phase-synced (left foot down at phase 0, right at 0.5) 
 | `sns_run_up` | upper | 0.70 loop | — | running with the shield held before the chest, weapon arm pumping, weapon pointing up-back | run, strafe, back |
 | `sns_sprint_up` | upper | 0.60 loop | — | shield tucked to the chest, weapon arm swinging low | sprint |
 | `sns_atk_1` | upper | 0.80 | strike 0.28 | overhand chop from above the right shoulder down to the left hip, shield stays in guard | basic attack (random, no repeat) |
-| `sns_atk_2` | upper | 0.80 | strike 0.26 | forehand diagonal cut right-to-left at chest height | basic attack |
+| `sns_atk_2` | upper | 0.80 | strike 0.26 | diagonal cut on the sword side: from above the right shoulder down and outward to beside the right knee (a right-to-left cut passes behind a shield held in guard — pilot) | basic attack |
 | `sns_atk_3` | upper | 0.80 | strike 0.26 | backhand horizontal cut left-to-right, shield swings aside | basic attack |
 | `sns_rend` | upper | 0.85 | strike 0.28 | weapon raised high, hacked down and dragged back toward the body | Rending Blow (Warrior) |
 | `sns_low` | full | 0.80 | strike 0.26 | drop low and sweep the weapon at the enemy's knees | Crippling Slash (Warrior) |

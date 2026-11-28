@@ -162,6 +162,8 @@ matches them, or measure (`measureStrike(id)`, then frame by frame with `CLIPS['
 At load (`buildClip`), after the trim: a `loop` clip is **closed** (the difference between its last and first key is
 spread over the clip, so it has no pop), and `inPlace` (default `true`) does the same for `pelvis.position` of a
 one-shot: the AI motions carry root motion (the pilot run travelled 2 m in 2 s) and the sim moves the champion.
+An `inPlace` clip is then **re-centred**: the horizontal offset of its first key from the rest pose is taken out of
+every key (a run trimmed at 0.4 s had already travelled ~1.5 m: the body ran ahead of its champion); the bob stays.
 A manifest run (`stride` set) plays at ground speed / (stride × height / 1.95), at most `RUN_RATE_MAX` (1.7,
 heroes.js); `world.js` passes the speed in m/s as `st.v`.
 
@@ -174,21 +176,26 @@ heroes.js); `world.js` passes the speed in m/s as `st.v`.
   may name the shield (it shapes the stance).
 - **Two variants per clip** (20 credits each), then pick on the source skeleton: the right hand's path must be longer
   than the left's, `measureStrike` gives the strike, a front-view strip (`|offL`, the real items) decides.
-- **Trims**: each attack keeps ~0.4 s before the hand's speed peak and ~0.6 s after (1.0 s clips: chop [0.20, 1.20],
-  forehand [0.30, 1.30], backhand [0.17, 1.17] raw s). Checked in game: the strike lands on hitAt (0.13 / 0.18 /
-  0.24 s) within one frame, and the two attacks alternate at random without repeats.
-- **Loops**: the period comes from leg-pose self-similarity (the run: 0.667 s, seam 4.9° per bone before closing),
-  the stride from the planted foot's speed against the pelvis (the run: 1.86 m per cycle on a 1.95 m champion, a
-  2.8 m/s jog). "Sprinting" prompts gave faster but irregular motions (seam 8–10°, no clean period); the jog is used
-  and slides a little above 1.7× (champions run ~7 m/s).
+- **Trims**: each attack keeps ~0.4 s before the blade's speed peak and ~0.6 s after (1.0 s clips: chop [0.20, 1.20],
+  diagonal [0.25, 1.25], backhand [0.17, 1.17] raw s). Checked in game: the strike lands on hitAt (0.13 / 0.18 /
+  0.24 s) within one frame with the blade at full speed (chop 30, diagonal 15, backhand 16 m/s), and the three attacks
+  are picked at random without repeats.
+- **Loops**: the period comes from leg-pose self-similarity, the stride from the planted foot's speed against the
+  pelvis. The first run was a 2.86 m/s jog (0.667 s, 1.91 m per cycle, ~30 % foot slide at 7 m/s); "sprinting"
+  prompts were irregular. The run in use came from "an athlete running at a fast steady pace with long powerful
+  strides, a perfectly regular running cycle": 3.95 m/s, 0.479 s and 1.89 m per cycle, seam 6.7° before closing; it
+  is stride-matched up to 6.75 m/s and slides ~4 % at 7 m/s (the 1.7× cap).
 - **Grip**: these motions hold the hand so that the blade leaves the fist on the **little-finger side** (as the old
   `attacks.json` sword clips: `grip: 'rev'`). With the thumb-side socket the tip was below knee height in 79 % of the idle
   and 55–74 % of the swings. A manifest `grip` now also turns an assembled weapon: the `grip_r` / `grip_l` socket joint
   is rotated 180° about its palm axis (heroes.js `gripMode` / `turnGrips`, blended over 0.12 s; the playing attack's
   grip, else the locomotion clip's, else the idle's). All four `sns` clips are `rev`: the tip never drops below the
   knees, the idle holds the sword high. Strikes re-measured as the blade tip's speed peak: chop 0.33, backhand 0.45.
-- **Forehand** (`sns_atk_2`): with the shield held in guard (`offL`) the cut passes behind the shield at the strike;
-  it is out of the attack list until a re-roll that sweeps in front at arm's length.
+- **No right-to-left cuts behind a tower shield.** Six forehand takes (incl. "at arm's length, far out in front")
+  all crossed the body behind the shield held in guard and were slow (tip 7–15 m/s, jerky). Thrusts were weak too
+  (the whole body lunges, tip 6–7 m/s). `sns_atk_2` is now a **diagonal cut on the sword side**: "swings from above
+  his right shoulder down and outward to beside his right knee, the arm extended away from the body" — right hand
+  path 2.6 vs 0.9 for the left, tip 15 m/s in front at waist height, over the shield's top seen from the front.
 - **Hit**: the chest-hit clip leans back until 0.42 s and is upright again at 0.78 s; trimmed to [0, 0.78].
-- Source of the pilot clips: `assets/models/anims/src/anim_pilot_v3.glb` (all 19 motions made on the master, task
+- Source of the pilot clips: `assets/models/anims/src/anim_pilot_v5.glb` (all 32 motions made on the master, task
   3aae5edf-641b-4820-aec8-088f014ad17f); `sns.map.json` / `cm.map.json` pick the four + two used.
