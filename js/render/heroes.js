@@ -12,12 +12,12 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { makeMaterials, makeClassWeapon, equipArmor } from './armory.js';
-import { makeFormModel } from './minions.js';
+import { FormController } from './forms.js';
 import { applyRace, RACES, RACE_OF } from './races.js';
 import { consolidate } from './consolidate.js';
 import { CHAMPION_MODELS, RACE_HEIGHT, championModel, loadChampion, setRetargetSource, analyse, retargetClip } from './champions.js';
 import { preloadCreatures } from './creatures.js';
-import { loadAttackAnims, ANIM_CLIPS, RAW_CLIPS, ATTACK_ANIMS, animSource, loadManifest, MANIFEST_CLIPS, MANIFEST_RAW, clipMeta, clipSource, attacksFor, idleFor, resolveClip } from './attack-anims.js';
+import { loadAttackAnims, ANIM_CLIPS, RAW_CLIPS, ATTACK_ANIMS, animSource, loadManifest, MANIFEST_CLIPS, MANIFEST_RAW, clipMeta, clipSource, attacksFor, idleFor, resolveClip, abilityClips } from './attack-anims.js';
 export { ANIM_CLIPS }; // for the test harness (cut times)
 import { validSpec } from '../data/classes.js';
 
@@ -361,6 +361,9 @@ export const setTrollKnee = v => { TROLL_KNEE = v; };
 // the measured arm instead of a fixed grip (fitShield)
 const SHIELDS = new Set(['shield', 'orcshield', 'kiteshield', 'towershield']);
 const GRIP_GEN = {};
+// code-built two-handed weapons (armory.js: origin = the right fist, +Y = the haft toward the head): the centre of the
+// left fist on the haft, m along +Y. An empty `grip2` there is the two-hand IK's target (only with HAND_LAYER.ikCodeBuilt)
+const GRIP2 = { greatAxe: -0.25, sunhammer: -0.2, greatsword: -0.2, bonestaff: -0.35, druidstaff: -0.35 };
 
 // ------------------------------------------------------------------ assembled champions: hand poses (docs/remodel/03 §5)
 // An assembled champion (tools/assemble-champion.mjs) has its items merged into its skin on socket joints, so the
@@ -369,6 +372,7 @@ const GRIP_GEN = {};
 // from the middle finger); thumb = [opposition of thumb_01 toward the palm about the hand's long axis, 02, 03].
 export const HAND_POSES = {
   fist_1h: { f: [[70, 95, 55], [75, 95, 55], [80, 95, 55], [85, 95, 55]], spread: -4, thumb: [45, 25, 35] },
+  trigger: { f: [[10, 20, 10], [75, 95, 55], [80, 95, 55], [85, 95, 55]], spread: -4, thumb: [45, 25, 35] }, // gun hand: index along the trigger guard
   fist_2h: { f: [[62, 85, 50], [66, 88, 50], [70, 88, 50], [75, 88, 50]], spread: -4, thumb: [40, 25, 30] },
   wand_pinch: { f: [[25, 30, 15], [55, 70, 40], [75, 90, 50], [85, 90, 50]], spread: 0, thumb: [50, 20, 25] },
   bow_grip: { f: [[55, 78, 45], [60, 82, 45], [65, 82, 45], [70, 82, 45]], spread: -2, thumb: [35, 30, 30] },
@@ -382,8 +386,10 @@ export const HAND_POSES = {
 };
 // tuning: blend time (s) when a hand's pose changes, wrist-lock strength with a shield (03 §4.2), how much of the
 // curl the model already has at rest is taken off the table's angles (1 = the table's angles are from a straight finger),
-// and how far a shield is rolled on the forearm so its top stays up and its tip points down (0 = rigid on the socket)
-export const HAND_LAYER = { blend: 0.08, wristLock: 0.8, restComp: 1, shieldUpright: 1 };
+// and how far a shield is rolled on the forearm so its top stays up and its tip points down (0 = rigid on the socket).
+// Two-hand IK (03 §6): reach limit (share of the arm's length), weight blend time (s), and whether code-built weapons
+// (an empty `grip2` from GRIP2) get it too — off: the live game keeps today's look until assembled two-handers ship.
+export const HAND_LAYER = { blend: 0.08, wristLock: 0.8, restComp: 1, shieldUpright: 1, ikReach: 0.98, ikBlend: 0.12, ikCodeBuilt: false };
 const FINGERS = ['index', 'middle', 'ring', 'pinky'], SPREAD_K = [1, 0, -0.5, -1]; // spread share, + = toward the thumb side
 const DEG = Math.PI / 180;
 // the hand pose an item asks for (an item entry of the GLB may name its own)
@@ -391,6 +397,7 @@ function itemPose(id, it) {
   if (it && HAND_POSES[it.pose]) return it.pose;
   const n = String(id).toLowerCase();
   if (/wand/.test(n)) return 'wand_pinch';
+  if (/blunderbuss|rifle|musket|gun/.test(n)) return 'trigger';
   if (/crossbow/.test(n)) return 'fist_1h';
   if (/bow/.test(n)) return 'bow_grip';
   if (/tome|book/.test(n)) return 'tome';
@@ -454,6 +461,30 @@ function poseAngles(p, J, out) {
 }
 const _hq = new THREE.Quaternion(), _hr = new THREE.Quaternion(), _ha = [0, 0, 0];
 const _sq = new THREE.Quaternion(), _sx = new THREE.Vector3(), _sy = new THREE.Vector3(), _sz = new THREE.Vector3(), _su = new THREE.Vector3(), _Z = new THREE.Vector3(0, 0, 1);
+// two-hand IK scratch (no allocation per frame)
+const _iA = new THREE.Vector3(), _iB = new THREE.Vector3(), _iC = new THREE.Vector3(), _iT = new THREE.Vector3(), _iD = new THREE.Vector3(), _iP = new THREE.Vector3();
+const _iE = new THREE.Vector3(), _iW = new THREE.Vector3(), _iV = new THREE.Vector3(), _iV2 = new THREE.Vector3(), _iS = new THREE.Vector3(), _iS2 = new THREE.Vector3();
+const _iQt = new THREE.Quaternion(), _iQh = new THREE.Quaternion(), _iQ1 = new THREE.Quaternion(), _iQ2 = new THREE.Quaternion();
+const _iQu = new THREE.Quaternion(), _iQp = new THREE.Quaternion(), _iQl = new THREE.Quaternion(), _iQl2 = new THREE.Quaternion(), _iQh2 = new THREE.Quaternion();
+// one hand of the finger layer
+const handState = (side, rig) => { const n = rig.joints.length; return { side, joints: rig.joints, pose: null, w: 0, t: 1, tracked: false, from: new Float32Array(n * 3), cur: new Float32Array(n * 3) }; };
+// the two-hand IK weight a clip asks for at time t (s into the trimmed clip): manifest ikL (0 without it; 1 when only
+// markers are given), 0 from an ikL_off marker to an ikL_on marker (05 §2.5)
+function ikOf(id, t) {
+  const m = id ? clipMeta(id) : null; if (!m) return 0;
+  const off = m.markers.ikL_off, on = m.markers.ikL_on, w = m.ikL ?? (off != null || on != null ? 1 : 0);
+  if (off == null && on == null) return w;
+  if (off != null && on != null) return (off < on ? t >= off && t < on : t < on || t >= off) ? 0 : w;
+  return (off != null ? t >= off : t < on) ? 0 : w;
+}
+// a manifest clip on the 'additive' layer (05 §2.6): made additive against its own first frame once it is retargeted
+// (retargetClip needs absolute rotations); the upper / lower parts share the full clip's tracks
+function additive(name, set) {
+  if (!set || clipMeta(name)?.layer !== 'additive') return set;
+  THREE.AnimationUtils.makeClipAdditive(set.full);
+  set.upper.blendMode = set.lower.blendMode = THREE.AdditiveAnimationBlendMode;
+  return set;
+}
 
 // Strap a shield along the OUTER side of the left forearm, held by the fist behind it: measure the skinned
 // forearm + hand + fingers in the rest pose, then place the shield's back just outside that surface.
@@ -578,6 +609,7 @@ export class Character {
     for (const w of look.weapons) {
       if (merged[w]) { this.weapons[w] = this.itemMarker(w, merged[w]); continue; }
       const wp = makeWeapon(w, look), gp = (this.generated && GRIP_GEN[w]) || GRIP[w];
+      if (GRIP2[w] !== undefined) { const g2 = new THREE.Object3D(); g2.name = 'grip2'; g2.position.y = GRIP2[w]; wp.add(g2); wp.userData.grip2 = g2; } // two-hand IK target
       let bone = (this.generated && SHIELDS.has(w)) ? fitShield(this, wp) : null;
       if (!bone) { bone = this.bones[gp.bone] || this.bones.hand_r; solveGrip(wp, bone, gp, this.bones); }
       if (look.weaponScale) wp.scale.multiplyScalar(look.weaponScale);
@@ -588,6 +620,7 @@ export class Character {
     }
     this.fistGrips(look);
     if (this.assembled) this.setupHands(look, merged);
+    this.setupIK(merged);
     // class armor, fitted to this body in the same rest pose
     this.armor = (look.noArmor || champ) ? null : equipArmor(this, cls, makeMaterials(TEX), spec);
     rest.stop(); this.mixer0.uncacheRoot(body); this.mixer0 = null;
@@ -674,7 +707,9 @@ export class Character {
       if (o.isBone) this.bones[o.name] = o;
       // each champion gets its own copy of the model's material (textures stay shared): otherwise two
       // champions of the same spec would share one material, and a stealth fade or hit flash on one would show on both
-      if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true; o.material = o.material.clone(); (this.flashMats || (this.flashMats = [])).push(o.material); }
+      // LOD meshes (champions.js markLods): LOD0 leaves the shadow to the proxy (the last LOD, on SHADOW_LAYER)
+      if (o.isMesh) { o.frustumCulled = false; o.castShadow = !o.userData.noShadow; o.receiveShadow = !o.userData.shadowProxy; o.material = o.material.clone(); (this.flashMats || (this.flashMats = [])).push(o.material); }
+      if (o.isMesh && o.userData.lod !== undefined) (this.lods || (this.lods = []))[o.userData.lod] = o;
     });
     if (!champ.A) champ.A = analyse(body); // rest-pose frames are scale-free (relative to the body)
     // gameplay code addresses bones by the base skeleton's names (hand_r, spine_03, Head …): alias them
@@ -747,10 +782,10 @@ export class Character {
     this.baseGrip = clipMeta(this.idle)?.grip || 'fist';
     this.gripTurn = ['grip_r', 'grip_l'].map(s => this.nodesLc[s]).filter(n => n && Object.entries(merged).some(([w, it]) => !SHIELDS.has(w) && lc(it.socket || socketOf(w)) === lc(n.name)))
       .map(n => ({ node: n, rest: n.quaternion.clone(), k: this.baseGrip === 'rev' ? 1 : 0 }));
-    this.hands = [];
+    this.hands = []; this.handWant = want; // want: each hand's item pose (the two-hand IK returns to it)
     for (const s of ['r', 'l']) {
       const rig = R[s]; if (!rig) continue;
-      const n = rig.joints.length, h = { side: s, joints: rig.joints, pose: null, w: 0, t: 1, tracked: false, from: new Float32Array(n * 3), cur: new Float32Array(n * 3) };
+      const h = handState(s, rig);
       this.hands.push(h);
       if (want[s]) { this.setHandPose(s, want[s]); h.w = 1; } // held from the first frame, no blend in
     }
@@ -762,11 +797,17 @@ export class Character {
     if (pose && !h.tracked) { h.tracked = true; for (const J of h.joints) this.layerSaved.push({ node: J.node, q: J.node.quaternion.clone() }); }
     h.from.set(h.cur); h.t = pose && h.w > 0 ? 0 : 1; h.pose = pose;
   }
+  // Order: wrist lock (hand_l's local pull toward its rest, the animation-level fix) → grip turn (moves the weapon, so
+  // grip2, in the right fist) → two-hand IK (reads grip2; writes upperarm_l / lowerarm_l / hand_l, so it overrides the
+  // wrist lock by its weight) → shield roll (reads the forearm's world rotation, which the IK may have moved) → fingers
+  // (local rotations under the hands, independent of the arm). The body's procedural layers that run after this
+  // (hunch, hit jolt, stun sway on spine / head, strafe yaw) turn both arms together, so the hands stay on the haft.
   handLayer(dt) {
     for (const S of this.layerSaved) S.q.copy(S.node.quaternion); // the animation's own values (restored before the next mixer update)
     if (this.wristLock) this.wristLock.node.quaternion.slerp(this.wristLock.rest, HAND_LAYER.wristLock);
-    if (this.shieldUp) this.uprightShield();
     if (this.gripTurn?.length) this.turnGrips(dt);
+    if (this.ik) this.armIK(dt);
+    if (this.shieldUp) this.uprightShield();
     const bt = Math.max(1e-3, HAND_LAYER.blend), q = _hq, r = _hr, a = _ha;
     for (const h of this.hands || []) {
       const P = h.pose && HAND_POSES[h.pose];
@@ -784,6 +825,136 @@ export class Character {
         if (h.w < 1) e.node.quaternion.slerp(q, h.w); else e.node.quaternion.copy(q);
       }
     }
+  }
+
+  // ---- two-hand IK (docs/remodel/03 §6): the left hand is snapped onto the two-handed item's `grip2` — an assembled
+  // item's <item>_grip2 empty, or GRIP2's empty on a code-built weapon (only with HAND_LAYER.ikCodeBuilt). The left
+  // hand's grip frame (03 §3.1: +X knuckles, +Y thumb side, origin in the fist's channel) is the model's grip_l socket
+  // when it has one, else it is built from the hand's bones the way grip_r sits in the right hand. Read in the rest pose.
+  setupIK(merged) {
+    const B = this.bones, U = B.upperarm_l, Lo = B.lowerarm_l, Hd = B.hand_l; if (!U || !Lo || !Hd) return;
+    const under = (o, p) => { for (let x = o.parent; x; x = x.parent) if (x === p) return true; return false; };
+    if (!under(Lo, U) || !under(Hd, Lo)) return;
+    let target = null, code = false;
+    for (const [w, wp] of Object.entries(this.weapons)) {
+      const g2 = SHIELDS.has(w) ? null : merged[w] ? wp.userData.markers?.grip2 : wp.userData.grip2;
+      if (g2 && !under(g2, Hd)) { target = g2; code = !merged[w]; break; } // not an item in the left hand itself
+    }
+    if (!target) return;
+    this.root.updateMatrixWorld(true);
+    const V = THREE.Vector3, at = o => new V().setFromMatrixPosition(o.matrixWorld), ph = new V(), qh = new THREE.Quaternion(), pg = new V(), qg = new THREE.Quaternion();
+    Hd.matrixWorld.decompose(ph, qh, new V());
+    const gl = this.nodesLc?.grip_l;
+    if (gl && under(gl, Hd)) gl.matrixWorld.decompose(pg, qg, new V());
+    else {
+      // a hand's frame from its bones: X = wrist → middle knuckle, Y = thumb side, N = palm normal (as restHand)
+      const frame = s => {
+        const h = B['hand_' + s], m = B['middle_01_' + s] || B['ring_01_' + s], i = B['index_01_' + s], p = B['pinky_01_' + s] || B['ring_01_' + s];
+        if (!h || !m || !i || !p || i === p) return null;
+        const H = at(h), X = at(m).sub(H).normalize(), Y = at(i).sub(at(p)); Y.addScaledVector(X, -Y.dot(X)).normalize();
+        return { H, X, Y, N: new V().crossVectors(X, Y).multiplyScalar(s === 'r' ? -1 : 1) };
+      };
+      const F = frame('l'); if (!F) return;
+      const gr = this.nodesLc?.grip_r, R = gr && frame('r'), mir = k => F.X.clone().multiplyScalar(k.dot(R.X)).addScaledVector(F.Y, k.dot(R.Y)).addScaledVector(F.N, k.dot(R.N));
+      if (R) { // grip_r mirrored: its place and axes in the right hand's bone frame, laid into the left's (paladin: 9 mm, 3° from the fitted grip_l)
+        const q = new THREE.Quaternion(); gr.matrixWorld.decompose(new V(), q, new V());
+        const X = mir(new V(1, 0, 0).applyQuaternion(q)).normalize(), Y = mir(new V(0, 1, 0).applyQuaternion(q)); Y.addScaledVector(X, -Y.dot(X)).normalize();
+        pg.copy(F.H).add(mir(at(gr).sub(R.H)));
+        qg.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, new V().crossVectors(X, Y)));
+      } else { // as the code-built weapons sit in the right fist (solveGrip: 0.085 m toward the fingers; fistGrips' axes)
+        pg.copy(F.H).addScaledVector(F.X, 0.085);
+        qg.setFromRotationMatrix(new THREE.Matrix4().makeBasis(F.X, F.Y, new V().crossVectors(F.X, F.Y)));
+      }
+    }
+    const A = at(U), D = at(Hd).sub(A).normalize(), pole = at(Lo).sub(A); pole.addScaledVector(D, -pole.dot(D));
+    if (pole.lengthSq() < 1e-12) pole.set(0, -1, 0);
+    this.ik = { upper: U, lower: Lo, hand: Hd, target, code, w: 0, want: 0, posed: false, short: 0, live: false,
+      relInv: qg.clone().invert().multiply(qh),                 // hand world = grip2 world · relInv
+      off: pg.clone().sub(ph).applyQuaternion(qh.clone().invert()), // wrist → the grip's centre, in the hand's frame (world units)
+      pole: pole.normalize(), qU: new THREE.Quaternion(), qL: new THREE.Quaternion(), qH: new THREE.Quaternion() };
+    // the arm joins the layer's restore-before-mixer list; a body without the finger layer (code-built weapon) gets a
+    // hand rig for the IK's fist_2h only (no item poses)
+    this.layerSaved = this.layerSaved || [];
+    for (const n of [U, Lo, Hd]) if (!this.layerSaved.some(S => S.node === n)) this.layerSaved.push({ node: n, q: n.quaternion.clone() });
+    if (!this.hands) {
+      const nodes = {}; for (const [n, b] of Object.entries(B)) { const k = n.toLowerCase(); if (!(k in nodes)) nodes[k] = b; }
+      this.hands = []; this.handWant = {};
+      for (const s of ['r', 'l']) { const rig = restHand(nodes, s); if (rig) this.hands.push(handState(s, rig)); }
+    }
+  }
+  // the IK weight the playing clips ask for: the action over the cast pose over the locomotion, by their blend weights
+  ikWant(c, actW, castName, castA) {
+    if (this.ik.code && !HAND_LAYER.ikCodeBuilt) return 0;
+    const L = this.loco, cw = this.castW || 0;
+    let w = ikOf(L.name, L.a ? L.a.time : 0);
+    if (cw > 0) w += (ikOf(castName, castA ? castA.time : 0) - w) * cw;
+    if (c && actW > 0) w += (ikOf(c.id || c.name, c.a.time) - w) * actW;
+    return w;
+  }
+  // analytic two-bone IK: upperarm_l → lowerarm_l with the clip's own elbow as the pole, then hand_l turned so its grip
+  // frame lies on grip2; the wrist stops at HAND_LAYER.ikReach × the arm's length (no stretched arm: ik.short > 0)
+  armIK(dt) {
+    const K = this.ik, step = Math.max(dt, 0) / Math.max(1e-3, HAND_LAYER.ikBlend);
+    K.w += Math.max(-step, Math.min(step, K.want - K.w)); if (K.w < 1e-4) K.w = 0;
+    const on = K.w > 0;
+    if (on !== K.posed) { // both hands fist_2h while the left hand is on the haft (03 §6); back to the items' poses after
+      K.posed = on; const W = this.handWant || {};
+      this.setHandPose('l', on ? 'fist_2h' : W.l || null); this.setHandPose('r', W.r || (on ? 'fist_2h' : null));
+    }
+    if (!on) { K.short = 0; K.live = false; return; }
+    const U = K.upper, Lo = K.lower, Hd = K.hand, A = _iA, Bp = _iB, C = _iC, T = _iT, D = _iD, P = _iP, E = _iE, Wr = _iW;
+    Hd.updateWorldMatrix(true, false); K.target.updateWorldMatrix(true, false); // the arm as animated, grip2 after the grip turn
+    A.setFromMatrixPosition(U.matrixWorld); Bp.setFromMatrixPosition(Lo.matrixWorld); C.setFromMatrixPosition(Hd.matrixWorld);
+    K.target.matrixWorld.decompose(T, _iQt, _iS2);
+    const Qh = _iQh.copy(_iQt).multiply(K.relInv);   // the hand's world rotation with its grip frame on grip2 …
+    T.sub(_iV.copy(K.off).applyQuaternion(Qh));      // … and the wrist's place then
+    const l1 = A.distanceTo(Bp), l2 = Bp.distanceTo(C);
+    D.subVectors(T, A); const d = D.length(); if (!(d > 1e-6 && l1 > 1e-6 && l2 > 1e-6)) return;
+    D.multiplyScalar(1 / d);
+    const reach = (l1 + l2) * HAND_LAYER.ikReach, dc = Math.min(reach, Math.max(Math.abs(l1 - l2) * 1.02 + 1e-4, d));
+    K.short = Math.max(0, d - reach);
+    // pole: the clip's own elbow bend (the elbow's offset from the animated shoulder → wrist line; measured against the
+    // line to the target it flips whenever that line sweeps past the elbow), a little of last frame's for an almost
+    // straight arm, then square to the line to the target
+    _iV.subVectors(C, A).normalize(); P.subVectors(Bp, A); P.addScaledVector(_iV, -P.dot(_iV));
+    P.addScaledVector(K.pole, l1 * 0.05); P.addScaledVector(D, -P.dot(D));
+    if (P.lengthSq() < 1e-12) { P.set(0, -1, 0).addScaledVector(D, D.y); if (P.lengthSq() < 1e-12) P.set(1, 0, 0); }
+    P.normalize();
+    // the elbow's plane turns at most 720°/s (no pop when an out-of-reach target's line swings past the elbow); it
+    // snaps when the IK comes on
+    const turn = K.live ? P.angleTo(K.pole) : 0, mx = Math.max(dt, 0) * 4 * Math.PI;
+    if (turn > mx) {
+      _iV.crossVectors(K.pole, P); if (_iV.lengthSq() < 1e-12) _iV.copy(D);
+      _iV2.copy(P); P.copy(K.pole).applyAxisAngle(_iV.normalize(), mx); P.addScaledVector(D, -P.dot(D));
+      if (P.lengthSq() < 1e-6) P.copy(_iV2); P.normalize();
+    }
+    K.pole.copy(P); K.live = true;
+    const ca = Math.min(1, Math.max(-1, (l1 * l1 + dc * dc - l2 * l2) / (2 * l1 * dc))), sa = Math.sqrt(1 - ca * ca);
+    E.copy(A).addScaledVector(D, ca * l1).addScaledVector(P, sa * l1); // the new elbow
+    Wr.copy(A).addScaledVector(D, dc);                                // the new wrist
+    const q1 = _iQ1.setFromUnitVectors(_iV.subVectors(Bp, A).normalize(), _iV2.subVectors(E, A).normalize()); // swing the upper arm
+    C.sub(A).applyQuaternion(q1).add(A);                                                                          // the wrist after it
+    const q2 = _iQ2.setFromUnitVectors(_iV.subVectors(C, E).normalize(), _iV2.subVectors(Wr, E).normalize());   // swing the forearm
+    // world swings → local rotations: a bone's new world = swing · old world, and so is its parent's below the swung bone
+    U.parent.matrixWorld.decompose(_iS, _iQp, _iS2); U.matrixWorld.decompose(_iS, _iQu, _iS2); Lo.matrixWorld.decompose(_iS, _iQl, _iS2);
+    const Pl = Lo.parent === U ? _iQu : (Lo.parent.matrixWorld.decompose(_iS, _iQl2, _iS2), _iQl2);
+    const Ph = Hd.parent === Lo ? _iQl : (Hd.parent.matrixWorld.decompose(_iS, _iQh2, _iS2), _iQh2);
+    K.qU.copy(_iQp).invert().multiply(q1).multiply(_iQu);
+    K.qL.copy(q1).multiply(Pl).invert().multiply(q2).multiply(q1).multiply(_iQl);
+    K.qH.copy(q2).multiply(q1).multiply(Ph).invert().multiply(Qh);
+    if (K.w >= 1) { U.quaternion.copy(K.qU); Lo.quaternion.copy(K.qL); Hd.quaternion.copy(K.qH); }
+    else { U.quaternion.slerp(K.qU, K.w); Lo.quaternion.slerp(K.qL, K.w); Hd.quaternion.slerp(K.qH, K.w); }
+  }
+  // an additive one-shot (manifest layer 'additive', 05 §2.6): its upper body is added on top of whatever plays (a hit
+  // jolt during an attack); in over 0.05 s, out over its last 0.1 s
+  playAdditive(name, ts = 1) {
+    const a = this.action(name, 'upper'); if (!a) return false;
+    a.blendMode = THREE.AdditiveAnimationBlendMode;
+    a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.timeScale = ts; a.play();
+    const L = this.adds || (this.adds = []);
+    let s = L.find(x => x.a === a); if (!s) L.push(s = { a, t: 0, len: 0, w: 0 });
+    s.t = 0; s.len = this.clip(name).full.duration / ts;
+    return true;
   }
 
   // The shield sits on the forearm (socket shield_l, +Y = its top, +Z = its face). Its bind frame follows the thumb,
@@ -846,7 +1017,7 @@ export class Character {
       if (!this.retarget) {
         if (!(name in TRIPO_UAL_CLIPS)) {
           const on = sk ? (TRIPO_ON[sk] ||= analyse(GL.Male_Ranger.scene, src.rest)) : TRIPO_ON_UAL;
-          TRIPO_UAL_CLIPS[name] = on ? splitClip(retargetClip(S.clean, on), LOWER) : null;
+          TRIPO_UAL_CLIPS[name] = on ? additive(name, splitClip(retargetClip(S.clean, on), LOWER)) : null;
         }
         return TRIPO_UAL_CLIPS[name];
       }
@@ -854,7 +1025,7 @@ export class Character {
       if (key in cache) return cache[key];
       const champ = this.champ;
       const AT = sk ? ((champ.ATs ||= {})[sk] ||= analyse(champ.scene, src.rest)) : (champ.AT ||= analyse(champ.scene, animSource().rest));
-      return (cache[key] = splitClip(retargetClip(S.clean, AT), LOWER));
+      return (cache[key] = additive(name, splitClip(retargetClip(S.clean, AT), LOWER)));
     }
     if (!this.retarget) return CLIPS[name];
     const cache = this.clipCache;
@@ -877,28 +1048,35 @@ export class Character {
   setLoco(name, fade = 0.18) {
     if (this.loco.name === name || !this.clip(name)) return;
     this.loco.prev = this.loco.name; this.loco.name = name; this.loco.fade = fade > 0 ? 0 : 1; this.loco.fadeDur = fade;
-    const lo = this.action(name, 'lower'), up = this.action(name, 'upper');
+    const lo = this.action(name, 'lower'), up = this.action(name, 'upper'); this.loco.a = up; // (its time: the IK's markers)
     lo.time = up.time = (this.loco.prev && this.actions[this.loco.prev + ':lower']) ? (this.actions[this.loco.prev + ':lower'].time / this.clip(this.loco.prev).full.duration) * this.clip(name).full.duration : 0;
   }
 
   // hitAt (basic melee swings): s from now at which the sim lands the blow. The clip is started / paced so
   // its impact frame falls exactly there. Ability strikes deal their damage at once, so without hitAt the
   // clip starts just before its impact frame (STRIKE_LEAD) instead of 0.2–0.3 s of wind-up after the number.
-  play(kind, dur = 0.5, hitAt) {
+  // ability (optional): the ability's id — its own clip from the manifest's `abilities` table replaces the kind's ACTIONS
+  // clip (kind may then be unknown); kind 'caststart' plays the start of its cast (the first of two `cast` clips)
+  play(kind, dur = 0.5, hitAt, ability) {
+    if (this.form) this.form.play(kind, dur, hitAt, ability); // a druid form plays its own action (forms.js)
     if (kind === 'flinch') { this.hit(1); return; }
-    const spec = ACTIONS[kind]; if (!spec) return;
+    const abc = ability ? abilityClips(ability, { has }) : null;
+    const own = abc ? (kind === 'caststart' ? (abc.cast.length > 1 ? abc.cast[0] : null) : abc.release) : null;
+    const spec = ACTIONS[kind] || (own ? {} : null); if (!spec) return;
     // the stance set's attacks (animation manifest): a flat list picks at random without repeating the last one,
     // a nested list ([[right], [left]], dual wield) alternates its sub-lists on its own counter (05 §4.3 / §4.5)
-    const man = kind === 'attack' && attacksFor(this.cls, this.spec, { has });
-    let list = man || spec[this.lookKey] || spec[this.cls] || spec.any; if (!list) return;
-    if (kind === 'attack' && !man && !CLIPS[list[0]]) list = ATTACK_FALLBACK[this.lookKey] || ATTACK_FALLBACK[this.cls] || list;
+    const man = !own && kind === 'attack' && attacksFor(this.cls, this.spec, { has });
+    let list = own ? [own] : man || spec[this.lookKey] || spec[this.cls] || spec.any; if (!list) return;
+    if (kind === 'attack' && !man && !own && !CLIPS[list[0]]) list = ATTACK_FALLBACK[this.lookKey] || ATTACK_FALLBACK[this.cls] || list;
     let base;
-    if (man) {
+    if (own) base = own; // (an ability's clip leaves the attack counters alone)
+    else if (man) {
       if (Array.isArray(list[0])) { this.dwSide = 1 - (this.dwSide || 0); list = list[this.dwSide % list.length]; }
       const pool = list.length > 1 ? list.filter(x => x !== this.lastAtk) : list;
       base = this.lastAtk = pool[Math.floor(Math.random() * pool.length)];
     } else { this.side = 1 - this.side; base = list[this.side % list.length]; }
     const m = clipMeta(base);
+    if (m && m.layer === 'additive' && MANIFEST_CLIPS[base]) { this.playAdditive(base); return; } // on top: the action goes on
     // a Tripo right-hand attack keeps a shield / tome / relic in the left hand still (manifest clips say so: offL)
     const name = CLIPS[base]?.src === 'tripo' && this.offHand && (m ? m.offL : ATTACK_ANIMS[base]?.hand !== 'l') ? base + '|offL' : base;
     const clip = this.clip(name); if (!clip) return;
@@ -930,25 +1108,28 @@ export class Character {
     const fullA = full ? null : this.action(name, 'full');
     if (fullA) { fullA.reset(); fullA.setLoop(THREE.LoopOnce, 1); fullA.clampWhenFinished = true; fullA.time = t0; fullA.timeScale = a.timeScale; fullA.play(); }
     this.prevAct = this.cur;
-    this.cur = { kind, name, t: 0, len: pre ? lead + (len - I) / ts : (len - t0) / ts, a, fullA, full, w: 0, ts, pre: pre ? lead : 0 };
+    this.cur = { kind, name, id: base, t: 0, len: pre ? lead + (len - I) / ts : (len - t0) / ts, a, fullA, full, w: 0, ts, pre: pre ? lead : 0 };
     this.act = this.cur;
-    this.lastSide = this.side;
+    this.lastSide = own && m ? (m.hand === 'l' ? 1 : 0) : this.side;
   }
 
   hit(strength = 1) {
     if (this.deadT > 0) return;
+    if (this.form) this.form.hit(strength); // the form flinches too (additive, also during its attacks)
     this.hitT = 0.3; this.hitBig = strength >= 2 ? 1 : 0;
     if (!this.cur || this.cur.kind === 'hit') {
       const name = strength >= 2 ? 'Hit_Knockback' : MANIFEST_CLIPS.cm_hit_front ? 'cm_hit_front' : Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head';
+      if (MANIFEST_CLIPS[name] && clipMeta(name).layer === 'additive') { this.playAdditive(name, 1.4); return; }
       const a = this.action(name, 'upper'); if (!a) return;
       a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.timeScale = 1.4; a.play();
       if (this.cur) this.cur.out = true;
       this.cur = { kind: 'hit', name, t: 0, len: this.clip(name).full.duration / 1.4, a, fullA: null, full: false, w: 0 };
-    }
+    } else if (MANIFEST_CLIPS.cm_hit_add && clipMeta('cm_hit_add').layer === 'additive') this.playAdditive('cm_hit_add'); // 05 §4.2: a jolt on top of the action (else swallowed)
   }
 
   hitStop(t) { this.stopT = Math.max(this.stopT || 0, t); }
-  flash(k = 1) { if (this.flashMats && this.opacity > 0.9) this.flashK = Math.max(this.flashK || 0, k); }
+  hasAbilityClip(ab) { return !!abilityClips(ab, { has })?.release; } // the manifest names a clip for this ability (world.js)
+  flash(k = 1) { if (this.form) this.form.flash(k); if (this.flashMats && this.opacity > 0.9) this.flashK = Math.max(this.flashK || 0, k); }
 
   setOpacity(a) {
     if (Math.abs(a - this.opacity) < 0.01) return;
@@ -965,34 +1146,35 @@ export class Character {
       this.materials = this.materials.map(m => map.get(m) || m);
     }
     for (const m of this.materials) {
-      m.transparent = a < 0.999 || m.userData.baseTransparent;
+      const tr = a < 0.999 || !!m.userData.baseTransparent;
+      if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } // three r170 compiles opaque materials with alpha forced to 1
       m.opacity = m.userData.baseOpacity * a;
       m.depthWrite = a > 0.99 && !m.userData.baseTransparent;
     }
+    if (this.form) this.form.setOpacity(a); // a druid form fades with the champion
     this.root.visible = a > 0.02;
   }
 
   // st: { speed, back, strafe, air, casting, castProgress, stunned, disoriented, dead, victory, tempest }
   update(dt, st = {}) {
-    // Druid shapeshift (cat / bear) and Tree of Life: swap the humanoid for a beast / treant model
+    // Druid shapeshift (cat / bear) and Tree of Life: forms.js swaps the humanoid for the form's model (cover burst,
+    // shift-in) and runs the form's own state machine; it takes this.stopT's hit-stop slow-down like the body below
     const fk = st.tree ? 'tree' : (st.form || null);
-    if (fk !== (this.formKey || null)) {
-      this.formKey = fk;
-      if (this.formModel) { this.root.remove(this.formModel.root); this.formModel.dispose?.(); this.formModel = null; this.formMats = null; }
-      if (fk) {
-        this.formModel = makeFormModel(fk); this.root.add(this.formModel.root);
-        // the hit flash reaches the form too (only materials without a glow of their own: eyes keep theirs)
-        this.formMats = []; this.formModel.root.traverse(o => { const m = o.isMesh && o.material; if (m && m.emissive && !Array.isArray(m) && m.emissive.r + m.emissive.g + m.emissive.b === 0) this.formMats.push(m); });
-      }
-      this.body.visible = !fk;
-    }
-    if (this.formModel) this.formModel.update(dt, (st.speed || 0) > 0.1, !!(this.cur && this.cur.t < 0.35 && this.cur.kind !== 'hit'), st);
+    if (fk || this.form) (this.form ||= new FormController(this)).update(dt, st, fk);
     this.time += dt;
     // hit flash: a short warm glow on the body when a blow lands on this champion
-    if (this.flashK > 0) { this.flashK = Math.max(0, this.flashK - dt * 5.5); const k = this.flashK * this.flashK * 0.42; for (const m of this.flashMats || []) m.emissive.setRGB(k, k * 0.82, k * 0.62); for (const m of this.formMats || []) m.emissive.setRGB(k, k * 0.82, k * 0.62); }
+    if (this.flashK > 0) { this.flashK = Math.max(0, this.flashK - dt * 5.5); const k = this.flashK * this.flashK * 0.42; for (const m of this.flashMats || []) m.emissive.setRGB(k, k * 0.82, k * 0.62); }
     // hit-stop: the body holds for a few frames on the moment its weapon connects
     if (this.stopT > 0) { this.stopT -= dt; dt *= 0.06; }
     const speed = st.speed || 0;
+    // an ability's own cast clips (manifest `abilities[id].cast`: [start, loop] or [loop]; st.castAb = the id of the
+    // ability being cast): the start plays as a one-shot, the loop replaces the cast pose (standing: the whole body)
+    if ((st.castAb || null) !== (this.castAb || null)) {
+      this.castAb = st.castAb || null;
+      const cc = this.castAb ? abilityClips(this.castAb, { has }) : null, loop = cc && cc.cast.length ? cc.cast[cc.cast.length - 1] : null;
+      this.castLoop = loop && this.clip(loop) ? loop : null;
+      if (cc && cc.cast.length > 1) this.play('caststart', 0.3, undefined, this.castAb);
+    }
     // ---- choose the locomotion / pose clip
     let loco = this.idle, rate = 1;
     if (st.dead) loco = 'Death01';
@@ -1007,7 +1189,7 @@ export class Character {
       const rm = clipMeta(loco);
       if (rm?.stride && st.v) { const h = 1.865 * (this.look.scale || 1) * (RACE_HEIGHT[this.race] || 1); rate = Math.min(RUN_RATE_MAX, Math.max(0.55, st.v * this.clip(loco).full.duration / (rm.stride * h / 1.95))) * (st.back ? -0.85 : 1); }
     }
-    else if (st.casting) loco = this.look.castPose || 'Spell_Simple_Idle_Loop';
+    else if (st.casting) loco = this.castLoop || this.look.castPose || 'Spell_Simple_Idle_Loop';
     this.setLoco(loco, st.dead ? 0.15 : 0.2);
     const dying = st.dead;
     const deathA = this.actions['Death01:lower'];
@@ -1031,7 +1213,7 @@ export class Character {
     }
     if (this.prevAct && this.prevAct !== this.cur) { const p = this.prevAct; p.w = Math.max(0, p.w - dt / 0.1); p.a.setEffectiveWeight(p.w); p.fullA && p.fullA.setEffectiveWeight(0); if (p.w <= 0) this.prevAct = null; }
     // casting holds the spell pose on the upper body even while moving
-    const castPose = this.look.castPose || 'Spell_Simple_Idle_Loop';
+    const castPose = this.castLoop || this.look.castPose || 'Spell_Simple_Idle_Loop';
     const castW = st.casting && !dying && this.loco.name !== castPose ? 1 : 0;
     const castA = this.action(castPose, 'upper');
     this.castW = (this.castW || 0) + (castW - (this.castW || 0)) * Math.min(1, dt * 10);
@@ -1045,6 +1227,7 @@ export class Character {
       if (c && a === c.a) continue; if (c && a === c.fullA) continue;
       if (this.prevAct && (a === this.prevAct.a)) continue;
       if (a === castA && part === 'upper') continue;
+      if (a.blendMode === THREE.AdditiveAnimationBlendMode) continue; // additive one-shots: weighted below
       let w = 0;
       if (name === L.name) w = L.fade; else if (name === L.prev) w = 1 - L.fade;
       if (part === 'upper') w *= (1 - actW) * (1 - this.castW);
@@ -1060,9 +1243,14 @@ export class Character {
         c.fullA.setEffectiveWeight(lowerOnly * 0.999);
       }
     }
+    if (this.adds) for (let i = 0; i < this.adds.length; i++) { // additive one-shots on top (playAdditive)
+      const s = this.adds[i]; if (!(s.len > 0)) continue;
+      s.t += dt;
+      if (dying || s.t >= s.len) { s.len = 0; s.w = 0; } else s.w = Math.min(1, s.t / 0.05, (s.len - s.t) / 0.1);
+      s.a.setEffectiveWeight(s.w);
+    }
     if (this.layerSaved) for (const S of this.layerSaved) S.node.quaternion.copy(S.q); // hand layer: back to the animated values
     this.mixer.update(dt);
-    if (this.layerSaved) this.handLayer(dt); // assembled champions: fingers closed on the merged items, shield wrist lock
     // weapons turn into the fist grip while a Tripo attack plays (see fistGrips)
     if (this.fistWeapons) {
       // the attack that is fading in (or the one fading out) decides the grip; 'idle' clips keep the idle hold
@@ -1073,6 +1261,10 @@ export class Character {
       const key = { rev: 'revQ', palm: 'palmQ', palmRev: 'palmRevQ' }[same ? lm : mode] || 'fistQ';
       for (const wp of this.fistWeapons) wp.quaternion.slerpQuaternions(wp.userData.idleQ, wp.userData[key] || wp.userData.fistQ, g);
     }
+    // hand layer (assembled champions: fingers on the merged items, shield wrist lock; two-hand IK): after the weapons'
+    // turn in the fist above, so the IK reads grip2 where the weapon is this frame
+    if (this.ik) this.ik.want = this.ikWant(c, actW, castPose, castA);
+    if (this.layerSaved) this.handLayer(dt);
 
     // ---- procedural layers on top of the animation
     const b = this.bones;
@@ -1103,6 +1295,19 @@ export class Character {
     }
     if (this.halo) this.halo.rotation.z += dt * 0.6;
     if (this.armor) this.armor.update(dt, st, this.time);
+  }
+
+  // 5v5 level of detail (docs/remodel/07 §5): LOD0 below 22 m, LOD1 to 45 m, then the last LOD (the shadow proxy,
+  // which then also draws in colour); 5 % hysteresis each way. 1v1 / 2v2 never call this (LOD0 always).
+  setLodDistance(d) {
+    const L = this.lods; if (!L || L.length < 2) return;
+    const last = L.length - 1, T = last === 2 ? [22, 45] : [45];
+    let k = this.lodK || 0;
+    while (k < T.length && d > T[k] * 1.05) k++;
+    while (k > 0 && d < T[k - 1] * 0.95) k--;
+    if (k === (this.lodK || 0)) return;
+    this.lodK = k;
+    L.forEach((m, i) => { if (!m) return; if (i === last) { if (k === last) m.layers.enable(0); else m.layers.disable(0); } else m.visible = i === k; });
   }
 
   // turn the body toward the strafe direction while running sideways (no strafe clips in the kit)

@@ -98,6 +98,10 @@ Fallback if the atlas step is late: items as a second mesh with their own materi
 
 ## 5. LOD and shadows
 
+**Implemented (Phase 1)**: `assemble-champion --lods 0.5,0.17` + `glb-compress`; `champions.js` marks the LODs, the
+proxy sits on `SHADOW_LAYER` (5, enabled on the sun's shadow camera), LOD0 no longer casts; `Character.setLodDistance`
+switches in 5v5 only (more than 4 fighters). The Protection Paladin: 13,141 / 6,570 / 2,233 triangles, 2.14 MB compressed.
+
 | Mode | LOD0 | LOD1 | LOD2 |
 |---|---|---|---|
 | 1v1 / 2v2 (camera ≤ 25 m) | always | — | shadow proxy only |

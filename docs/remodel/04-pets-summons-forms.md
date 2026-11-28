@@ -331,6 +331,13 @@ Static models (no rig), **1,200 tris** each, one shared 1024² totem atlas. Rise
 
 ## 4. Form state machine (druid)
 
+**Implemented (Phase 1, js/render/forms.js `FormController`)**: every state below looks up its manifest clip id
+(`resolveClip`) and plays a procedural motion when none has loaded, so Phase 5 clips drop in without code changes.
+Swaps: a 0.25 s cover burst, the old model gone at +0.05 s, shift-in; hit-stop scales the form too; forms share the
+champion's rim light, hit flash (`uFlash`) and stealth fade. Manifest `abilities` entries for forms are keyed
+`"cat:rake"` / `"bear:maul"` / `"tree:regrowth"` (a bare `"rake"` would also reach the hidden humanoid). The tree
+needs a **rigged** model before its clips can play (today's treant has no skeleton).
+
 Forms get their own state machine instead of reacting to actions meant for the hidden humanoid:
 
 | Input | Cat | Bear | Tree |

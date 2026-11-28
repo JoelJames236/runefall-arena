@@ -8,6 +8,11 @@
   #ui { position: absolute; top: 8px; left: 8px; z-index: 2; background: #000a; padding: 8px 10px; border-radius: 6px; }
   #ui select, #ui button { font-size: 13px; margin: 2px; }
   #info { margin-top: 4px; color: #e8c37a; }
+  #qa { margin-top: 6px; padding-top: 6px; border-top: 1px solid #fff2; }
+  #qa label { margin-right: 6px; }
+  #stripOut { position: absolute; inset: 0; z-index: 3; background: #000d; display: none; overflow: auto; text-align: center; }
+  #stripOut img { max-width: 98vw; margin: 8px auto; display: block; }
+  #stripOut .bar { position: sticky; top: 0; padding: 6px; background: #000c; color: #e8c37a; }
 </style>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -20,7 +25,14 @@
   <select id="anim"><option>idle</option><option>walk</option><option>sprint</option><option>cast</option><option>attack</option><option>finisher</option><option>bash</option><option>hit</option><option>dead</option></select>
   <label><input id="cmp" type="checkbox" checked> compare old model</label>
   <div id="info">loading…</div>
+  <div id="qa">
+    <select id="clip" title="animation-manifest clip for the motion strip"></select>
+    <button id="strip" title="8 frames from the start through the marker to the end, side + front, blade-tip path (05 §9)">motion strip</button>
+    <select id="lod" title="LOD meshes written by assemble-champion --lods"><option value="0">LOD0</option></select>
+    <label><input id="sock" type="checkbox"> sockets</label>
+  </div>
 </div>
+<div id="stripOut"><div class="bar"><span id="stripInfo"></span> · <a id="stripSave" download>save</a> · click the picture to close</div><img id="stripImg" alt=""></div>
 <script type="module">
 // Dev tool: inspect a champion (generated or code-built) with its weapons and animations side by side.
 import * as THREE from 'three';
@@ -30,9 +42,10 @@ import { loadHeroAssets, preloadChampions, Character, makeWeapon } from './js/re
 const WEAPONS = [['orcaxe', 0], ['orcshield', 0], ['greatAxe', { axeStyle: 'orc' }], ['greatAxe', 0], ['warAxe', 0], ['fang', 0], ['frostwand', { glow: 0x7fd0ff }], ['tome', { glow: 0x7fd0ff }], ['firewand', { glow: 0xff7a2a }], ['tome', { glow: 0xff7a2a }], ['stormmace', 0], ['relic', 0],
   ['sunhammer', { glow: 0xffe08a }], ['holysword', 0], ['towershield', 0], ['sunmace', { glow: 0xffd98a }], ['stormaxe', { glow: 0x4ad8ff }], ['bow', 0], ['longbow', 0], ['bonestaff', { glow: 0x7aff6a }], ['druidstaff', { glow: 0x8ad86a }]];
 import { CLASS_ORDER, specsOf } from './js/data/classes.js';
-import { CHAMPION_MODELS, DISABLED } from './js/render/champions.js';
+import { CHAMPION_MODELS, DISABLED, SHADOW_LAYER } from './js/render/champions.js';
 import { makeCreature } from './js/render/creatures.js';
 import { makeBeast } from './js/render/beasts.js';
+import * as AA from './js/render/attack-anims.js';
 // pets / druid forms: generated model next to the code-built creature it replaces
 function creatureChar(m) {
   let atk = 0;
@@ -51,6 +64,7 @@ const cam = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 100);
 const ctl = new OrbitControls(cam, renderer.domElement); ctl.target.set(0, 1.0, 0); ctl.update();
 scene.add(new THREE.HemisphereLight(0xb8c4e8, 0x4a3828, 1.1));
 const sun = new THREE.DirectionalLight(0xffd8b0, 2.6); sun.position.set(3, 6, 4); sun.castShadow = true; scene.add(sun);
+sun.shadow.camera.layers.enable(SHADOW_LAYER); // assembled champions cast through their low-poly shadow proxy
 const ground = new THREE.Mesh(new THREE.CircleGeometry(6, 48), new THREE.MeshStandardMaterial({ color: 0x3a3440, roughness: 0.9 }));
 ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); });
@@ -63,6 +77,7 @@ who.add(new Option('★ pet: silverback gorilla', 'pet:gorilla'));
 who.add(new Option('★ druid form: cat', 'form:cat'));
 who.add(new Option('★ druid form: bear', 'form:bear'));
 who.add(new Option('— all weapons —', 'weapons'));
+who.add(new Option('— remodel items (grip space) —', 'items'));
 await loadHeroAssets(); await preloadChampions();
 const first = Object.keys(CHAMPION_MODELS)[0]; if (first) who.value = first;
 
@@ -70,6 +85,8 @@ let chars = [], rack = null;
 function build() {
   for (const c of chars) scene.remove(c.root);
   if (rack) { scene.remove(rack); rack = null; }
+  clearHelpers();
+  if (who.value === 'items') { chars = []; loadItemRack(); return; }
   if (who.value === 'weapons') {
     chars = []; rack = new THREE.Group(); let tris = 0, draws = 0;
     WEAPONS.forEach(([k, l], i) => {
@@ -96,11 +113,126 @@ function build() {
     try { const b = new Character(cls, spec); chars.push(b); } finally { DISABLED.delete(who.value); }
   }
   chars.forEach((c, i) => { c.root.position.x = chars.length > 1 ? (i ? 1.1 : -1.1) : 0; scene.add(c.root); });
-  let tris = 0, draws = 0; a.root.traverse(o => { if (o.isMesh && o.visible) { draws++; tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; } });
-  info.textContent = `${who.value}: ${a.generated ? 'generated' : 'code-built'} · ${Math.round(tris)} triangles · ${draws} meshes · weapons: ${Object.keys(a.weapons).join(', ') || '–'}`;
+  setupQA(a);
 }
+// ------------------------------------------------------------------ QA tools (docs/remodel/08 §2)
+const ITEM_IDS = ['holysword', 'towershield', 'orcaxe', 'orcshield', 'greataxe_orc', 'headsman_axe', 'sunhammer', 'fang', 'frostwand', 'tome_frost',
+  'firewand', 'tome_fire', 'sun_staff', 'void_staff', 'stormmace', 'relic', 'stormaxe', 'bow', 'blunderbuss', 'arrow', 'bonestaff_summoner',
+  'bonestaff_curser', 'druidstaff', 'runeblade_frost', 'runeblade_blood'];
+const clipSel = document.getElementById('clip'), lodSel = document.getElementById('lod'), sockChk = document.getElementById('sock');
+let helpers = [];
+function clearHelpers() { for (const h of helpers) h.removeFromParent(); helpers = []; }
+const countMeshes = root => { let tris = 0, draws = 0, joints = 0; root.traverse(o => { if (o.isMesh && o.visible && o.layers.isEnabled(0) && !o.userData.qa) { draws++; tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; if (o.isSkinnedMesh) joints = Math.max(joints, o.skeleton.bones.length); } }); return { tris: Math.round(tris), draws, joints }; };
+// the champion's LOD meshes (assemble-champion --lods): listed in the GLB's extras.remodel.lods
+function lodMeshes(a) {
+  const lods = a.champ?.remodel?.lods || [], out = [];
+  lods.forEach((l, i) => { let m = null; a.body?.traverse(o => { if (!m && o.isMesh && (o.name === l.node || o.parent?.name === l.node)) m = o; }); if (m) out[i] = m; });
+  return out;
+}
+function setupQA(a) {
+  // clips: every loaded manifest clip, played the way the game plays it (|offL when the champion holds an off-hand)
+  clipSel.innerHTML = '';
+  for (const id of Object.keys(AA.MANIFEST_CLIPS)) { const m = AA.clipMeta(id); clipSel.add(new Option(id + (m?.layer ? ' · ' + m.layer : ''), m?.offL && a.offHand ? id + '|offL' : id)); }
+  if (!clipSel.options.length) clipSel.add(new Option('(no manifest clips loaded)', ''));
+  // LODs
+  const lods = lodMeshes(a); lodSel.innerHTML = '';
+  lodSel.add(new Option('LOD0', '0'));
+  lods.forEach((m, i) => { if (i) lodSel.add(new Option(`LOD${i}${i === lods.length - 1 ? ' (shadow proxy)' : ''} · ${a.champ.remodel.lods[i].tris} tris`, String(i))); });
+  lodSel.disabled = lods.length < 2; showLod(a, 0);
+  if (sockChk.checked) showSockets(a);
+  readout(a);
+}
+function readout(a) {
+  const { tris, draws, joints } = countMeshes(a.root);
+  info.textContent = `${who.value}: ${a.generated ? (a.assembled ? 'assembled' : 'generated') : 'code-built'} · ${tris} triangles · ${draws} draw${draws === 1 ? '' : 's'} · ${joints} joints · weapons: ${Object.keys(a.weapons).join(', ') || '–'}`;
+}
+function showLod(a, k) {
+  const lods = lodMeshes(a); if (lods.length < 2) return;
+  lods.forEach((m, i) => { if (i === lods.length - 1) { if (i === k) m.layers.enable(0); else m.layers.disable(0); } else m.visible = i === k; });
+  readout(a);
+}
+lodSel.onchange = () => { if (chars[0]) showLod(chars[0], +lodSel.value); };
+// sockets: a tripod on every socket joint and item marker (red +X, green +Y, blue +Z), a 34 mm test handle on grips
+function showSockets(a) {
+  const ws = new THREE.Vector3();
+  a.root.traverse(o => {
+    const n = (o.name || '').toLowerCase();
+    const sock = /^(grip_[lr]|shield_l)$/.test(n), marker = !o.isBone && !o.isMesh && /_(tip|trail_base|fx_core|pommel|rim_top|grip2|nock_r|string_mid|muzzle)$/.test(n);
+    if (!sock && !marker) return;
+    o.getWorldScale(ws); const k = 1 / Math.max(1e-6, ws.x);
+    const ax = new THREE.AxesHelper(sock ? 0.16 : 0.07); ax.userData.qa = true; ax.scale.setScalar(k); ax.material.depthTest = false; ax.renderOrder = 10; o.add(ax); helpers.push(ax);
+    if (/^grip_[lr]$/.test(n)) {
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.14, 16), new THREE.MeshBasicMaterial({ color: 0x40e0ff, transparent: true, opacity: 0.45, depthTest: false }));
+      cyl.userData.qa = true; cyl.scale.setScalar(k); cyl.renderOrder = 9; o.add(cyl); helpers.push(cyl);
+    }
+  });
+}
+sockChk.onchange = () => { clearHelpers(); if (sockChk.checked && chars[0]) showSockets(chars[0]); };
+// items in grip space: origin = the fist centre (tripod + 34 mm test handle), named empties as small tripods
+async function loadItemRack() {
+  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js'), L = new GLTFLoader();
+  rack = new THREE.Group(); scene.add(rack); const rows = [];
+  let i = 0;
+  for (const id of ITEM_IDS) {
+    const g = await new Promise(res => L.load(`assets/models/items/${id}.glb`, res, undefined, () => res(null)));
+    if (!g || who.value !== 'items') continue;
+    const it = g.scene; it.position.set((i % 6 - 2.5) * 0.9, i < 6 ? 0.2 : 1.9, 0); i++;
+    const ax = new THREE.AxesHelper(0.2); ax.userData.qa = true; ax.material.depthTest = false; ax.renderOrder = 10; it.add(ax);
+    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.14, 16), new THREE.MeshBasicMaterial({ color: 0x40e0ff, transparent: true, opacity: 0.5, depthTest: false })); cyl.userData.qa = true; cyl.renderOrder = 9; it.add(cyl);
+    const empties = []; it.traverse(o => { if (o !== it && !o.isMesh && o.name && o.name !== 'item' && !o.userData.qa) { const e = new THREE.AxesHelper(0.06); e.userData.qa = true; e.material.depthTest = false; o.add(e); empties.push(o.name); } });
+    const { tris } = countMeshes(it), box = new THREE.Box3(); it.traverse(o => { if (o.isMesh && !o.userData.qa) box.expandByObject(o); }); box.getSize(box.max);
+    rows.push(`${id} ${tris} tris ${box.max.y.toFixed(2)} m [${empties.join(' ')}]`); rack.add(it);
+  }
+  info.textContent = rows.length ? rows.join(' · ') : 'no item GLBs in assets/models/items/';
+}
+// motion strip (05 §9): 8 frames from the start through the marker to the end, side + front, the blade tip's path;
+// a frame whose tip is below knee height (0.5 m) is framed red, the marker frame green
+function poseAt(c, name, t) {
+  for (const x of c.mixer._actions) x.setEffectiveWeight(0);
+  const act = c.mixer.clipAction(c.clip(name).full); act.enabled = true; act.setLoop(THREE.LoopRepeat, Infinity); act.play(); act.setEffectiveWeight(1); act.time = t; act.timeScale = 0;
+  if (c.layerSaved) for (const S of c.layerSaved) S.node.quaternion.copy(S.q);
+  c.mixer.update(0); c.handLayer?.(0); c.root.updateMatrixWorld(true);
+  return act;
+}
+function motionStrip() {
+  const c = chars[0], name = clipSel.value; if (!c || !name || !c.clip(name)) return;
+  const id = name.split('|')[0], meta = AA.clipMeta(id) || {}, dur = c.clip(name).full.duration, mk = meta.impact ?? null;
+  const times = Array.from({ length: 8 }, (_, i) => (i / 7) * dur);
+  if (mk != null) { let b = 1; times.forEach((t, i) => { if (Math.abs(t - mk) < Math.abs(times[b] - mk) && i && i < 7) b = i; }); times[b] = mk; }
+  const others = chars.slice(1); others.forEach(o => { o.root.visible = false; }); const helperVis = helpers.map(h => h.visible); helpers.forEach(h => { h.visible = false; });
+  const tip = c.tipR || c.bones.hand_r, g0 = c.root.position.y, path = [];
+  for (let k = 0; k <= 32; k++) { poseAt(c, name, (k / 32) * dur); path.push(tip.getWorldPosition(new THREE.Vector3())); }
+  const tile = 240, out = document.createElement('canvas'); out.width = tile * 8; out.height = tile * 2; const gx = out.getContext('2d');
+  const sc = new THREE.PerspectiveCamera(36, 1, 0.05, 100), cv = renderer.domElement, size = renderer.getSize(new THREE.Vector2());
+  const views = [new THREE.Vector3(-4.2, 0.6, 0.9), new THREE.Vector3(0.9, 0.7, 4.3)], low = [];
+  views.forEach((off, row) => times.forEach((t, i) => {
+    poseAt(c, name, t); const tgt = c.root.position.clone().add(new THREE.Vector3(0, 1, 0));
+    sc.position.copy(tgt).add(off.clone().applyQuaternion(c.root.quaternion)); sc.lookAt(tgt); sc.updateMatrixWorld();
+    renderer.render(scene, sc);
+    const s = Math.min(cv.width, cv.height), x = i * tile, y = row * tile;
+    gx.drawImage(cv, (cv.width - s) / 2, (cv.height - s) / 2, s, s, x, y, tile, tile);
+    // the tip path, projected into this tile (square crop of the canvas)
+    const px = p => { const v = p.clone().project(sc), ax = cv.width / s; return [x + tile / 2 + v.x * tile / 2 * ax, y + tile / 2 - v.y * tile / 2]; };
+    gx.strokeStyle = '#ffe08a'; gx.lineWidth = 1.5; gx.beginPath(); path.forEach((p, k) => { const [u, w] = px(p); k ? gx.lineTo(u, w) : gx.moveTo(u, w); }); gx.stroke();
+    const tp = tip.getWorldPosition(new THREE.Vector3()), [u, w] = px(tp); gx.fillStyle = '#ff5a3a'; gx.beginPath(); gx.arc(u, w, 4, 0, 7); gx.fill();
+    const isLow = tp.y - g0 < 0.5, isMk = mk != null && Math.abs(t - mk) < 1e-6; if (row === 0 && isLow) low.push(t.toFixed(2));
+    if (isLow || isMk) { gx.strokeStyle = isLow ? '#ff3030' : '#40ff80'; gx.lineWidth = 4; gx.strokeRect(x + 2, y + 2, tile - 4, tile - 4); }
+    gx.fillStyle = '#fff'; gx.font = '13px sans-serif'; gx.fillText(`${id} ${t.toFixed(2)}${isMk ? ' ★' : ''}`, x + 6, y + 16);
+  }));
+  const act = c.mixer.clipAction(c.clip(name).full); act.stop(); act.timeScale = 1;
+  others.forEach(o => { o.root.visible = true; }); helpers.forEach((h, i) => { h.visible = helperVis[i]; });
+  renderer.setSize(size.x, size.y);
+  const url = out.toDataURL('image/jpeg', 0.86);
+  document.getElementById('stripImg').src = url;
+  const save = document.getElementById('stripSave'); save.href = url; save.download = `${who.value.replace(':', '_')}-${id}.jpg`;
+  document.getElementById('stripInfo').textContent = `${who.value} · ${name} · ${dur.toFixed(2)} s · marker ${mk ?? '–'} · tip below knee: ${low.length ? low.join(', ') + ' s' : 'never'}`;
+  document.getElementById('stripOut').style.display = 'block';
+  return { low, dur, marker: mk };
+}
+document.getElementById('strip').onclick = motionStrip;
+document.getElementById('stripImg').onclick = () => { document.getElementById('stripOut').style.display = 'none'; };
 who.onchange = cmp.onchange = build; build();
-window.__viewer = { get chars() { return chars; }, get rack() { return rack; }, build, scene, cam, ctl };
+window.__viewer = { get chars() { return chars; }, get rack() { return rack; }, build, scene, cam, ctl, motionStrip, showLod, lodMeshes };
 
 let last = performance.now(), actT = 0;
 renderer.setAnimationLoop(() => {

@@ -29,9 +29,12 @@ const GradeShader = {
 };
 import { createArena } from './arenas.js';
 import { VFX } from './vfx.js';
+import { FX } from './fx/fx.js';
+import { installFxDebug } from './fx/debug.js';
 import { makeMinion } from './minions.js';
 import { Character as ProcCharacter } from './characters.js';
 import { Character as HeroCharacter, heroesReady } from './heroes.js';
+import { SHADOW_LAYER } from './champions.js';
 // realistic rigged champions when their assets loaded, procedural fallback otherwise
 const makeChar = (cls, spec) => heroesReady() ? new HeroCharacter(cls, spec) : new ProcCharacter(cls);
 // undead summons (ghoul, abomination) are rigged champions with a minion look; null until assets load
@@ -91,6 +94,7 @@ export class World {
     this.sun.position.set(-40, 32, 34);
     this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera; sc.left = -38; sc.right = 38; sc.top = 38; sc.bottom = -38; sc.near = 1; sc.far = 140;
+    sc.layers.enable(SHADOW_LAYER); // champions' shadow proxies (low-poly LOD) cast; their full meshes don't
     this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.035; this.sun.shadow.radius = 3;
     this.scene.add(this.sun); this.scene.add(this.sun.target);
     const moon = new THREE.DirectionalLight(0x8aa0ff, 0.6); moon.position.set(30, 30, -40); this.scene.add(moon); // cool back / fill light
@@ -117,6 +121,13 @@ export class World {
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
+    // the new pooled effect system (docs/remodel/06 §2), drawn by its own pass right after the scene; it shares the
+    // old VFX's 4 flash lights. Today it draws the weapon trails; the abilities move over from VFX in Phase 6.
+    this.fx = new FX(this.renderer, this.camera, { scene: this.scene, fog: this.scene.fog, lightPool: this.vfx.lightPool, composer: this.composer });
+    installFxDebug(this.fx, this);
+    // the sim's events reach VFX through world.vfx.onEvent (main.js): FX listens there too
+    const vfxEvent = this.vfx.onEvent.bind(this.vfx);
+    this.vfx.onEvent = (ev, ctx) => { vfxEvent(ev, ctx); this.fxEvent(ev, ctx); };
 
     this.chars = [null, null];
     this.charState = [{}, {}];
@@ -187,6 +198,7 @@ export class World {
     this.useBloom = q !== 'low';            // composer (grade) on high+medium
     if (this.bloom) this.bloom.enabled = q === 'high';
     this.vfx.setQuality(q);
+    this.fx.setQuality(q);
     this.renderer.shadowMap.enabled = q !== 'low';
     this.sun.castShadow = q !== 'low';
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, q === 'low' ? 1 : q === 'medium' ? 1.25 : 1.75));
@@ -232,6 +244,7 @@ export class World {
     this.minionModels = new Map();
     if (this.preview.char) { this.scene.remove(this.preview.char.root); this.preview.char = null; }
     this.vfx.clearAll();
+    this.fx.clearAll();
   }
 
   // specs: [{ cls, team }] — one entry per fighter (index = fighter id)
@@ -311,7 +324,7 @@ export class World {
 
   previewAbility(ab) {
     const c = this.preview.char; if (!c) return;
-    c.play(AB_ANIM[ab.id] || 'release', 0.6);
+    c.play(AB_ANIM[ab.id] || 'release', 0.6, undefined, ab.id);
     const col = new THREE.Color(ab.color).getHex();
     const p = c.focusWorld();
     this.vfx.burst(p.x, p.y, p.z, [col, 0xffffff], 40, 4, 0.7, 0.45);
@@ -366,6 +379,8 @@ export class World {
       ch.update(dt, {
         speed: f.alive ? cs.speed / baseSpeed : 0, v: f.alive ? cs.speed : 0, back, strafe, air: f.y - floorAt(f.x, f.z, f.y) > 0.1, casting: !!f.cast, form: f.form, tree: hasBuff(f, 'treeform'), castProgress: f.cast ? f.cast.t / f.cast.dur : 0,
         stunned: hasBuff(f, 'stun'), disoriented: hasBuff(f, 'disorient'), dead: !f.alive, victory: won, tempest: hasBuff(f, 'tempest'),
+        buffs: f.buffs, vfx: this.vfx, // druid forms (forms.js): Freezing Trap holds the pose; vfx: the swap's cover burst
+        castAb: f.cast ? kitOf(f).abilities[f.cast.idx]?.id ?? null : null, // the manifest's cast clip for the ability being cast
       });
       // stealth visibility
       let op = 1;
@@ -381,6 +396,10 @@ export class World {
         const s = 1 + (i === myId ? Math.sin(this.time * 3) * 0.04 : 0);
         ring.scale.set(s, s, s);
       }
+      // 5v5: level of detail by camera distance (07 §5; 1v1 / 2v2 keep LOD0)
+      if (this.chars.length > 4 && ch.setLodDistance) ch.setLodDistance(ch.root.position.distanceTo(this.camera.position));
+      // weapon trails (FX): the body fighter i is drawn with, whether it shows, a whirlwind holds the trail on
+      this.fx.trails.track(i, ch, f.alive && op > 0.05 && !f.form, hasBuff(f, 'tempest'));
     }
     // selection circles under the hostile target and the friendly target
     const t = me ? F[me.target] : null;
@@ -455,7 +474,7 @@ export class World {
   onAbilityAnim(id, ab) {
     const ch = this.chars[id]; if (!ch) return;
     const kind = AB_ANIM[ab];
-    if (kind) ch.play(kind, kind === 'raise' ? 0.7 : kind === 'slam' ? 0.6 : 0.42);
+    if (kind || ch.hasAbilityClip?.(ab)) ch.play(kind, kind === 'raise' ? 0.7 : kind === 'slam' ? 0.6 : 0.42, undefined, ab); // ab: the manifest's clip for it wins
     if (this.charState[id]) this.charState[id].faceT = 0.5;
   }
   // hit: s until the blow of a melee swing lands in the sim — the swing animation is timed to connect then
@@ -517,6 +536,16 @@ export class World {
 
   addShake(a) { this.shake = Math.min(1.2, this.shake + a); }
 
+  // sim events for the new effect system (wired in the constructor): today only the weapon trails — basic melee
+  // swings until just after the blow lands, melee abilities for their strike, tinted by a non-physical school
+  fxEvent(ev, ctx) {
+    if (ev.e !== 'auto' && ev.e !== 'ab') return;
+    const f = ctx.fighters && ctx.fighters[ev.id]; if (!f) return;
+    if (ev.e === 'auto') { if (!ev.ranged) this.fx.swing(ev.id, Math.max(0.3, ev.hit || 0) + 0.3, null); return; }
+    const ab = kitOf(f).abilities.find(a => a && a.id === ev.ab);
+    if (ab && ab.melee) this.fx.swing(ev.id, 0.7, ab.school !== 'phys' ? ab.school : null);
+  }
+
   render(dt) {
     this.time += dt;
     this.arena.update(dt, this.vfx);
@@ -534,7 +563,7 @@ export class World {
       for (const c of this.chars) if (c) c.update(dt, { speed: 0 });
     } else if (this.mode === 'preview') {
       const c = this.preview.char;
-      if (c) { c.root.rotation.y = this.preview.yaw; if (!this.preview.dragging) this.preview.yaw += dt * 0.15; c.update(dt, { speed: 0, form: this.preview.form }); }
+      if (c) { c.root.rotation.y = this.preview.yaw; if (!this.preview.dragging) this.preview.yaw += dt * 0.15; c.update(dt, { speed: 0, form: this.preview.form, vfx: this.vfx }); }
       const d = this.preview.dist;
       // frame the champion slightly left of centre (details panel is on the right)
       const sx = 0.6 * d / 5 * Math.min(1.4, 1100 / innerWidth);
@@ -543,6 +572,7 @@ export class World {
       if (Math.random() < dt * 6) { const a = Math.random() * 6.28; this.vfx.emit({ x: Math.sin(a) * 1.4, y: 0.05, z: PREVIEW_Z + Math.cos(a) * 1.4, vy: 0.8 + Math.random(), life: 1.5, size: 0.18, color: 0xffd8a0 }); }
     }
     this.vfx.update(dt);
-    if (this.useBloom) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+    this.fx.update(dt);
+    if (this.useBloom) this.composer.render(); else { this.renderer.render(this.scene, this.camera); this.fx.renderDirect(); }
   }
 }

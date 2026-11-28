@@ -100,7 +100,7 @@ function readRig(scene) {
 const mapNames = legs => Object.fromEntries(Object.entries(legs).map(([k, c]) => [k, c.map(b => b.name)]));
 
 // ------------------------------------------------------------------ instances
-const _q = new THREE.Quaternion(), _e = new THREE.Euler();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler();
 export function makeCreature(kind) {
   const src = loaded[kind]; if (!src) return null;
   const R = src.rig, body = SkeletonUtils.clone(src.scene);
@@ -128,38 +128,49 @@ export function makeCreature(kind) {
   const pelvis = spine[0] && !(spine[0].parent && spine[0].parent.isBone) && spine[1] ? spine[1] : spine[0];
   const midSpine = spine[Math.floor(spine.length / 2)] || pelvis;
   const neck = R.neck.map(B).filter(Boolean), head = B(R.head), jaw = B(R.jaw), tail = R.tail.map(B).filter(Boolean);
-  // a pose is a set of model-space rotations per bone, applied on top of the rest pose
-  const pose = new Map();
-  const rot = (b, x = 0, y = 0, z = 0) => { if (!b) return; const p = pose.get(b); if (p) { p.x += x; p.y += y; p.z += z; } else pose.set(b, { x, y, z }); };
+  // a pose is a set of model-space rotations per bone, applied on top of the rest pose (one preallocated entry per
+  // bone: nothing is allocated per frame)
+  const restList = [...rest].map(([b, r]) => ({ b, r, x: 0, y: 0, z: 0, on: false }));
+  const pose = new Map(restList.map(e => [e.b, e]));
+  const rot = (b, x = 0, y = 0, z = 0) => { if (!b) return; const p = pose.get(b); if (p) { p.x += x; p.y += y; p.z += z; p.on = true; } };
   const apply = () => {
-    for (const [b, r] of rest) b.quaternion.copy(r.q);
-    for (const [b, a] of pose) {
-      const r = rest.get(b); if (!r) continue;
-      _q.setFromEuler(_e.set(a.x, a.y, a.z));
-      b.quaternion.copy(r.q).multiply(r.Wi.clone().multiply(_q).multiply(r.W)); // model-space rotation in the bone's own frame
+    for (let i = 0; i < restList.length; i++) {
+      const p = restList[i], b = p.b, r = p.r;
+      b.quaternion.copy(r.q);
+      if (!p.on) continue;
+      _q.setFromEuler(_e.set(p.x, p.y, p.z));
+      b.quaternion.multiply(_q2.copy(r.Wi).multiply(_q).multiply(r.W)); // model-space rotation in the bone's own frame
+      p.x = p.y = p.z = 0; p.on = false;
     }
-    pose.clear();
   };
+  const LEGS = ['FL', 'FR', 'BL', 'BR'].map(k => ({ key: k, L: legs[k], front: k[0] === 'F' })).filter(e => e.L && e.L.up);
+  const OFF_GALLOP = { FL: 0, FR: 0.35, BL: Math.PI, BR: Math.PI + 0.35 }, OFF_WALK = { FL: 0, FR: Math.PI, BL: Math.PI * 1.5, BR: Math.PI * 0.5 };
   const smooth = t => t * t * (3 - 2 * t);
   const state = { phase: 0, speed: 0, atk: 0, atkWas: false, swipeSide: 1, dead: 0, t: Math.random() * 10 };
   const cat = kind !== 'bear';
   const baseY = turn.position.y;
+  const n0 = neck[0] || head;
+  // the bones and offsets a pose layer (forms.js: the druid form state machine) adds its motions to, in the same
+  // model-space terms as the gait below (x = pitch, y = yaw, z = roll; lift / push move the body up / forward, m)
+  const rig = { kind, legs, pelvis, mid: midSpine, chest, neck: n0, head: head && head !== n0 ? head : null, jaw, tail, rot,
+    lift: y => { turn.position.y += y; }, push: z => { turn.position.z += z; } };
+  // st0.dir: -1 runs the gait backwards (backing off); st0.layer(rig): extra motion on top of gait, idle and air
   function update(dt, moving, attacking, st0 = {}) {
     const S = state; S.t += dt;
     const targetSpeed = st0.dead ? 0 : (st0.speed !== undefined ? Math.min(1.4, st0.speed) : (moving ? 1 : 0));
     S.speed += (targetSpeed - S.speed) * Math.min(1, dt * 6);
     const gallop = S.speed > 1.05;
     const freq = cat ? (gallop ? 2.7 : 1.9) : (gallop ? 1.9 : 1.35);
-    S.phase += dt * Math.PI * 2 * freq * Math.max(0.25, S.speed) * (S.speed > 0.05 ? 1 : 0);
+    S.phase += dt * Math.PI * 2 * freq * Math.max(0.25, S.speed) * (S.speed > 0.05 ? 1 : 0) * (st0.dir < 0 ? -1 : 1);
     if (attacking && !S.atkWas) { S.atk = 1; S.swipeSide = -S.swipeSide; } S.atkWas = attacking;
     S.atk = Math.max(0, S.atk - dt / (cat ? 0.42 : 0.6));
     S.dead = st0.dead ? Math.min(1, S.dead + dt * 2.2) : Math.max(0, S.dead - dt * 3);
     const m = Math.min(1, S.speed), P = S.phase;
     // legs: walk = lateral sequence; gallop = front pair / back pair with a small lead (as in beasts.js)
-    const off = gallop ? { FL: 0, FR: 0.35, BL: Math.PI, BR: Math.PI + 0.35 } : { FL: 0, FR: Math.PI, BL: Math.PI * 1.5, BR: Math.PI * 0.5 };
+    const off = gallop ? OFF_GALLOP : OFF_WALK;
     const amp = (cat ? 0.55 : 0.42) * (gallop ? 1.35 : 1) * m;
-    for (const [key, L] of Object.entries(legs)) {
-      const ph = P + off[key], sw = Math.sin(ph), lift = Math.max(0, Math.cos(ph)) * m, fr = key[0] === 'F';
+    for (let i = 0; i < LEGS.length; i++) {
+      const { key, L, front: fr } = LEGS[i], ph = P + off[key], sw = Math.sin(ph), lift = Math.max(0, Math.cos(ph)) * m;
       rot(L.up, -sw * amp);
       if (fr) { rot(L.lo, lift * (cat ? 1.1 : 0.8)); rot(L.pw, -lift * 0.9); }
       else { rot(L.up, -lift * 0.25); rot(L.lo, -lift * 0.9); rot(L.pw, lift * 1.1); }
@@ -171,11 +182,13 @@ export function makeCreature(kind) {
     rot(pelvis, 0, Math.sin(P) * 0.05 * m);
     // idle: looking around, head bob; tail sway
     const idle = 1 - m, T = S.t;
-    const n0 = neck[0] || head, fix = HEAD_FIX[kind] || 0;
+    const fix = HEAD_FIX[kind] || 0;
     if (fix) { rot(n0, 0, fix * (head && head !== n0 ? 0.6 : 1)); if (head && head !== n0) rot(head, 0, fix * 0.4); }
-    rot(n0, -Math.sin(P * 2) * 0.05 * m + (cat ? 0.05 : -0.05) * idle, Math.sin(T * 0.37) * 0.35 * idle);
+    // a pose layer can calm the idle look-around (st0.calm 0..1: a form busy fighting keeps its head on the enemy)
+    const look = idle * (1 - (st0.calm || 0));
+    rot(n0, -Math.sin(P * 2) * 0.05 * m + (cat ? 0.05 : -0.05) * idle, Math.sin(T * 0.37) * 0.35 * look);
     rot(head, Math.sin(T * 0.9) * 0.04 * idle);
-    tail.forEach((b, i) => rot(b, (cat ? (i < 2 ? 0.12 : -0.18) * (1 - m * 0.6) : 0.1) * 0.6 + (gallop ? -0.1 : 0), Math.sin(T * (cat ? 1.6 : 2.2) - i * 0.7) * (cat ? 0.2 : 0.1) * (0.5 + idle * 0.5)));
+    for (let i = 0; i < tail.length; i++) rot(tail[i], (cat ? (i < 2 ? 0.12 : -0.18) * (1 - m * 0.6) : 0.1) * 0.6 + (gallop ? -0.1 : 0), Math.sin(T * (cat ? 1.6 : 2.2) - i * 0.7) * (cat ? 0.2 : 0.1) * (0.5 + idle * 0.5));
     // attack: the cat pounces and rakes with a front paw, the bear rears up and mauls with both
     const a = S.atk;
     if (a > 0) {
@@ -187,17 +200,18 @@ export function makeCreature(kind) {
       } else {
         const r = Math.sin(Math.min(1, (1 - a) * 1.4) * Math.PI);
         rot(pelvis, -r * 0.75); turn.position.y += r * 0.12;
-        for (const L of [legs.FL, legs.FR]) { rot(L.up, -r * 1.2 - (1 - a > 0.55 ? k * 0.6 : 0)); rot(L.lo, r * 0.5); }
-        for (const L of [legs.BL, legs.BR]) rot(L.up, r * 0.75);
+        for (let i = 0; i < LEGS.length; i++) { const { L, front } = LEGS[i]; if (front) { rot(L.up, -r * 1.2 - (1 - a > 0.55 ? k * 0.6 : 0)); rot(L.lo, r * 0.5); } else rot(L.up, r * 0.75); }
         rot(n0, -r * 0.1); rot(head, r * 0.3); rot(jaw, k * 0.7);
       }
     }
-    if (st0.air) for (const [key, L] of Object.entries(legs)) { rot(L.up, key[0] === 'F' ? -0.5 : 0.5); rot(L.lo, 0.4); }
+    if (st0.air) for (let i = 0; i < LEGS.length; i++) { const { L, front } = LEGS[i]; rot(L.up, front ? -0.5 : 0.5); rot(L.lo, 0.4); }
+    if (st0.layer) st0.layer(rig);
     // death: roll onto the side, legs limp
     if (S.dead > 0) { const d = smooth(S.dead); grp.rotation.z = d * Math.PI / 2 * 0.96; turn.position.y = baseY - d * 0.04 + bob * (1 - d); rot(n0, d * 0.3); }
     else grp.rotation.z = 0;
     apply();
   }
   update(0, false, false, {});
-  return { root: grp, update, dispose() { body.traverse(o => { if (o.isMesh) o.material.dispose(); }); }, generated: true };
+  // body: the skinned model (an AnimationMixer root for clips made on this rig); bones: name → bone
+  return { root: grp, update, rig, body, bones, dispose() { body.traverse(o => { if (o.isMesh) o.material.dispose(); }); }, generated: true };
 }

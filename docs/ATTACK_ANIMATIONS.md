@@ -112,6 +112,16 @@ Pilot: `sns` (Protection Paladin / Warrior) + the common `cm_run` and `cm_hit_fr
 | `resolveClip(id, has)` | `id` if loaded, else its fallback chain down to a UAL / `attacks.json` name; `has(name)` skips names heroes.js lacks |
 | `measureStrike(id)` | hand-peak strike of a loaded clip in raw and trimmed time (05 §8.3), next to the manifest value |
 
+### Phase 1 additions (2026-11-28)
+
+- **Abilities**: `play(kind, dur, hitAt, ability)` — with a manifest `abilities` entry the ability's clip replaces the
+  kind's (`abilityClips(ab)` in attack-anims.js, `{ release, cast }` through `fallback`); `world.onAbilityAnim` passes
+  the id. A `cast` entry plays while the sim casts (`st.castAb`, world.js) and its release on the cast's end.
+- **Additive** (`layer: 'additive'`): made additive after retargeting and played on top (0.05 s in, 0.1 s out); `hit()`
+  during an action plays `cm_hit_add` when the manifest has it (world.js only calls `hit()` during actions on crits).
+- **IK**: `ikL` per clip drives the two-hand IK (`03` §6).
+- Empty tables today: the game behaves exactly as before until entries ship (A/B: 0 m difference on every bone).
+
 ### heroes.js integration (done 2026-11-28)
 
 Pass `this.cls, this.spec`, not `this.lookKey`: Protection Warrior's look key is plain `'warrior'`.

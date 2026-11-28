@@ -50,18 +50,55 @@ const loaded = {};   // key -> { scene, clips, remodel, A, fit } once loaded, nu
 const pending = {};
 
 export const DISABLED = new Set(); // keys forced back to the code-built champion (viewer comparison)
+// render layer of the champions' shadow proxies (LOD2 of an assembled model): drawn only into the sun's shadow map
+// (World enables it on every shadow-casting light's shadow camera; the main camera never renders it)
+export const SHADOW_LAYER = 5;
+
+// Shipped champions are compressed by tools/glb-compress.mjs: KTX2 textures (KHR_texture_basisu) and meshopt
+// geometry (EXT_meshopt_compression, KHR_mesh_quantization). The decoders come from the same CDN path as three; the
+// KTX2 transcoder picks the GPU's formats from a throwaway WebGL2 context (same GPU and browser as the game's).
+function prepareLoader(loader) {
+  if (loader.__remodel) return loader.__remodel;
+  return (loader.__remodel = (async () => {
+    try {
+      const [{ KTX2Loader }, { MeshoptDecoder }] = await Promise.all([import('three/addons/loaders/KTX2Loader.js'), import('three/addons/libs/meshopt_decoder.module.js')]);
+      let base = 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/';
+      try { base = import.meta.resolve('three/addons/'); } catch (e) { /* older browsers: the pinned CDN path */ }
+      const ktx2 = new KTX2Loader().setTranscoderPath(new URL('libs/basis/', base).href);
+      const gl = document.createElement('canvas').getContext('webgl2');
+      ktx2.detectSupport({ extensions: { has: n => !!(gl && gl.getExtension(n)), get: n => gl && gl.getExtension(n) } });
+      loader.setKTX2Loader(ktx2); loader.setMeshoptDecoder(MeshoptDecoder);
+    } catch (e) { console.warn('KTX2 / meshopt decoders unavailable: compressed champion models fall back to the code-built ones', e); }
+  })());
+}
+// LOD meshes of an assembled model (assemble-champion --lods → asset.extras.remodel.lods): LOD0 shown and kept out
+// of the shadow pass (userData.noShadow), the middle LODs hidden (the 5v5 distance switch shows them), the last one
+// is the shadow proxy on SHADOW_LAYER
+function markLods(scene, r) {
+  const lods = Array.isArray(r?.lods) ? r.lods : [];
+  if (lods.length < 2) return;
+  const meshes = lods.map(l => { let m = null; scene.traverse(o => { if (!m && o.isMesh && (o.name === l.node || o.parent?.name === l.node)) m = o; }); return m; });
+  if (meshes.some(m => !m)) { console.warn('champion LODs missing in the scene', lods.map(l => l.node)); return; }
+  meshes.forEach((m, i) => {
+    m.userData.lod = i;
+    if (i === 0) m.userData.noShadow = true;
+    else if (i === meshes.length - 1) { m.userData.shadowProxy = true; m.layers.set(SHADOW_LAYER); m.castShadow = true; m.receiveShadow = false; }
+    else m.visible = false;
+  });
+}
 export const championModel = key => (DISABLED.has(key) ? null : loaded[key] || null);
 
 export function loadChampion(loader, key) {
   if (!key || !CHAMPION_MODELS[key]) return Promise.resolve(null);
   if (key in loaded) return Promise.resolve(loaded[key]);
   if (pending[key]) return pending[key];
-  pending[key] = new Promise(res => loader.load(DIR + CHAMPION_MODELS[key], g => {
+  pending[key] = prepareLoader(loader).then(() => new Promise(res => loader.load(DIR + CHAMPION_MODELS[key], g => {
     // assembled champions (tools/assemble-champion.mjs) carry their items merged into the skin on socket joints:
-    // asset.extras.remodel = { key, bodyHeightScene, metresPerUnit, items: [{ name, socket, file, tris }], sockets }
+    // asset.extras.remodel = { key, bodyHeightScene, metresPerUnit, items: [{ name, socket, file, tris }], sockets, lods? }
     const r = g.asset?.extras?.remodel;
+    if (r && typeof r === 'object') markLods(g.scene, r);
     loaded[key] = { scene: g.scene, clips: {}, remodel: r && typeof r === 'object' ? r : null }; res(loaded[key]);
-  }, undefined, err => { console.warn('champion model failed, using fallback:', key, err); loaded[key] = null; res(null); }));
+  }, undefined, err => { console.warn('champion model failed, using fallback:', key, err); loaded[key] = null; res(null); })));
   return pending[key];
 }
 

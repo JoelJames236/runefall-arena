@@ -212,13 +212,19 @@ export function makeBeast(kind) {
   const rest = new Map(bones.map(b => [b, b.position.clone()]));
   const state = { phase: 0, speed: 0, atk: 0, atkWas: false, swipeSide: 1, dead: 0, t: Math.random() * 10, rear: 0 };
   const cat = kind !== 'bear'; // cats and wolves share the lithe gait and the pounce
+  // the same pose-layer interface as a generated creature (creatures.js): forms.js adds the druid forms' motions here
+  // when the generated model is missing. Bones are axis-aligned at rest, so model-space rotations add up directly.
+  const rig = { kind, legs, pelvis, mid: spine, chest, neck, head, jaw, tail: tailBones,
+    rot(b, x = 0, y = 0, z = 0) { if (b) { b.rotation.x += x; b.rotation.y += y; b.rotation.z += z; } },
+    lift(y) { root.position.y += y; }, push(z) { root.position.z += z; } };
+  // st0.dir: -1 runs the gait backwards; st0.layer(rig): extra motion on top of gait, idle and air
   function update(dt, moving, attacking, st0 = {}) {
     const s = state; s.t += dt;
     const targetSpeed = st0.dead ? 0 : (st0.speed !== undefined ? Math.min(1.4, st0.speed) : (moving ? 1 : 0));
     s.speed += (targetSpeed - s.speed) * Math.min(1, dt * 6);
     const gallop = s.speed > 1.05;
     const freq = cat ? (gallop ? 2.7 : 1.9) : (gallop ? 1.9 : 1.35);
-    s.phase += dt * Math.PI * 2 * freq * Math.max(0.25, s.speed) * (s.speed > 0.05 ? 1 : 0);
+    s.phase += dt * Math.PI * 2 * freq * Math.max(0.25, s.speed) * (s.speed > 0.05 ? 1 : 0) * (st0.dir < 0 ? -1 : 1);
     if (attacking && !s.atkWas) { s.atk = 1; s.swipeSide = -s.swipeSide; } s.atkWas = attacking;
     s.atk = Math.max(0, s.atk - dt / (cat ? 0.42 : 0.6));
     s.dead = st0.dead ? Math.min(1, s.dead + dt * 2.2) : Math.max(0, s.dead - dt * 3);
@@ -263,11 +269,12 @@ export function makeBeast(kind) {
     }
     // air: tuck legs
     if (st0.air) for (const L of Object.values(legs)) { L.up.rotation.x += L.up === legs.FL.up || L.up === legs.FR.up ? -0.5 : 0.5; L.lo.rotation.x += 0.4; }
+    if (st0.layer) st0.layer(rig);
     // death: roll onto the side, legs limp
     if (s.dead > 0) { const d = smooth(s.dead); root.rotation.z = d * Math.PI / 2 * 0.96; root.position.y = -d * 0.04 + bob * (1 - d); for (const L of Object.values(legs)) { L.up.rotation.x *= 1 - d; L.lo.rotation.x = L.lo.rotation.x * (1 - d) + d * 0.3; } neck.rotation.x += d * 0.3; }
     else root.rotation.z = 0;
   }
   const scale = cat ? 1.0 : 1.0;
   grp.scale.setScalar(scale);
-  return { root: grp, update, dispose() { geo.dispose(); sg.dispose(); } };
+  return { root: grp, update, rig, dispose() { geo.dispose(); sg.dispose(); } };
 }

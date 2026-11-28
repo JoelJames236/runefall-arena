@@ -247,6 +247,14 @@ middle phalanx without passing through it (viewer check, §8).
 
 ## 6. Two-handed weapons: left-hand IK
 
+**Implemented (Phase 1, heroes.js `setupIK` / `armIK`)**: target = an assembled item's `<item>_grip2` empty (or a
+code-built weapon's `grip2`, `GRIP2` table — IK on code-built weapons is **off**, `HAND_LAYER.ikCodeBuilt`, because
+today's library clips aren't two-handed: 64–85 % of frames out of reach). Weight from the manifest's `ikL` (0 between
+`ikL_off` and `ikL_on` markers), blended over 0.12 s; reach limit 0.98; pole = the clip's own elbow bend. The left hand's
+grip frame is the model's `grip_l` joint, else `grip_r` mirrored — **assemble-champion should emit a `grip_l` joint
+(fitted, no item) for every champion whose item has a `grip2`** (Phase 2). Layer order: wrist lock → grip turn → IK →
+shield roll → fingers. Measured: ≤ 0.05 mm / 0.7° from the target when reachable, ~2 µs per champion.
+
 WoW authors every two-handed animation per body so both hands sit on the haft. Our clips are retargeted from one
 source, so the left hand is **snapped by IK**:
 

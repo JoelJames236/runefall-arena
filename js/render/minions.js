@@ -1,12 +1,10 @@
 // Pets & summons (sim.minions): the spirit wolf and jungle cat are skinned creatures from beasts.js, the
 // necromancer's undead are rigged champions with zombie animations (provided by heroes.js through
-// `makeHumanoid`). Also the Druid's treant form. Every pet gets a small health bar.
+// `makeHumanoid`). Every pet gets a small health bar. (The Druid's forms and their state machine: forms.js.)
 import * as THREE from 'three';
 import { makeBeast } from './beasts.js';
 import { championModel } from './champions.js';
-import { makeCreature } from './creatures.js';
-
-const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.05, ...o });
+export { makeFormModel } from './forms.js';
 
 function hpBar() {
   const g = new THREE.Group();
@@ -47,26 +45,3 @@ export function makeMinion(kind, hostile, makeHumanoid) {
   };
 }
 
-// Druid shapeshift models: 'cat' (black panther), 'bear' (armored brown bear), 'tree' (Tree of Life treant)
-export function makeFormModel(form) {
-  const root = new THREE.Group();
-  if (form === 'tree') {
-    const bark = std(0x5a3a22, { roughness: 1, flatShading: true }), leaf = std(0x3a8a2a, { roughness: 0.9, emissive: 0x1a5a10, emissiveIntensity: 0.4, flatShading: true });
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.42, 1.9, 9), bark); trunk.position.y = 0.95; trunk.castShadow = true; root.add(trunk);
-    for (const s of [-1, 1]) { const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.12, 1.0, 6), bark); arm.position.set(s * 0.45, 1.5, 0); arm.rotation.z = -s * 0.9; arm.castShadow = true; root.add(arm);
-      const root2 = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.6, 5), bark); root2.position.set(s * 0.3, 0.12, 0.1); root2.rotation.z = s * 1.1; root.add(root2); }
-    for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45 + (i % 3) * 0.08, 0), leaf); c.position.set(Math.sin(a) * 0.45, 2.2 + Math.cos(a * 2) * 0.15, Math.cos(a) * 0.45); c.castShadow = true; root.add(c); }
-    const top = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 0), leaf); top.position.y = 2.6; root.add(top);
-    const face = new THREE.Group(); face.position.set(0, 1.45, 0.28);
-    for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color: 0xbaff6a })); e.position.x = s * 0.1; face.add(e); }
-    root.add(face);
-    let t = 0;
-    return { root, update(dt, moving) { t += dt * (moving ? 6 : 1.5); root.rotation.z = Math.sin(t) * (moving ? 0.05 : 0.015); } };
-  }
-  // Cat Form / Bear Form: the generated model once it has loaded (creatures.js), else the code-built creature (beasts.js)
-  const gen = makeCreature(form === 'bear' ? 'bear' : 'cat');
-  if (gen) { root.add(gen.root); return { root, update: gen.update, dispose: gen.dispose, generated: true }; }
-  const beast = makeBeast(form === 'bear' ? 'bear' : 'cat');
-  root.add(beast.root);
-  return { root, update: (dt, moving, atk, st) => beast.update(dt, moving, atk, st), dispose: beast.dispose };
-}

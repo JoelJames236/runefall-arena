@@ -4,7 +4,11 @@
 // becomes a 2048×1024 atlas: the body in the left 1024², the items shelf-packed into the right half.
 //
 //   node tools/assemble-champion.mjs --body <champion.glb> --key <sockets.json key> --item <socket>=<item.glb> [--item …]
-//        --out <out.glb> [--sockets assets/models/champions/sockets.json] [--quality 88]
+//        --out <out.glb> [--sockets assets/models/champions/sockets.json] [--quality 88] [--lods 0.5,0.2]
+//
+// --lods: also write LOD meshes on the same skin (07 §5): fractions of the triangle count, made by
+// tools/mesh-simplify.mjs (outline and skin borders kept); the last one doubles as the shadow proxy. They are listed
+// in extras.remodel.lods (node names + triangles); the game shows LOD0, renders the proxy into the shadow map only.
 //
 // Socket frames come from tools/fit-sockets.mjs (`mesh` = the frame in the skinned mesh's bind space), items from
 // tools/item-prep.mjs (metres, origin = the grip, named empties). The atlas is drawn with Windows' System.Drawing
@@ -14,12 +18,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { readGlb, readAccessor, imageBytes, worldMatrices, inv, mul, xform, xdir, sub, scl, dot, cross, norm, decompose, GlbWriter } from './glb-lib.mjs';
+import { simplify } from './mesh-simplify.mjs';
 
 const args = process.argv.slice(2);
 const die = msg => { console.error('assemble-champion: ' + msg); process.exit(1); };
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const BODY = opt('--body'), KEY = opt('--key'), OUT = opt('--out'), SOCKETS = opt('--sockets', 'assets/models/champions/sockets.json');
 const QUALITY = Number(opt('--quality', 88));
+const LODS = opt('--lods', '') ? opt('--lods').split(',').map(Number).filter(f => f > 0 && f < 1) : [];
 const ITEMS = args.flatMap((a, i) => a === '--item' ? [args[i + 1]] : []).map(s => {
   const e = (s || '').indexOf('='); if (e < 1) die('--item wants <socket>=<item.glb>, got ' + s);
   return { socket: s.slice(0, e), file: s.slice(e + 1) };
@@ -324,6 +330,31 @@ newPrim.attributes = {
 newPrim.indices = Wr.accessor(I, 'SCALAR', 5125, { target: 34963 });
 OJ.meshes = [{ ...JSON.parse(JSON.stringify(bodyMesh)), primitives: [newPrim] }];
 OJ.nodes[meshNode].mesh = 0;
+// LODs: same material, same skin, sibling nodes of the mesh node. A re-derived UV stays in its half of the atlas
+// (body left, items right), so a LOD never samples across the seam between the two.
+const lodInfo = [{ node: OJ.nodes[meshNode].name || 'mesh', tris: I.length / 3 }];
+if (LODS.length) {
+  const half = (uv, tri) => { const right = (tri[0][0] + tri[1][0] + tri[2][0]) / 3 >= 0.5, e = 1 / AW;
+    return [Math.min(right ? 1 : 0.5 - e, Math.max(right ? 0.5 + e : 0, uv[0])), Math.min(1, Math.max(0, uv[1]))]; };
+  const parentOf = OJ.nodes.findIndex(n => (n.children || []).includes(meshNode));
+  const base = OJ.nodes[meshNode], baseName = base.name || 'mesh';
+  for (const [li, f] of LODS.entries()) {
+    const r = simplify({ P, N, T, J: JN, W: WT, I }, Math.round(I.length / 3 * f), { uvClamp: half });
+    const lp = { ...JSON.parse(JSON.stringify(newPrim)), attributes: {
+      POSITION: Wr.accessor(r.P, 'VEC3', 5126, { minmax: true, target: 34962 }),
+      NORMAL: Wr.accessor(r.N, 'VEC3', 5126, { target: 34962 }),
+      TEXCOORD_0: Wr.accessor(r.T, 'VEC2', 5126, { target: 34962 }),
+      JOINTS_0: Wr.accessor(r.J, 'VEC4', 5123, { target: 34962 }),
+      WEIGHTS_0: Wr.accessor(r.W, 'VEC4', 5126, { target: 34962 }),
+    }, indices: Wr.accessor(r.I, 'SCALAR', 5125, { target: 34963 }) };
+    OJ.meshes.push({ name: `${baseName}_LOD${li + 1}`, primitives: [lp] });
+    const node = { name: `${baseName}_LOD${li + 1}`, mesh: OJ.meshes.length - 1, skin: base.skin };
+    for (const k of ['matrix', 'translation', 'rotation', 'scale']) if (base[k]) node[k] = JSON.parse(JSON.stringify(base[k]));
+    OJ.nodes.push(node); const ni = OJ.nodes.length - 1;
+    if (parentOf >= 0) OJ.nodes[parentOf].children.push(ni); else OJ.scenes[OJ.scene ?? 0].nodes.push(ni);
+    lodInfo.push({ node: node.name, tris: r.stats.end, fraction: f });
+  }
+}
 const ibm = new Float32Array((nJ0 + ibmNew.length) * 16); ibm.set(bodyIBM); ibmNew.forEach((m, k) => ibm.set(m, (nJ0 + k) * 16));
 OJ.skins = BJ.skins.map((s, si) => si === skinIdx
   ? { ...s, joints: [...s.joints, ...newJoints], inverseBindMatrices: Wr.accessor(ibm, 'MAT4', 5126) }
@@ -349,6 +380,7 @@ for (const k of ['extensionsUsed', 'extensionsRequired']) if (OJ[k]) { OJ[k] = O
 OJ.asset = { ...BJ.asset, extras: { ...(BJ.asset?.extras || {}), remodel: {
   key: KEY, bodyHeightScene: entry.bodyHeightScene, metresPerUnit: M, atlas: [AW, AH],
   items: report.map(r => ({ name: r.name, socket: r.socket, file: r.file, tris: r.tris, tile: r.tile })), sockets: items.map(it => it.socket),
+  ...(lodInfo.length > 1 ? { lods: lodInfo, shadowProxy: lodInfo[lodInfo.length - 1].node } : {}),
 } } };
 fs.mkdirSync(path.dirname(path.resolve(OUT)), { recursive: true });
 const bytes = Wr.write(OUT);
@@ -356,6 +388,7 @@ const bytes = Wr.write(OUT);
 // ------------------------------------------------------------------ summary
 const trisBody = bI.length / 3, trisAll = I.length / 3;
 for (const r of report) console.log(`  ${r.socket} <- ${r.file} (${r.tris} tris) on ${r.bone}, tile ${r.tile[2]}x${r.tile[3]} at ${r.tile[0]},${r.tile[1]}${r.empties.length ? ', empties ' + r.empties.join(' ') : ''}`);
+if (lodInfo.length > 1) console.log('  LODs ' + lodInfo.map((l, i) => `${i}: ${l.tris}`).join(', ') + ` (shadow proxy: ${lodInfo[lodInfo.length - 1].node})`);
 console.log(`${path.basename(OUT)}: tris ${trisBody} -> ${trisAll}, joints ${nJ0} -> ${nJ0 + newJoints.length}, meshes ${OJ.meshes.length}, primitives ${OJ.meshes[0].primitives.length}, ` +
   `atlas ${AW}x${AH} (${atlases.map(a => a.roles.join('+')).join(', ')}), ${(bytes / 1024).toFixed(0)} kB` + (items.length ? `, rest-vs-bind ${restBind.toExponential(1)}` : ''));
 if (!items.length) console.warn('warning: no --item given; only the atlas layout was applied');

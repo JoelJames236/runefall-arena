@@ -334,6 +334,18 @@ export function idleFor(cls, spec, opts = {}) {
   if (!id || (!opts.always && !MANIFEST_CLIPS[id])) return null;
   return resolveClip(id, opts.has);
 }
+// An ability's own clips (manifest `abilities`: ability id → clip id, or { cast: [start, loop] | [loop], release: id }),
+// resolved like resolveClip → { release, cast: [ids] }. null while the ability has no entry, or none of its clips has
+// loaded yet and it names no library clip directly (like attacksFor: today's ACTIONS clip keeps playing until then).
+export function abilityClips(ab, opts = {}) {
+  const e = ab && MANIFEST.abilities[ab]; if (!e) return null;
+  const rel = typeof e === 'string' ? e : typeof e.release === 'string' ? e.release : null;
+  const cast = e && Array.isArray(e.cast) ? e.cast.filter(x => typeof x === 'string') : [];
+  const ids = rel ? [rel, ...cast] : cast;
+  if (!opts.always && !ids.some(x => MANIFEST_CLIPS[x] || !(x in MANIFEST.clips))) return null;
+  const out = { release: rel ? resolveClip(rel, opts.has) : null, cast: cast.map(x => resolveClip(x, opts.has)).filter(Boolean) };
+  return out.release || out.cast.length ? out : null;
+}
 // Production helper (05 §8.3): measure a loaded clip's strike on its source skeleton — the striking hand's peak
 // "speed × reach" (or speed alone: metric 'speed') — in raw and trimmed time, next to the manifest's value.
 export function measureStrike(id, win, metric) {

@@ -18,3 +18,6 @@ assets/models/anims/src/
 
 # raw Tripo exports for the remodel items; the grip-space items live in assets/models/items/
 assets/models/items/src/
+
+# npm packages the tools use (meshoptimizer for EXT_meshopt_compression); install: npm install --prefix tools --no-save meshoptimizer@1.3.0
+tools/node_modules/

@@ -33,6 +33,14 @@ shapes, runes and colours are our own.
 
 ## 2. Effect system (performance first)
 
+**Implemented (Phase 1, js/render/fx/)**: atlas (painted at load from `atlas-layout.js`, 64 cells — the 60 of §2.1 +
+noise, hex pattern, claw, cracked heart; KTX2 bake pending), particle pools (additive 6,000 / alpha 2,000, GPU-simulated,
+soft particles through the composer's depth), mesh FX, ribbons (trails, beams, chains), decals (hostile edge rule),
+pooled lights (shared with the old VFX), the §4 building blocks as an API, `window.__fx` (`demo`, `stats`, `bench`,
+`showAtlas`). Today it draws only the weapon trails of **assembled** champions (code-built weapons: off — their tip
+markers made giant sheets); every ability still uses the old VFX until Phase 6. Measured: 1 draw in a match, ≤ 9 with
+every part, 0.006–0.011 ms per update, nothing allocated during a match.
+
 | Part | Design | Draws |
 |---|---|---|
 | **Atlas** | one **2048² KTX2** texture, 8 × 8 cells of 256²; flipbooks in 2 × 2-cell blocks (4 × 4 frames of 128²). Contents in §2.1 | — |
